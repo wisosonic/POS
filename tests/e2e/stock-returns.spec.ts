@@ -56,6 +56,7 @@ test('US-17: a manager takes damaged stock out; the ledger shows it and the quan
 test('US-14: return part of a sale, hand the money back, and it cannot be returned twice', async ({ page }) => {
   await managerLogin(page);
   await scan(page, CHOC);
+  await expect(page.getByTestId('cart-total')).toHaveText(/50,000/); // wait for the till to take the first scan before the second (a busy PC can stretch a burst of keys)
   await scan(page, CHOC);
   await expect(page.getByTestId('cart-total')).toHaveText(/100,000/);
   await page.getByRole('button', { name: /PAY/ }).click();

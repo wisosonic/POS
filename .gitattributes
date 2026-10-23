@@ -1,0 +1,4 @@
+# Windows scripts must keep Windows line endings (a batch file with LF only fails in odd ways: "cannot find the batch label").
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

@@ -305,6 +305,9 @@ a {
 .menu-btn {
   border-color: var(--line);
   background: var(--panel);
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0 7px;
 }
 .account-btn {
   display: inline-flex;
@@ -608,24 +611,39 @@ dialog.drawer::backdrop {
   margin: 0;
   padding: 0;
 }
+/* Rows are kept low so a long basket stays on the screen: about 50 px a line instead of 80. */
 .cart-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto 40px;
+  grid-template-columns: minmax(0, 1fr) auto auto 34px;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--line);
 }
 .cart-row.current {
   background: var(--brand-soft);
 }
+/* the small words under the name (price each, Price) sit tight against it */
+.cart-row .sub .btn {
+  min-height: 22px;
+  padding: 0 6px;
+  font-size: 0.78rem;
+}
+.cart-row > .btn.ghost {
+  min-height: 34px;
+  min-width: 34px;
+  padding: 0;
+}
 .cart-row .name {
   font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cart-row .sub {
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
   color: var(--muted);
 }
 .qty {
@@ -634,8 +652,8 @@ dialog.drawer::backdrop {
   gap: 4px;
 }
 .qty button {
-  width: 38px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 5px;
   border: 1px solid var(--line);
   background: var(--bg);
@@ -643,8 +661,8 @@ dialog.drawer::backdrop {
   font-size: 1.2rem;
 }
 .qty input {
-  width: 56px;
-  height: 40px;
+  width: 52px;
+  height: 32px;
   text-align: center;
   border: 1px solid var(--line);
   border-radius: 5px;

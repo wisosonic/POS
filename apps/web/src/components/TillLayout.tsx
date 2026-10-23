@@ -83,7 +83,7 @@ export function TillLayout() {
           aria-label="Menu"
           onClick={() => setMenuOpen(true)}
         >
-          <Icon name="menu" size={22} />
+          <Icon name="menu" size={19} />
         </button>
         <Link className="brand" to="/">
           {shopName}

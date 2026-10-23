@@ -5,6 +5,7 @@
 // Both write to this terminal, each line marked [api] or [web]. Ctrl+C stops both. If either stops by itself the other is
 // stopped too, so nothing is left running in the background. --open opens the browser once both answer.
 import { spawn, spawnSync } from 'node:child_process';
+import net from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -71,6 +72,26 @@ function stopAll(reason) {
     else c.kill('SIGTERM');
   }
   setTimeout(() => process.exit(process.exitCode ?? 0), 1500).unref();
+}
+
+// Something already on a port is the commonest reason for "it does not start": say so plainly, before starting anything.
+const taken = (port, host) =>
+  new Promise((done) => {
+    const s = net.connect({ port, host });
+    s.once('connect', () => (s.destroy(), done(true)));
+    s.once('error', () => done(false));
+    s.setTimeout(800, () => (s.destroy(), done(false)));
+  });
+for (const [port, what] of [
+  [3000, 'the server'],
+  [5173, 'the screen'],
+]) {
+  if ((await taken(port, '127.0.0.1')) || (await taken(port, '::1'))) {
+    process.stdout.write(
+      `\nCannot start: port ${port}, which ${what} needs, is already in use. Most likely another copy of the POS (or the browser tests) is\nstill running, in another window or in the background. Close it, or end the "node" programs in Task Manager, and try again.\n`,
+    );
+    process.exit(1);
+  }
 }
 
 for (const p of parts) {
