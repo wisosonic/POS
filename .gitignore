@@ -1,0 +1,24 @@
+POSDB.sql
+Uploads/
+node_modules/
+.env
+*.dump
+coverage/
+dist/
+playwright-report/
+test-results/
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Load test results (docs/09-load-test.md)
+tests/load/results/
+
+# Local leftovers
+shots/
+*.log
+backups/
+*.etl-report.json
+.vscode/
+Untitled-*

@@ -1,0 +1,118 @@
+import { test, expect, type Browser, type Page } from '@playwright/test';
+
+// US-15 / US-16: the manager's back office. Same throwaway stack as checkout.spec.ts.
+const PASSWORDS: Record<string, string> = { cashier: 'test-cashier-pass', manager: 'test-manager-pass' };
+
+async function login(page: Page, user: 'cashier' | 'manager') {
+  await page.goto('/login');
+  await page.getByLabel('Username').fill(user);
+  await page.getByLabel('Password').fill(PASSWORDS[user]!);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+}
+
+/** Sign in as the manager and land on a back-office page. These pages work whether or not a register is open. */
+async function managerAt(page: Page, path: string) {
+  await login(page, 'manager');
+  await expect(page.getByTestId('checkout').or(page.getByRole('button', { name: 'Open register' }))).toBeVisible();
+  await page.goto(path);
+}
+
+async function openMenu(page: Page, link: string) {
+  await page.getByRole('button', { name: /Menu/ }).click();
+  await page.getByRole('link', { name: link, exact: true }).click();
+}
+
+async function cashierPage(browser: Browser, baseURL: string | undefined): Promise<Page> {
+  const page = await (await browser.newContext({ baseURL })).newPage();
+  await login(page, 'cashier');
+  const open = page.getByRole('button', { name: 'Open register' });
+  await expect(open.or(page.getByTestId('checkout'))).toBeVisible();
+  if (await open.isVisible()) {
+    for (const [label, v] of [
+      ['Cash LBP', '1000000'],
+      ['Cash USD', '10'],
+    ]) {
+      await page.getByLabel(label!).fill(v!);
+    }
+    await open.click();
+    await expect(page.getByTestId('checkout')).toBeVisible();
+  }
+  return page;
+}
+
+test('US-15: a manager adds a dollar product, changes its price, and the till sells it at the new price', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  await managerAt(page, '/products');
+
+  await page.getByRole('button', { name: 'New product' }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Zaatar mix');
+  await page.getByLabel('Barcode').fill('7771234500012');
+  await page.getByLabel('Currency').selectOption('USD');
+  await page.getByLabel('Selling price (USD)').fill('4.50');
+  await page.getByLabel('Cost (USD)').fill('3');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.getByRole('searchbox').fill('zaatar');
+  const row = page.getByTestId('product-row').filter({ hasText: 'Zaatar mix' });
+  await expect(row).toContainText('$4.50');
+
+  await row.getByRole('button', { name: /Edit/ }).click();
+  await page.getByLabel('Selling price (USD)').fill('5');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(row).toContainText('$5.00');
+  await expect(row).toContainText('$3.00'); // an edit of the price leaves the cost alone
+
+  // The cashier's till picks the new product up and prices it at $5.00 = 450,000 LL (rate 90,000).
+  const till = await cashierPage(browser, baseURL);
+  await till.reload();
+  await expect(till.getByTestId('checkout')).toBeVisible();
+  await till.locator('body').click({ position: { x: 5, y: 5 } });
+  await till.keyboard.type('7771234500012', { delay: 5 });
+  await till.keyboard.press('Enter');
+  await expect(till.getByTestId('cart-total')).toHaveText(/450,000/);
+});
+
+test('US-15: a hidden product leaves the default list, shows under "Show hidden", and can be restored', async ({ page }) => {
+  await managerAt(page, '/products');
+  await page.getByRole('searchbox').fill('towel');
+  const row = page.getByTestId('product-row').first();
+  await row.getByRole('button', { name: /Edit/ }).click();
+  await page.getByLabel(/Sold in the shop/).uncheck();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByTestId('product-row')).toHaveCount(0);
+
+  await page.getByLabel('Show hidden products').check();
+  const hidden = page.getByTestId('product-row').first();
+  await expect(hidden).toContainText('Hidden');
+  await hidden.getByRole('button', { name: /Edit/ }).click();
+  await page.getByLabel(/Sold in the shop/).check();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByLabel('Show hidden products').uncheck();
+  await expect(page.getByTestId('product-row').first()).not.toContainText('Hidden');
+});
+
+test('US-15: a new category appears in the product form; a duplicate name is refused', async ({ page }) => {
+  await managerAt(page, '/products/lists');
+  await page.getByLabel('New category').fill('Spices');
+  await page.getByRole('button', { name: 'Add' }).click();
+  await expect(page.getByTestId('lookup-row').filter({ hasText: 'Spices' })).toBeVisible();
+
+  await page.getByLabel('New category').fill('spices');
+  await page.getByRole('button', { name: 'Add' }).click();
+  await expect(page.getByText(/already a category/i)).toBeVisible();
+
+  await openMenu(page, 'Products');
+  await page.getByRole('button', { name: 'New product' }).click();
+  await expect(page.getByLabel('Category').locator('option', { hasText: 'Spices' })).toHaveCount(1);
+});
+
+test('US-26: a cashier has no Products menu and is sent back to the till from /products', async ({ browser, baseURL }) => {
+  const page = await cashierPage(browser, baseURL);
+  await page.getByRole('button', { name: /Menu/ }).click();
+  await expect(page.getByRole('link', { name: 'Products', exact: true })).toHaveCount(0);
+  await page.goto('/products');
+  await expect(page).toHaveURL(/\/$/);
+});

@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+Uploads
+POSDB.sql
+docs/mockups
+playwright-report
+test-results
+package-lock.json
+*.md

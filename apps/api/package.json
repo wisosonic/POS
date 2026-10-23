@@ -1,0 +1,34 @@
+{
+  "name": "@pos/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fastify + TypeScript API. Implemented from M1 (see plan.md).",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "create-admin": "tsx src/cli/create-admin.ts",
+    "backup": "tsx src/cli/backup.ts",
+    "restore": "tsx src/cli/restore.ts",
+    "etl": "tsx src/etl/cli.ts",
+    "rehearse": "tsx src/cli/rehearse.ts",
+    "preflight": "tsx src/cli/preflight.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/jwt": "^10.2.5",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/static": "^10.1.6",
+    "@node-rs/argon2": "^2.2.2",
+    "@pos/shared": "*",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.7",
+    "fastify-plugin": "^6.0.1",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0"
+  }
+}

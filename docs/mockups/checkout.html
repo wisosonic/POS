@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POS Checkout Mockup</title>
+<style>
+  :root { --bg:#f4f5f7; --panel:#fff; --ink:#1b1f24; --muted:#6b7280; --line:#e5e7eb; --brand:#0f766e; --brand-ink:#fff; --warn:#b45309; --err:#b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --panel:#1a1f26; --ink:#e8eaed; --muted:#9aa3ad; --line:#2a313a; --brand:#14b8a6; --brand-ink:#04211e; } }
+  * { box-sizing:border-box } body { margin:0; font:15px system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:16px; align-items:center; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap }
+  header b { font-size:17px } .dot { color:#16a34a } .sp { flex:1 }
+  main { display:grid; grid-template-columns:1fr 420px; gap:12px; padding:12px; height:calc(100vh - 56px) }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; overflow:auto }
+  input[type=text] { width:100%; padding:14px; font-size:18px; border:2px solid var(--brand); border-radius:8px; background:var(--bg); color:var(--ink) }
+  .cats { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap }
+  .chip { padding:8px 14px; border:1px solid var(--line); border-radius:20px; background:var(--bg); cursor:pointer }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px }
+  .tile { border:1px solid var(--line); border-radius:10px; padding:10px; cursor:pointer; text-align:center; background:var(--bg); min-height:96px }
+  .tile:hover { border-color:var(--brand) } .tile small { color:var(--muted); display:block; margin-top:4px }
+  table { width:100%; border-collapse:collapse } th,td { padding:8px 4px; text-align:right; border-bottom:1px solid var(--line) } th:first-child,td:first-child { text-align:left }
+  .qty button { width:32px; height:32px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer }
+  .totals { margin-top:12px } .totals div { display:flex; justify-content:space-between; padding:4px 0; color:var(--muted) }
+  .total { background:var(--brand); color:var(--brand-ink); border-radius:10px; padding:14px; display:flex; justify-content:space-between; align-items:baseline; font-size:26px; font-weight:700; margin:8px 0 }
+  .total small { font-size:14px; font-weight:400 }
+  .btns { display:grid; grid-template-columns:1fr 1fr 2fr; gap:8px } .btns button { padding:16px; font-size:16px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer }
+  .btns .pay { background:var(--brand); color:var(--brand-ink); border:0; font-weight:700 }
+  dialog { border:1px solid var(--line); border-radius:12px; padding:20px; width:min(460px,92vw); background:var(--panel); color:var(--ink) }
+  dialog::backdrop { background:rgba(0,0,0,.5) } dialog input { width:100%; padding:10px; font-size:18px; margin:4px 0 10px; text-align:right; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px }
+  .change { font-size:24px; font-weight:700; color:var(--brand); display:flex; justify-content:space-between }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:8px; opacity:0; transition:.2s } #toast.on { opacity:1 }
+  @media (max-width:900px) { main { grid-template-columns:1fr; height:auto } .grid { display:none } }
+</style>
+</head>
+<body>
+<header>
+  <b>Darwish Market</b><span class="dot">● Online</span><span>Register #3 · Sara</span>
+  <span>Rate 1$ = <span id="rate">90,000</span> LL</span><span class="sp"></span><span>Hold (0)</span><span>☰ Menu</span>
+</header>
+<main>
+  <section class="card">
+    <input id="scan" type="text" placeholder="Scan barcode or search product…  (try typing 5287000107945 + Enter)" autofocus>
+    <div class="cats"><span class="chip">Grocery</span><span class="chip">Snacks</span><span class="chip">Drinks</span><span class="chip">Dairy</span><span class="chip">Hygiene</span></div>
+    <div class="grid" id="grid"></div>
+  </section>
+  <section class="card">
+    <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody id="rows"></tbody></table>
+    <div class="totals">
+      <div><span>Subtotal</span><span id="sub">0</span></div>
+      <div><span>Rounding</span><span id="rnd">0</span></div>
+    </div>
+    <div class="total"><span>TOTAL <small id="usd">≈ $0.00</small></span><span id="tot">0 LL</span></div>
+    <div class="btns"><button id="clear">Clear</button><button>Hold</button><button class="pay" id="pay">PAY (F9)</button></div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <h3>Pay</h3>
+  <div>Total due: <b id="due"></b></div>
+  <label>Customer
+    <select id="cust" style="width:100%;padding:8px;margin:4px 0 10px"><option value="walk">Walk-In</option><option value="reg">ahmad darwish (registered)</option></select>
+  </label>
+  <label>Cash LBP<input id="lbp" type="text" inputmode="numeric" value="0"></label>
+  <label>Cash USD<input id="usdIn" type="text" inputmode="decimal" value="0"></label>
+  <label>Whish LBP<input id="whish" type="text" inputmode="numeric" value="0"></label>
+  <label>OMT LBP<input id="omt" type="text" inputmode="numeric" value="0"></label>
+  <div class="change"><span id="chgLabel">Change</span><span id="chg">0 LL</span></div>
+  <div id="warn" style="color:var(--err);min-height:1.4em"></div>
+  <p style="text-align:right"><button id="cancel">Cancel</button> <button id="done" class="pay" style="padding:10px 18px">Complete</button></p>
+</dialog>
+<div id="toast"></div>
+
+<script>
+// Mock data — illustrative only; prices in LBP.
+const RATE = 90000, ROUND = 5000;
+const P = {
+  '5287000107945': { n:'Cedars silver towel', p:75000 },
+  '9342390005250': { n:'Crispy chocolate', p:50000 },
+  '5281034420117': { n:'Uno laban 1kg', p:160000 },
+  '5711953005251': { n:'Starbucks Caffe Latte 220ml', p:225000 },
+  '5283003303810': { n:'Master salt & vinegar', p:50000 },
+};
+const cart = new Map();
+const fmt = n => n.toLocaleString('en-US');
+const $ = id => document.getElementById(id);
+const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1500); };
+
+function total() { const s=[...cart.values()].reduce((a,l)=>a+l.p*l.q,0); const t=Math.round(s/ROUND)*ROUND; return {s,t,r:t-s}; }
+function render() {
+  $('rows').innerHTML = [...cart].map(([c,l]) => `<tr><td>${l.n}</td><td class="qty"><button data-c="${c}" data-d="-1">−</button> ${l.q} <button data-c="${c}" data-d="1">+</button></td><td>${fmt(l.p)}</td><td>${fmt(l.p*l.q)}</td></tr>`).join('');
+  const {s,t,r} = total();
+  $('sub').textContent = fmt(s); $('rnd').textContent = (r>=0?'+':'')+fmt(r);
+  $('tot').textContent = fmt(t)+' LL'; $('usd').textContent = '≈ $'+(t/RATE).toFixed(2);
+}
+function add(code) {
+  const p = P[code]; if (!p) { toast('Unknown barcode: '+code); return; }
+  const l = cart.get(code) || { ...p, q:0 }; l.q++; cart.set(code,l); render();
+}
+$('grid').innerHTML = Object.entries(P).map(([c,p]) => `<div class="tile" data-c="${c}">${p.n}<small>${fmt(p.p)} LL</small></div>`).join('');
+$('grid').onclick = e => { const t=e.target.closest('.tile'); if (t) add(t.dataset.c); };
+$('scan').addEventListener('keydown', e => { if (e.key==='Enter') { add($('scan').value.trim()); $('scan').value=''; } });
+$('rows').onclick = e => { const b=e.target.closest('button'); if(!b) return; const l=cart.get(b.dataset.c); l.q+=+b.dataset.d; if(l.q<=0) cart.delete(b.dataset.c); render(); };
+$('clear').onclick = () => { cart.clear(); render(); };
+function num(id) { return +$(id).value.replace(/,/g, '') || 0; }
+// Mirrors docs/02 decision table: change is cash only; wallet can't exceed total; credit needs a registered customer.
+function change() {
+  const T = total().t, wallet = num('whish') + num('omt');
+  const cash = num('lbp') + Math.round((+$('usdIn').value || 0) * RATE);
+  const recv = cash + wallet, diff = recv - T, reg = $('cust').value === 'reg';
+  let msg = '';
+  if (diff >= 0) { $('chgLabel').textContent = 'Change (cash)'; $('chg').textContent = fmt(diff) + ' LL'; if (wallet > T) msg = 'Wallet payment cannot exceed the total (change is cash only).'; }
+  else { $('chgLabel').textContent = 'Remaining (on account)'; $('chg').textContent = fmt(-diff) + ' LL'; if (!reg) msg = 'Select a registered customer to leave a balance.'; }
+  $('warn').textContent = msg; $('done').disabled = !!msg; return diff;
+}
+$('pay').onclick = () => { if(!cart.size) return toast('Cart is empty'); $('due').textContent=fmt(total().t)+' LL'; $('lbp').value=total().t; $('usdIn').value=0; $('whish').value=0; $('omt').value=0; change(); $('dlg').showModal(); };
+['lbp','usdIn','whish','omt','cust'].forEach(id => $(id).oninput = change);
+$('cancel').onclick = () => $('dlg').close();
+$('done').onclick = () => { if ($('done').disabled) return; const d = change(); $('dlg').close(); cart.clear(); render(); toast(d < 0 ? '✔ Sale on account (mock)' : '✔ Sale completed (mock) — receipt would print'); };
+document.addEventListener('keydown', e => { if (e.key==='F9') { e.preventDefault(); $('pay').click(); } });
+render();
+</script>
+</body>
+</html>
