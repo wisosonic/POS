@@ -18,7 +18,7 @@ tests/load/results/
 # Local leftovers
 shots/
 *.log
-backups/
+/backups/
 *.etl-report.json
 .vscode/
 Untitled-*

@@ -24,7 +24,13 @@ export type TestCtx = {
 
 /** Each context gets its own throwaway SQLite file, so test files cannot affect each other and no Docker is needed. */
 export async function startCtx(
-  options: { printer?: ReceiptPrinter; backup?: BuildOptions['backup']; webDist?: string; logStream?: BuildOptions['logStream'] } = {},
+  options: {
+    printer?: ReceiptPrinter;
+    backup?: BuildOptions['backup'];
+    webDist?: string;
+    logStream?: BuildOptions['logStream'];
+    restart?: () => void;
+  } = {},
 ): Promise<TestCtx> {
   const dir = mkdtempSync(join(tmpdir(), 'pos-it-'));
   const databasePath = join(dir, 'pos.db');
@@ -37,6 +43,7 @@ export async function startCtx(
     printer: options.printer,
     backup: options.backup,
     webDist: options.webDist,
+    restart: options.restart,
   });
   await app.ready();
   // Listen once on a free port. Letting supertest start and stop the server per request breaks requests that are

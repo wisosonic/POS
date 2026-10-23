@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { startCtx, type TestCtx } from '../helpers/app';
 
 // US-30: who can see and run backups, and what the answers say. The backup itself is covered in tests/db/backup*.test.ts.
@@ -113,3 +113,78 @@ describe('backups are set up', () => {
     }
   });
 });
+
+describe('restoring a backup from the screen (US-30)', () => {
+  let c: TestCtx;
+  let dir: string;
+  let restarts = 0;
+  let cashier: string;
+  let manager: string;
+  let admin: string;
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'pos-bk-restore-'));
+    c = await startCtx({ backup: { dir, passphrase: PASS, keep: 5 }, restart: () => void restarts++ });
+    cashier = await c.login('cashier');
+    manager = await c.login('manager');
+    admin = await c.login('admin');
+  });
+  afterAll(async () => {
+    await c.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('only an admin may restore, and only with an explicit confirmation of a listed backup', async () => {
+    const body = { file: 'pos-20260101-000000.db.enc', confirm: true };
+    expect((await c.http.post(`${api}/backups/restore`).set(auth(cashier)).send(body)).status).toBe(403);
+    expect((await c.http.post(`${api}/backups/restore`).set(auth(manager)).send(body)).status).toBe(403);
+    expect((await c.http.post(`${api}/backups/restore`).send(body)).status).toBe(401);
+    expect((await c.http.post(`${api}/backups/restore`).set(auth(admin)).send({ file: body.file })).status).toBe(400); // no confirmation
+    expect((await c.http.post(`${api}/backups/restore`).set(auth(admin)).send({ file: '../../pos.db', confirm: true })).status).toBe(400); // not a backup name
+    expect((await c.http.post(`${api}/backups/restore`).set(auth(admin)).send(body)).status).toBe(404); // well named, but not there
+    expect(restarts).toBe(0);
+    expect(existsSync(`${c.databasePath}.restore-pending`)).toBe(false);
+  });
+
+  it('a damaged backup is refused with a reason, and nothing is queued', async () => {
+    writeFileSync(join(dir, 'pos-20260102-000000.db.enc'), Buffer.alloc(200, 1));
+    const r = await c.http.post(`${api}/backups/restore`).set(auth(admin)).send({ file: 'pos-20260102-000000.db.enc', confirm: true });
+    expect(r.status).toBe(422);
+    expect(r.body.code).toBe('BACKUP_UNUSABLE');
+    expect(existsSync(`${c.databasePath}.restore-pending`)).toBe(false);
+    expect(restarts).toBe(0);
+  });
+
+  it('a good backup: the current data is backed up first, a note is left, it is audited, and the server is asked to restart', async () => {
+    const made = await c.http.post(`${api}/backups`).set(auth(admin));
+    const before = (await c.http.get(`${api}/backups`).set(auth(admin))).body.files.length;
+    const r = await c.http.post(`${api}/backups/restore`).set(auth(admin)).send({ file: made.body.file, confirm: true });
+    expect(r.status).toBe(202);
+    expect(r.body).toMatchObject({ restarting: true, file: made.body.file });
+    expect(r.body.safetyBackup).toMatch(BACKUP_NAME_RE);
+    expect(JSON.parse(readFileSync(`${c.databasePath}.restore-pending`, 'utf8')).from).toBe(join(dir, made.body.file));
+    expect((await c.http.get(`${api}/backups`).set(auth(admin))).body.files.length).toBe(before + 1); // the safety backup
+    expect(JSON.stringify(r.body)).not.toContain(PASS);
+    await vi.waitFor(() => expect(restarts).toBe(1));
+
+    const db = new Database(c.databasePath, { readonly: true });
+    try {
+      const row = db.prepare(`SELECT entity_id FROM audit_log WHERE action = 'backup.restore'`).get() as { entity_id: string };
+      expect(row.entity_id).toBe(made.body.file);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('without backups set up the answer says so', async () => {
+    const bare = await startCtx();
+    try {
+      const token = await bare.login('admin');
+      const r = await bare.http.post(`${api}/backups/restore`).set(auth(token)).send({ file: 'pos-20260101-000000.db', confirm: true });
+      expect(r.status).toBe(409);
+      expect(r.body.code).toBe('BACKUP_NOT_CONFIGURED');
+    } finally {
+      await bare.close();
+    }
+  });
+});
+const BACKUP_NAME_RE = /^pos-\d{8}-\d{6}(-\d+)?\.db\.enc$/;

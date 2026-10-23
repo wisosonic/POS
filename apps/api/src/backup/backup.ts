@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readSync, closeSync, statSync } from 'node:fs';
-import { copyFile, readdir, rename, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdtemp, readdir, rename, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Db } from '../db/open';
@@ -298,4 +299,20 @@ export async function restoreBackup(options: RestoreOptions): Promise<{ to: stri
   for (const ext of ['-wal', '-shm']) await rm(options.to + ext, { force: true });
   await rename(temp, options.to);
   return { to: options.to, previous };
+}
+
+/** Check that a backup can be restored (decrypts, is a database, passes the integrity check) without putting it anywhere. */
+export async function verifyBackupFile(from: string, passphrase?: string): Promise<void> {
+  if (!existsSync(from)) throw new BackupError('NOT_A_BACKUP', `There is no file at ${from}`);
+  const dir = await mkdtemp(join(tmpdir(), 'pos-verify-'));
+  const temp = join(dir, 'check.db');
+  try {
+    if (isEncryptedFile(from)) {
+      if (!passphrase) throw new BackupError('PASSPHRASE_REQUIRED', 'This backup is encrypted: set BACKUP_PASSPHRASE');
+      await decryptFile(from, temp, passphrase);
+    } else await copyFile(from, temp);
+    verifyDatabaseFile(temp);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }

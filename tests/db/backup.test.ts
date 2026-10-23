@@ -10,8 +10,10 @@ import {
   isEncryptedFile,
   listBackups,
   restoreBackup,
+  verifyBackupFile,
   verifyDatabaseFile,
 } from '../../apps/api/src/backup/backup';
+import { applyPendingRestore, pendingRestorePath, requestRestore } from '../../apps/api/src/backup/pending';
 import { migrate } from '../../apps/api/src/db/migrate';
 import { openDatabase, type Db } from '../../apps/api/src/db/open';
 import { storeImage } from '../../apps/api/src/modules/catalog/images';
@@ -283,5 +285,50 @@ describe('product pictures are backed up with the database', () => {
     expect(r.pictures?.error).toBeTruthy();
     expect(existsSync(r.path)).toBe(true);
     expect(() => verifyDatabaseFile(r.path)).not.toThrow();
+  });
+});
+
+describe('a restore chosen on the Backups screen (US-30)', () => {
+  it('is checked without being put anywhere, and a wrong passphrase or a damaged file is refused', async () => {
+    const dir = fresh('verify');
+    const r = await createBackup(db, { dir, passphrase: PASS });
+    await expect(verifyBackupFile(r.path, PASS)).resolves.toBeUndefined();
+    await expect(verifyBackupFile(r.path, 'another passphrase here')).rejects.toMatchObject({ code: 'WRONG_PASSPHRASE_OR_DAMAGED' });
+    await expect(verifyBackupFile(r.path)).rejects.toMatchObject({ code: 'PASSPHRASE_REQUIRED' });
+    await expect(verifyBackupFile(join(dir, 'missing.db'))).rejects.toMatchObject({ code: 'NOT_A_BACKUP' });
+    expect(readdirSync(dir)).toEqual([r.file]); // nothing left behind
+  });
+
+  it('is applied at the next start: the backup replaces the database, the old one is kept, and the note is gone', async () => {
+    const dir = fresh('pending');
+    const target = join(dir, 'pos.db');
+    migrate(target);
+    const live = openDatabase(target);
+    live.prepare(`INSERT INTO categories (name) VALUES ('Before the backup')`).run();
+    const backup = await createBackup(live, { dir: join(dir, 'backups'), passphrase: PASS });
+    live.prepare(`INSERT INTO categories (name) VALUES ('After the backup')`).run();
+    live.close();
+    const before = count(target, 'categories');
+
+    requestRestore(target, backup.path);
+    expect(existsSync(pendingRestorePath(target))).toBe(true);
+    const said = await applyPendingRestore(target, PASS, join(dir, 'uploads'));
+    expect(said).toMatch(/^restored /);
+    expect(existsSync(pendingRestorePath(target))).toBe(false);
+    expect(count(target, 'categories')).toBe(before - 1); // the later row is gone
+    expect(readdirSync(dir).some((f) => f.startsWith('pos.db.before-restore-'))).toBe(true);
+    expect(await applyPendingRestore(target, PASS, join(dir, 'uploads'))).toBeNull(); // nothing waiting now
+  });
+
+  it('a backup that cannot be read changes nothing, and the note is still cleared so it is not tried at every start', async () => {
+    const dir = fresh('pending-bad');
+    const target = join(dir, 'pos.db');
+    migrate(target);
+    const before = count(target, 'schema_migrations');
+    requestRestore(target, join(dir, 'pos-20260101-000000.db'));
+    expect(await applyPendingRestore(target, undefined, join(dir, 'uploads'))).toMatch(/restore FAILED/);
+    expect(existsSync(pendingRestorePath(target))).toBe(false);
+    expect(count(target, 'schema_migrations')).toBe(before);
+    expect(readdirSync(dir).filter((f) => f.includes('before-restore'))).toEqual([]);
   });
 });

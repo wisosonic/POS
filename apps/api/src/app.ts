@@ -43,6 +43,8 @@ export type BuildOptions = {
   printer?: ReceiptPrinter;
   /** Backup settings. Anything left out comes from the environment (BACKUP_DIR and friends). */
   backup?: Partial<BackupSettings>;
+  /** Called when a restore needs the server to stop and start again. The entry point exits; tests leave it out. */
+  restart?: () => void;
   /** Where product pictures are kept. Defaults to UPLOADS_DIR, then an `uploads` folder beside the database. */
   uploadsDir?: string;
   /** The built web app to serve (apps/web/dist). Defaults to the WEB_DIST environment variable. Nothing is served without it. */
@@ -140,6 +142,8 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
 
   if (options.rateLimit ?? config.production) await app.register(rateLimit, { global: false });
   await app.register(authPlugin, { db, jwtSecret: config.jwtSecret });
+  app.decorate('dbPath', resolve(options.databasePath));
+  app.decorate('requestRestart', options.restart ?? (() => undefined));
   app.decorate('printer', options.printer ?? windowsSpoolerPrinter);
   app.decorate(
     'backups',

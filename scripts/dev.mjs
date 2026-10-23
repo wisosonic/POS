@@ -17,7 +17,9 @@ const WEB = 'http://localhost:5173';
 const color = process.stdout.isTTY;
 const paint = (code, text) => (color ? `\x1b[${code}m${text}\x1b[0m` : text);
 const parts = [
-  { name: 'api', code: 36, args: ['run', 'dev', '-w', '@pos/api'] },
+  // The server runs without the file watcher: a restore chosen on the Backups screen stops it on purpose (exit code 75) and this
+  // script starts it again.
+  { name: 'api', code: 36, args: ['run', 'start', '-w', '@pos/api'] },
   { name: 'web', code: 35, args: ['run', 'dev', '-w', '@pos/web'] },
 ];
 
@@ -94,7 +96,8 @@ for (const [port, what] of [
   }
 }
 
-for (const p of parts) {
+const RESTART_EXIT_CODE = 75;
+function launch(p) {
   // One command string (not a list of arguments) so the shell can find npm on every system without a warning.
   const child = spawn(`npm ${p.args.join(' ')}`, {
     cwd: root,
@@ -106,7 +109,11 @@ for (const p of parts) {
   child.stdout.on('data', (d) => say(p.name, p.code, d));
   child.stderr.on('data', (d) => say(p.name, p.code, d));
   child.on('exit', (code) => {
-    if (!stopping) {
+    if (!stopping && p.name === 'api' && code === RESTART_EXIT_CODE) {
+      children.splice(children.indexOf(child), 1);
+      process.stdout.write('\nThe server stopped to put a restored backup in place. Starting it again…\n');
+      launch(p);
+    } else if (!stopping) {
       process.exitCode = code || 1;
       stopAll(
         `The ${p.name === 'api' ? 'server' : 'screen'} stopped (exit code ${code}). Read the [${p.name}] lines above for the reason. Stopping the other one too.`,
@@ -114,6 +121,7 @@ for (const p of parts) {
     } else if (children.every((c) => c.exitCode !== null)) process.exit(process.exitCode ?? 0);
   });
 }
+for (const p of parts) launch(p);
 
 process.on('SIGINT', () => stopAll('Stopping the server and the screen…'));
 process.on('SIGTERM', () => stopAll('Stopping the server and the screen…'));

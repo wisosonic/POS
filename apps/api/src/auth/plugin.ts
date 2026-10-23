@@ -17,8 +17,12 @@ declare module 'fastify' {
     printer: ReceiptPrinter;
     /** Runs, schedules and reports on database backups. */
     backups: BackupService;
+    /** Stop the server so the launcher starts it again (after a restore). Does nothing in tests. */
+    requestRestart: () => void;
     /** The server speaks HTTPS: the sign-in cookie is then marked Secure. */
     tls: boolean;
+    /** The database file this server owns. */
+    dbPath: string;
     /** Where product pictures are kept (content-named files, served at /uploads/<name>). */
     uploadsDir: string;
     /** Every route that was registered. The security test uses it to prove that each one asks for a sign-in. */

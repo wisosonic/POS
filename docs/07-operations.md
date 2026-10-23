@@ -119,6 +119,8 @@ On a second PC (or the same one, into a different file) with the project install
 
 The restore also puts back the product pictures: it takes the `uploads` folder that sits beside the backup file (keep the two together when you copy a backup) and copies into `D:\drill\uploads` the pictures that are not there yet. It says how many it put back.
 
+**From the screen:** Settings → Backups lists the backups; **Restore** on a file (after a confirmation) checks it, backs up the data as it is now, stops the server, and the launcher (the Darwish POS task, `runner.bat` or `npm run dev`) starts it again with the backup in place. The old database file is kept as `pos.db.before-restore-<time>`. Without `BACKUP_DIR`, a test run (not production) keeps its backups in the `backups` folder of the project.
+
 **A real disaster** (the till PC died): install on the new PC as in section 2, **stop the Darwish POS task**, then restore into `C:\POS\pos.db` with `--force`, start the task again, and check a recent sale before opening the shop.
 
 What restore guarantees:
