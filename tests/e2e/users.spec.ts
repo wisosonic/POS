@@ -20,8 +20,8 @@ async function ready(page: Page) {
   }
 }
 async function openUsers(page: Page) {
-  await page.getByRole('button', { name: 'Settings and administration' }).click(); // the gear in the header
-  await page.getByRole('link', { name: 'Users', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click(); // the gear in the header
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Users' }).click();
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
 }
 async function signOut(page: Page) {
@@ -77,8 +77,10 @@ test('US-26: the admin adds a cashier with a first password; the cashier must ch
   await page.getByRole('button', { name: 'Save my password' }).click();
   await expect(signedIn(page)).toBeVisible(); // in, on the page she asked for (the Sales page)
   await expect(page.getByRole('heading', { name: 'Sales', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Settings and administration' })).toHaveCount(0); // a cashier has no gear, and no Users page
+  await page.getByRole('link', { name: 'Settings', exact: true }).click(); // a cashier has the gear too, but only Appearance behind it
+  await expect(page.getByRole('navigation', { name: 'Settings' }).getByRole('link')).toHaveCount(1);
   await page.goto('/users');
+  await expect(page).toHaveURL(/\/settings\/appearance$/);
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toHaveCount(0);
   await signOut(page);
 
@@ -149,4 +151,41 @@ test('US-25: anyone can change their own password from the menu', async ({ page 
   await page.getByLabel('New password again').fill('test-manager-pass');
   await page.getByRole('button', { name: 'Save my password' }).click();
   await expect(page.getByText('Your password is changed')).toBeVisible();
+});
+
+test('US-26: the admin deletes a user after a confirmation, and cannot delete their own account', async ({ page }) => {
+  await signIn(page, 'admin', 'test-admin-pass');
+  await ready(page);
+  await openUsers(page);
+  await page.getByRole('button', { name: 'New user' }).click();
+  const made = page.getByRole('dialog', { name: 'New user' });
+  await made.getByLabel(/Username/).fill('doomed.user');
+  await made.getByLabel(/Name \(printed/).fill('Doomed');
+  await made.getByLabel(/First password/).fill('first-password-1');
+  await made.getByRole('button', { name: 'Save' }).click();
+  const row = page.getByTestId('user-row').filter({ hasText: 'doomed.user' });
+  await expect(row).toBeVisible();
+
+  // cancelling the confirmation keeps the person
+  await row.getByRole('button', { name: 'Edit doomed.user' }).click();
+  await page.getByRole('dialog', { name: 'Edit user' }).getByRole('button', { name: 'Delete user' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Delete user' });
+  await expect(confirm).toContainText('cannot be undone');
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('dialog', { name: 'Edit user' }).getByRole('button', { name: 'Cancel' }).click();
+  await expect(row).toBeVisible();
+
+  await row.getByRole('button', { name: 'Edit doomed.user' }).click();
+  await page.getByRole('dialog', { name: 'Edit user' }).getByRole('button', { name: 'Delete user' }).click();
+  await page.getByRole('dialog', { name: 'Delete user' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(row).toHaveCount(0);
+
+  // your own account has no Delete button
+  await page
+    .getByTestId('user-row')
+    .filter({ hasText: '(you)' })
+    .getByRole('button', { name: /^Edit / })
+    .click();
+  await expect(page.getByRole('dialog', { name: 'Edit user' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete user' })).toHaveCount(0);
 });

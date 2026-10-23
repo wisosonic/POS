@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from '../../components/Modal';
-import { ApiError, patch, post } from '../../lib/api';
+import { api, ApiError, patch, post } from '../../lib/api';
 import type { Role } from '../../lib/types';
 import { toast } from '../../store/toast';
 import type { UserRow } from './UsersPage';
@@ -22,6 +22,7 @@ export function UserDialog({ user, isMe, onClose, onSaved }: Props) {
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const showPin = role === 'cashier';
 
@@ -79,6 +80,46 @@ export function UserDialog({ user, isMe, onClose, onSaved }: Props) {
       setBusy(false);
     }
   }
+
+  async function remove() {
+    if (!user || busy) return;
+    setBusy(true);
+    try {
+      await api('DELETE', `/users/${user.id}`);
+      toast.success(`${user.name} was deleted`);
+      await onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The user could not be deleted');
+      setDeleting(false);
+      setBusy(false);
+    }
+  }
+
+  if (user && deleting)
+    return (
+      <Modal label="Delete user" onClose={() => setDeleting(false)}>
+        <div style={{ display: 'grid', gap: 14 }}>
+          <h2>{`Delete ${user.username}?`}</h2>
+          <p style={{ margin: 0 }}>
+            {`${user.name} will no longer be able to sign in, and disappears from this list. Their past sales and returns stay as they are, with their name on them. This cannot be undone.`}
+          </p>
+          {error && (
+            <div className="warning" role="alert">
+              {error}
+            </div>
+          )}
+          <div className="dialog-actions">
+            <button type="button" className="btn" onClick={() => setDeleting(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn danger" disabled={busy} onClick={() => void remove()}>
+              Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
 
   return (
     <Modal label={user ? 'Edit user' : 'New user'} onClose={onClose}>
@@ -151,6 +192,20 @@ export function UserDialog({ user, isMe, onClose, onSaved }: Props) {
               disabled={busy}
             >
               Remove PIN
+            </button>
+          )}
+          {user && !isMe && (
+            <button
+              type="button"
+              className="btn danger"
+              style={{ marginInlineEnd: 'auto' }}
+              onClick={() => {
+                setError('');
+                setDeleting(true);
+              }}
+              disabled={busy}
+            >
+              Delete user
             </button>
           )}
           <button type="button" className="btn" onClick={onClose}>

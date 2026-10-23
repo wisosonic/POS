@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { E } from '../../errors';
 import { hashPassword } from '../../auth/password';
@@ -69,6 +70,8 @@ const toJson = (u: Row) => ({
 const pinCashierOnly = () =>
   E.unprocessable('PIN_CASHIER_ONLY', 'Only cashiers can have a PIN. Managers and admins sign in with their password.');
 
+const lastAdmin = () => E.unprocessable('LAST_ADMIN', 'There must always be at least one active admin');
+
 const COLUMNS = 'id, username, name, role, active, must_reset_password, phone, email, pin_hash, created_at';
 
 export default async function userRoutes(app: FastifyInstance) {
@@ -76,8 +79,15 @@ export default async function userRoutes(app: FastifyInstance) {
   const admin = { preHandler: app.requireRole('admin') };
 
   app.get('/users', admin, async () => ({
-    data: (db.prepare(`SELECT ${COLUMNS} FROM users ORDER BY username`).all() as Row[]).map(toJson),
+    data: (db.prepare(`SELECT ${COLUMNS} FROM users WHERE deleted_at IS NULL ORDER BY username`).all() as Row[]).map(toJson),
   }));
+
+  const otherActiveAdmins = (id: number) =>
+    (
+      db.prepare(`SELECT count(*) AS n FROM users WHERE role = 'admin' AND active = 1 AND deleted_at IS NULL AND id <> ?`).get(id) as {
+        n: number;
+      }
+    ).n;
 
   // Cashiers pick their name on the PIN screen. Names only, no secrets.
   app.get('/users/pin-list', { preHandler: app.authenticate }, async () => ({
@@ -113,7 +123,7 @@ export default async function userRoutes(app: FastifyInstance) {
   app.patch('/users/:id', admin, async (req) => {
     const id = Number((req.params as { id: string }).id);
     const b = parse(patchBody, req.body);
-    const before = db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ?`).get(id) as Row | undefined;
+    const before = db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ? AND deleted_at IS NULL`).get(id) as Row | undefined;
     if (!before) throw E.notFound('User');
 
     // Safety rail: an admin cannot deactivate or demote their own account. Only admins can edit users, so this also
@@ -123,6 +133,7 @@ export default async function userRoutes(app: FastifyInstance) {
     if (losesAdmin && id === req.auth.id) {
       throw E.unprocessable('CANNOT_DEMOTE_SELF', 'You cannot deactivate or demote your own account');
     }
+    if (losesAdmin && otherActiveAdmins(id) === 0) throw lastAdmin();
 
     const roleAfter = b.role ?? before.role;
     if (b.pin && roleAfter !== 'cashier') throw pinCashierOnly();
@@ -166,5 +177,35 @@ export default async function userRoutes(app: FastifyInstance) {
       });
     });
     return toJson(db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ?`).get(id) as Row);
+  });
+
+  // "Deleting" a person hides them and ends their access; the row stays because sales, returns, approvals and the audit log point
+  // at it (history is never rewritten). Their username is freed so it can be used again. Never the last admin, never yourself.
+  app.delete('/users/:id', admin, async (req, reply) => {
+    const id = Number((req.params as { id: string }).id);
+    const before = db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ? AND deleted_at IS NULL`).get(id) as Row | undefined;
+    if (!before) throw E.notFound('User');
+    if (id === req.auth.id) throw E.unprocessable('CANNOT_DELETE_SELF', 'You cannot delete your own account');
+    if (before.role === 'admin' && before.active === 1 && otherActiveAdmins(id) === 0) throw lastAdmin();
+
+    // The password is replaced by one nobody knows, so nothing can ever sign in as this row.
+    const unusable = await hashPassword(randomBytes(32).toString('hex'));
+    inWriteTransaction(db, () => {
+      db.prepare(`UPDATE users SET deleted_at = ?, active = 0, pin_hash = NULL, password_hash = ?, username = ? WHERE id = ?`).run(
+        new Date().toISOString(),
+        unusable,
+        `${before.username}~deleted${id}`,
+        id,
+      );
+      revokeAllRefreshTokens(db, id);
+      writeAudit(db, {
+        userId: req.auth.id,
+        action: 'user.delete',
+        entity: 'user',
+        entityId: id,
+        before: { username: before.username, name: before.name, role: before.role },
+      });
+    });
+    return reply.status(204).send();
   });
 }

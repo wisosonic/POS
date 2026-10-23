@@ -176,3 +176,63 @@ describe('audit log', () => {
     expect([404, 405]).toContain((await c.http.patch(`${api}/audit/1`).set(auth(admin)).send({ action: 'x' })).status);
   });
 });
+
+describe('deleting users (US-26)', () => {
+  const make = async (username: string, role: string, password = 'a-good-password-1') =>
+    (
+      await c.http
+        .post(`${api}/users`)
+        .set(auth(admin))
+        .send({ username, name: `Name ${username}`, role, password })
+    ).body as { id: number };
+  const signIn = (username: string, password = 'a-good-password-1') => c.http.post(`${api}/auth/login`).send({ username, password });
+
+  it('only an admin may delete a user', async () => {
+    const u = await make('del-who', 'cashier');
+    expect((await c.http.delete(`${api}/users/${u.id}`).set(auth(manager))).status).toBe(403);
+    expect((await c.http.delete(`${api}/users/${u.id}`).set(auth(cashier))).status).toBe(403);
+    expect((await c.http.delete(`${api}/users/${u.id}`)).status).toBe(401);
+  });
+
+  it('a deleted user disappears from the list, cannot sign in, loses their sessions, and the username is free again; it is audited', async () => {
+    const u = await make('del-gone', 'cashier');
+    const session = await signIn('del-gone');
+    expect(session.status).toBe(200);
+
+    expect((await c.http.delete(`${api}/users/${u.id}`).set(auth(admin))).status).toBe(204);
+    const list = await c.http.get(`${api}/users`).set(auth(admin));
+    expect(list.body.data.some((x: { id: number }) => x.id === u.id)).toBe(false);
+    expect((await signIn('del-gone')).status).toBe(401);
+    expect((await c.http.get(`${api}/me`).set(auth(session.body.accessToken))).status).toBe(401);
+    expect((await c.http.delete(`${api}/users/${u.id}`).set(auth(admin))).status).toBe(404); // already gone
+    expect((await c.http.patch(`${api}/users/${u.id}`).set(auth(admin)).send({ name: 'x' })).status).toBe(404);
+
+    const again = await c.http
+      .post(`${api}/users`)
+      .set(auth(admin))
+      .send({ username: 'del-gone', name: 'Someone new', role: 'cashier', password: 'another-good-pass-2' });
+    expect(again.status).toBe(201); // the username can be given again
+    expect((await signIn('del-gone', 'another-good-pass-2')).status).toBe(200);
+
+    const log = await c.http.get(`${api}/audit?entity=user&entityId=${u.id}&action=user.delete`).set(auth(admin));
+    expect(log.body.data[0].before).toMatchObject({ username: 'del-gone', role: 'cashier' });
+    expect(JSON.stringify(log.body)).not.toMatch(/argon2|a-good-password/);
+  });
+
+  it('you cannot delete yourself, and the shop keeps at least one active admin', async () => {
+    const self = await c.http.delete(`${api}/users/${c.seed.users.admin.id}`).set(auth(admin));
+    expect(self.status).toBe(422);
+    expect(self.body.code).toBe('CANNOT_DELETE_SELF');
+
+    // a second admin deletes the first one's colleague; the one left cannot delete or demote themselves
+    const second = await make('del-admin2', 'admin');
+    const t2 = (await signIn('del-admin2')).body.accessToken as string;
+    expect((await c.http.delete(`${api}/users/${second.id}`).set(auth(t2))).status).toBe(422); // self
+    expect((await c.http.delete(`${api}/users/${c.seed.users.admin.id}`).set(auth(t2))).status).toBe(204); // the seeded admin goes
+    expect((await c.http.get(`${api}/me`).set(auth(admin))).status).toBe(401); // and is signed out at once
+    const left = await c.http.get(`${api}/users`).set(auth(t2));
+    expect(left.body.data.filter((u: { role: string; active: boolean }) => u.role === 'admin' && u.active)).not.toHaveLength(0);
+    expect((await c.http.patch(`${api}/users/${second.id}`).set(auth(t2)).send({ role: 'manager' })).status).toBe(422);
+    expect((await c.http.delete(`${api}/users/${second.id}`).set(auth(t2))).status).toBe(422);
+  });
+});
