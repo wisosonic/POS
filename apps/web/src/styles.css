@@ -905,15 +905,41 @@ th {
   color: var(--muted);
   font-weight: 600;
 }
+/* Labelled fields and buttons share one baseline: the bottoms line up, so a button sits level with the box beside it, not with the label above. */
 .toolbar {
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: flex-end;
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
 .toolbar .field {
   min-width: 260px;
+}
+/* Everything in a filter row that is not a labelled field is lined up with the boxes: a checkbox and its words, a total, a small
+   button all sit on the same line as the middle of the input beside them. */
+.toolbar > label:not(.field) {
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.toolbar > .chip {
+  align-self: flex-end;
+  margin-bottom: calc((var(--target) - 30px) / 2);
+}
+.toolbar .btn.small {
+  min-height: var(--target);
+}
+.toolbar > p {
+  margin: 0;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+}
+/* a row of tabs, then the filters under it, need some air between them */
+.page > .tabs {
+  margin-bottom: var(--space-4);
 }
 .variance-ok {
   color: var(--ok);
@@ -1045,8 +1071,12 @@ th {
 .range {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  align-items: end;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: var(--target);
+}
+.range .btn.small {
+  min-height: var(--target);
 }
 
 @media (max-width: 900px) {
