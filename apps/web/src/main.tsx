@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { applyAppearance, readAppearance } from './lib/appearance';
 // Fonts are part of the app (nothing is fetched from the internet): the Latin and Arabic letters the screens use.
 import '@fontsource/ibm-plex-sans/latin-400.css';
 import '@fontsource/ibm-plex-sans/latin-500.css';
@@ -9,6 +10,8 @@ import '@fontsource/ibm-plex-sans/latin-700.css';
 import '@fontsource/ibm-plex-sans-arabic/arabic-400.css';
 import '@fontsource/ibm-plex-sans-arabic/arabic-600.css';
 import './styles.css';
+
+applyAppearance(readAppearance()); // before anything is drawn, so there is no flash of the wrong colours
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

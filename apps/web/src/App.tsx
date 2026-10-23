@@ -17,6 +17,8 @@ const UsersPage = page(() => import('./features/users/UsersPage'), 'UsersPage');
 const AccountsPage = page(() => import('./features/customers/AccountsPage'), 'AccountsPage');
 const BackupsPage = page(() => import('./features/backups/BackupsPage'), 'BackupsPage');
 const RatePage = page(() => import('./features/settings/RatePage'), 'RatePage');
+const SettingsLayout = page(() => import('./features/settings/SettingsLayout'), 'SettingsLayout');
+const AppearancePage = page(() => import('./features/settings/AppearancePage'), 'AppearancePage');
 const SettingsPage = page(() => import('./features/settings/SettingsPage'), 'SettingsPage');
 const CashPage = page(() => import('./features/register/CashPage'), 'CashPage');
 const CloseRegisterPage = page(() => import('./features/register/CloseRegisterPage'), 'CloseRegisterPage');
@@ -45,9 +47,9 @@ function Protected() {
 }
 
 /** Pages only the admin account may use (backups). The server enforces it too. */
-function AdminOnly() {
+function AdminOnly({ otherwise = '/' }: { otherwise?: string }) {
   const role = useSession((s) => s.user?.role);
-  return role === 'admin' ? <Outlet /> : <Navigate to="/" replace />;
+  return role === 'admin' ? <Outlet /> : <Navigate to={otherwise} replace />;
 }
 
 /** Back-office pages. The server enforces the role; this only keeps a cashier from landing on a page full of errors. */
@@ -73,12 +75,21 @@ export function App() {
             <Route path="/customers" element={<AccountsPage />} />
             <Route path="/low-stock" element={<LowStockPage />} />
             <Route path="/register/close" element={<CloseRegisterPage />} />
-            <Route element={<AdminOnly />}>
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/backups" element={<BackupsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/rate" element={<RatePage />} />
+            {/* Settings: a side menu and a section beside it. Appearance is for everyone, the rest for the admin. */}
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="appearance" replace />} />
+              <Route path="appearance" element={<AppearancePage />} />
+              <Route element={<AdminOnly otherwise="/settings/appearance" />}>
+                <Route path="shop" element={<SettingsPage />} />
+                <Route path="rate" element={<RatePage />} />
+                <Route path="users" element={<UsersPage />} />
+                <Route path="backups" element={<BackupsPage />} />
+              </Route>
             </Route>
+            {/* the old addresses still work */}
+            <Route path="/rate" element={<Navigate to="/settings/rate" replace />} />
+            <Route path="/users" element={<Navigate to="/settings/users" replace />} />
+            <Route path="/backups" element={<Navigate to="/settings/backups" replace />} />
             <Route element={<ManagerOnly />}>
               <Route path="/products" element={<ProductsPage />} />
               <Route path="/products/lists" element={<ListsPage />} />

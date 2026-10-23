@@ -42,10 +42,13 @@ test('back office', async ({ page }) => {
   await page.getByLabel('Password').fill('test-admin-pass');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByTestId('checkout').or(page.getByRole('button', { name: 'Open register' }))).toBeVisible();
-  await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.goto('/settings/shop');
+  await expect(page.getByRole('heading', { name: 'Shop and receipts' })).toBeVisible();
   await shot(page, '25-settings');
-  await page.goto('/rate');
+  await page.goto('/settings/appearance');
+  await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
+  await shot(page, '27-appearance');
+  await page.goto('/settings/rate');
   await expect(page.getByTestId('current-rate')).toBeVisible();
   await shot(page, '26-rate');
 });

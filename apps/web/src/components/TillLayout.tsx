@@ -1,12 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Suspense, useEffect, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { SwitchCashierDialog } from '../features/auth/SwitchCashierDialog';
 import { HoldsDialog } from '../features/checkout/HoldsDialog';
 import { OpenRegisterDialog } from '../features/register/OpenRegisterDialog';
 import { useAlerts, useHolds, useRate, useRegister, useSettings } from '../hooks/useTillData';
 import { get } from '../lib/api';
-import { ADMIN_NAV } from '../lib/nav';
 import type { BackupStatus } from '../lib/types';
 import { useConnection, startConnectionWatch } from '../store/connection';
 import { useSession } from '../store/session';
@@ -98,7 +97,7 @@ export function TillLayout() {
           )}
           {backupOverdue &&
             (isAdmin ? (
-              <Link className="chip danger" to="/backups" data-testid="backup-overdue">
+              <Link className="chip danger" to="/settings/backups" data-testid="backup-overdue">
                 <Icon name="backups" size={15} />
                 Backup overdue
               </Link>
@@ -145,21 +144,9 @@ export function TillLayout() {
             {online ? 'Online' : 'Offline'}
           </span>
 
-          {isAdmin && (
-            <Dropdown label="Settings and administration" trigger={<Icon name="settings" size={22} />}>
-              {(close) => (
-                <>
-                  <div className="dropdown-title">Administration</div>
-                  {ADMIN_NAV.map((i) => (
-                    <Link key={i.to} to={i.to} className="dropdown-item" onClick={close}>
-                      <Icon name={i.icon} />
-                      {i.label}
-                    </Link>
-                  ))}
-                </>
-              )}
-            </Dropdown>
-          )}
+          <NavLink to="/settings" className={({ isActive }) => `icon-btn${isActive ? ' on' : ''}`} aria-label="Settings" title="Settings">
+            <Icon name="settings" size={22} />
+          </NavLink>
 
           <Dropdown
             label={`Account: ${user.name}`}

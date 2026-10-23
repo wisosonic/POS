@@ -97,95 +97,99 @@ export function SettingsPage() {
     <main className="page">
       <h1>
         <Icon name="settings" size={26} />
-        Settings
+        Shop and receipts
       </h1>
-      <form onSubmit={save} style={{ display: 'grid', gap: 18, maxWidth: 720 }}>
-        <section className="card" style={{ display: 'grid', gap: 12, padding: 16 }}>
-          <h2 style={{ margin: 0 }}>The shop</h2>
-          <label className="field">
-            Name (printed at the top of every receipt)
-            <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
-          </label>
-          <label className="field">
-            Address
-            <input value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="off" />
-          </label>
-          <div className="method">
+      <form onSubmit={save} className="shop-form">
+        <div className="shop-col">
+          <section className="card" style={{ display: 'grid', gap: 12, padding: 16 }}>
+            <h2 style={{ margin: 0 }}>The shop</h2>
             <label className="field">
-              Phone
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="off" />
+              Name (printed at the top of every receipt)
+              <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
             </label>
             <label className="field">
-              Email
-              <input value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
+              Address
+              <input value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="off" />
             </label>
-          </div>
-        </section>
+            <div className="method">
+              <label className="field">
+                Phone
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="off" />
+              </label>
+              <label className="field">
+                Email
+                <input value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
+              </label>
+            </div>
+          </section>
 
-        <section className="card" style={{ display: 'grid', gap: 12, padding: 16 }}>
-          <h2 style={{ margin: 0 }}>Receipt and printer</h2>
-          <label className="field">
-            Printer name
-            <input
-              value={printer}
-              onChange={(e) => setPrinter(e.target.value)}
-              placeholder="Exactly as Windows lists it, for example POS-80"
-              autoComplete="off"
-            />
-            <span className="hint">
-              Empty means receipts open in the browser's print window instead. The printer must be installed in Windows for all users.
-            </span>
-          </label>
-          <div className="method">
+          <section className="card" style={{ display: 'grid', gap: 12, padding: 16 }}>
+            <h2 style={{ margin: 0 }}>Prices and cashiers</h2>
+            <div className="method">
+              <label className="field">
+                Round totals to (LL)
+                <input className="num" inputMode="numeric" value={rounding} onChange={(e) => setRounding(e.target.value)} />
+                <span className="hint">5,000 rounds every total to the nearest 5,000 LL.</span>
+              </label>
+              <label className="field">
+                Largest discount a cashier may give (%)
+                <input className="num" inputMode="numeric" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <div className="shop-col">
+          <section className="card" style={{ display: 'grid', gap: 12, padding: 16 }}>
+            <h2 style={{ margin: 0 }}>Receipt and printer</h2>
             <label className="field">
-              Receipt width (characters)
-              <input className="num" inputMode="numeric" value={width} onChange={(e) => setWidth(e.target.value)} />
-              <span className="hint">42 for an 80 mm printer, 32 for 58 mm.</span>
-            </label>
-            <label className="field">
-              Line at the bottom of the receipt
-              <input value={footer} onChange={(e) => setFooter(e.target.value)} autoComplete="off" />
-            </label>
-          </div>
-          <div className="toolbar" style={{ margin: 0 }}>
-            <button type="button" className="btn" disabled={testing || printerChanged || !s.printerName} onClick={() => void testPrint()}>
-              Print a test slip
-            </button>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              Printer name
               <input
-                type="checkbox"
-                checked={openDrawer}
-                onChange={(e) => setOpenDrawer(e.target.checked)}
-                style={{ width: 20, height: 20 }}
+                value={printer}
+                onChange={(e) => setPrinter(e.target.value)}
+                placeholder="Exactly as Windows lists it, for example POS-80"
+                autoComplete="off"
               />
-              Also open the cash drawer
+              <span className="hint">
+                Empty means receipts open in the browser's print window instead. The printer must be installed in Windows for all users.
+              </span>
             </label>
-          </div>
-          {printerChanged && <span className="hint">Save first: the test slip goes to the saved printer and width.</span>}
-          <span className="hint">The slip has a ruler as wide as the receipt and an Arabic name, so you can check both.</span>
-        </section>
-
-        <section className="card" style={{ display: 'grid', gap: 12, padding: 16 }}>
-          <h2 style={{ margin: 0 }}>Prices and cashiers</h2>
-          <div className="method">
-            <label className="field">
-              Round totals to (LL)
-              <input className="num" inputMode="numeric" value={rounding} onChange={(e) => setRounding(e.target.value)} />
-              <span className="hint">5,000 rounds every total to the nearest 5,000 LL.</span>
-            </label>
-            <label className="field">
-              Largest discount a cashier may give (%)
-              <input className="num" inputMode="numeric" value={discount} onChange={(e) => setDiscount(e.target.value)} />
-            </label>
-          </div>
-        </section>
+            <div className="method">
+              <label className="field">
+                Receipt width (characters)
+                <input className="num" inputMode="numeric" value={width} onChange={(e) => setWidth(e.target.value)} />
+                <span className="hint">42 for an 80 mm printer, 32 for 58 mm.</span>
+              </label>
+              <label className="field">
+                Line at the bottom of the receipt
+                <input value={footer} onChange={(e) => setFooter(e.target.value)} autoComplete="off" />
+              </label>
+            </div>
+            <div className="toolbar" style={{ margin: 0 }}>
+              <button type="button" className="btn" disabled={testing || printerChanged || !s.printerName} onClick={() => void testPrint()}>
+                Print a test slip
+              </button>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={openDrawer}
+                  onChange={(e) => setOpenDrawer(e.target.checked)}
+                  style={{ width: 20, height: 20 }}
+                />
+                Also open the cash drawer
+              </label>
+            </div>
+            {printerChanged && <span className="hint">Save first: the test slip goes to the saved printer and width.</span>}
+            <span className="hint">The slip has a ruler as wide as the receipt and an Arabic name, so you can check both.</span>
+          </section>
+        </div>
 
         {error && (
-          <div className="warning" role="alert">
+          <div className="warning shop-wide" role="alert">
             {error}
           </div>
         )}
-        <div>
+        <div className="shop-wide">
           <button type="submit" className="btn primary big" disabled={busy}>
             Save settings
           </button>

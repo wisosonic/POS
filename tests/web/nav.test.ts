@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ADMIN_NAV, atLeast, NAV } from '../../apps/web/src/lib/nav';
+import { atLeast, NAV, SETTINGS_NAV } from '../../apps/web/src/lib/nav';
 
 // The menu a person sees depends only on their role, and the server enforces the same roles: this keeps the screen honest.
 const visible = (role: 'cashier' | 'manager' | 'admin') => NAV.flatMap((s) => s.items).filter((i) => atLeast(role, i.min));
@@ -34,17 +34,17 @@ describe('the menu', () => {
     expect(visible('admin')).toHaveLength(visible('manager').length);
   });
 
-  it('administration (settings, exchange rate, users, backups) is behind the gear and for the admin only', () => {
-    expect(ADMIN_NAV.map((i) => i.label)).toEqual(['Settings', 'Exchange rate', 'Users', 'Backups']);
-    for (const i of ADMIN_NAV) {
-      expect(atLeast('admin', i.min)).toBe(true);
-      expect(atLeast('manager', i.min)).toBe(false);
-    }
-    expect(NAV.flatMap((s) => s.items).some((i) => ADMIN_NAV.some((a) => a.to === i.to))).toBe(false); // listed once
+  it('Settings: Appearance is for everyone; the shop, exchange rate, users and backups are for the admin only', () => {
+    expect(SETTINGS_NAV.map((i) => i.label)).toEqual(['Appearance', 'Shop and receipts', 'Exchange rate', 'Users', 'Backups']);
+    const only = (role: 'cashier' | 'manager' | 'admin') => SETTINGS_NAV.filter((i) => atLeast(role, i.min)).map((i) => i.label);
+    expect(only('cashier')).toEqual(['Appearance']);
+    expect(only('manager')).toEqual(['Appearance']);
+    expect(only('admin')).toHaveLength(5);
+    expect(NAV.flatMap((s) => s.items).some((i) => SETTINGS_NAV.some((a) => a.to === i.to))).toBe(false); // listed once
   });
 
   it('every place has its own address and its own label', () => {
-    const all = [...NAV.flatMap((s) => s.items), ...ADMIN_NAV];
+    const all = [...NAV.flatMap((s) => s.items), ...SETTINGS_NAV];
     expect(new Set(all.map((i) => i.to)).size).toBe(all.length);
     expect(new Set(all.map((i) => i.label)).size).toBe(all.length);
   });

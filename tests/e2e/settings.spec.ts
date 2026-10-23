@@ -7,12 +7,18 @@ async function adminAt(page: Page, path: string) {
   await page.getByLabel('Username').fill('admin');
   await page.getByLabel('Password').fill('test-admin-pass');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByTestId('checkout').or(page.getByRole('button', { name: 'Open register' }))).toBeVisible();
+  const open = page.getByRole('button', { name: 'Open register' });
+  await expect(open.or(page.getByTestId('checkout'))).toBeVisible();
+  if (await open.isVisible()) {
+    await page.getByLabel('Cash LBP').fill('1000000');
+    await open.click(); // the till's dialog covers the header until the register is open
+    await expect(page.getByTestId('checkout')).toBeVisible();
+  }
   await page.goto(path);
 }
 
 test('the admin changes the exchange rate; a likely typo has to be confirmed; the rate can be put back', async ({ page }) => {
-  await adminAt(page, '/rate');
+  await adminAt(page, '/settings/rate');
   await expect(page.getByTestId('current-rate')).toHaveText('1$ = 90,000 LL');
   const rows = await page.getByTestId('rate-row').count();
 
@@ -52,7 +58,7 @@ test('the admin changes the exchange rate; a likely typo has to be confirmed; th
 });
 
 test('the admin changes the shop details, and the test slip reaches the printer', async ({ page, request }) => {
-  await adminAt(page, '/settings');
+  await adminAt(page, '/settings/shop');
   await expect(page.getByLabel(/^Name/)).toHaveValue('Darwish Market');
 
   // a width the printer cannot have is refused with a reason
@@ -87,18 +93,28 @@ test('the admin changes the shop details, and the test slip reaches the printer'
   await expect(page.getByRole('link', { name: 'Darwish Market', exact: true })).toBeVisible();
 });
 
-test('only the admin has these screens; the header does not show the rate, and the rate screen is behind the gear', async ({
+test('the gear opens Settings with a side menu: the admin has every section, a manager only Appearance; the header shows no rate', async ({
   page,
   browser,
   baseURL,
 }) => {
   await adminAt(page, '/');
   await expect(page.getByText(/1\$ = /)).toHaveCount(0); // not in the header any more
-  await page.getByRole('button', { name: 'Settings and administration' }).click();
-  await expect(page.getByRole('link', { name: 'Exchange rate' })).toHaveAttribute('href', '/rate');
-  await page.keyboard.press('Escape');
-  await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click(); // the gear
+  await expect(page).toHaveURL(/\/settings\/appearance$/);
+  const menu = page.getByRole('navigation', { name: 'Settings' });
+  for (const name of ['Appearance', 'Shop and receipts', 'Exchange rate', 'Users', 'Backups'])
+    await expect(menu.getByRole('link', { name })).toBeVisible();
+  await menu.getByRole('link', { name: 'Exchange rate' }).click();
+  await expect(page).toHaveURL(/\/settings\/rate$/);
+  await expect(menu.getByRole('link', { name: 'Exchange rate' })).toHaveAttribute('aria-current', 'page');
+  await page.goto('/settings/shop');
+  await expect(page.getByRole('heading', { name: 'Shop and receipts' })).toBeVisible();
+  for (const old of ['/rate', '/users', '/backups']) {
+    const now = old.slice(1);
+    await page.goto(old); // the old addresses still lead there
+    await expect(page).toHaveURL(new RegExp(`/settings/${now}$`));
+  }
 
   const other = await (await browser.newContext({ baseURL })).newPage();
   await other.goto('/login');
@@ -107,9 +123,12 @@ test('only the admin has these screens; the header does not show the rate, and t
   await other.getByRole('button', { name: 'Sign in' }).click();
   await expect(other.getByTestId('checkout').or(other.getByRole('button', { name: 'Open register' }))).toBeVisible();
   await expect(other.getByText(/1\$ = /)).toHaveCount(0);
-  await expect(other.getByRole('button', { name: 'Settings and administration' })).toHaveCount(0); // no gear for a manager
-  for (const path of ['/settings', '/rate']) {
+  await other.getByRole('link', { name: 'Settings', exact: true }).click(); // everyone has the gear: Appearance is for everyone
+  const otherMenu = other.getByRole('navigation', { name: 'Settings' });
+  await expect(otherMenu.getByRole('link')).toHaveCount(1);
+  await expect(otherMenu.getByRole('link', { name: 'Appearance' })).toBeVisible();
+  for (const path of ['/settings/shop', '/settings/rate', '/settings/users', '/settings/backups', '/rate', '/users']) {
     await other.goto(path);
-    await expect(other).toHaveURL(/\/$/);
+    await expect(other).toHaveURL(/\/settings\/appearance$/); // not for a manager: sent to the one section they have
   }
 });

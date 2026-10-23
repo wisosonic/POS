@@ -42,10 +42,14 @@ export const NAV: NavSection[] = [
   },
 ];
 
-/** Administration: behind the gear in the header, for the admin only. */
-export const ADMIN_NAV: NavItem[] = [
-  { to: '/settings', label: 'Settings', icon: 'settings', min: 'admin' },
-  { to: '/rate', label: 'Exchange rate', icon: 'rate', min: 'admin' },
-  { to: '/users', label: 'Users', icon: 'users', min: 'admin' },
-  { to: '/backups', label: 'Backups', icon: 'backups', min: 'admin' },
+/**
+ * The side menu of the Settings page (the gear in the header leads there). Appearance is for everyone, because each person on a
+ * till sets the size of the letters and the light or dark screen that suits them; the rest is administration.
+ */
+export const SETTINGS_NAV: NavItem[] = [
+  { to: '/settings/appearance', label: 'Appearance', icon: 'appearance', min: 'cashier' },
+  { to: '/settings/shop', label: 'Shop and receipts', icon: 'shop', min: 'admin' },
+  { to: '/settings/rate', label: 'Exchange rate', icon: 'rate', min: 'admin' },
+  { to: '/settings/users', label: 'Users', icon: 'users', min: 'admin' },
+  { to: '/settings/backups', label: 'Backups', icon: 'backups', min: 'admin' },
 ];

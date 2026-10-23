@@ -28,8 +28,9 @@
   --target: 48px;
   color-scheme: light dark;
 }
+/* Dark colours: when the computer is dark (unless the person chose Light under Settings > Appearance), or when they chose Dark. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #0f1318;
     --panel: #1a2029;
     --ink: #eef1f5;
@@ -47,6 +48,29 @@
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
   }
 }
+:root[data-theme='dark'] {
+  --bg: #0f1318;
+  --panel: #1a2029;
+  --ink: #eef1f5;
+  --muted: #9aa5b3;
+  --line: #2b3441;
+  --brand: #2dd4bf;
+  --brand-ink: #04211e;
+  --brand-soft: #123c38;
+  --danger: #ff8a80;
+  --danger-soft: #3b1a17;
+  --warn: #f5c26b;
+  --warn-soft: #3a2b0f;
+  --ok: #7be0a0;
+  --ok-soft: #12351f;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
 
 * {
   box-sizing: border-box;
@@ -60,7 +84,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.45 var(--font);
+  font: 1rem/1.45 var(--font); /* rem, so the size chosen under Settings > Appearance reaches everything */
   -webkit-font-smoothing: antialiased;
 }
 button,
@@ -1161,5 +1185,153 @@ th {
   }
   .header-right {
     flex: 1;
+  }
+}
+
+/* ---------- settings: a side menu and a section ---------- */
+.settings-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  min-height: 0;
+  overflow: auto;
+}
+.settings-menu {
+  flex: 0 0 260px;
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+.settings-menu h2 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 0 12px;
+}
+.settings-menu nav {
+  display: grid;
+  gap: 2px;
+}
+.settings-content {
+  flex: 999 1 520px;
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .settings-menu {
+    flex-basis: 100%;
+    padding-bottom: 0;
+  }
+  .settings-menu nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------- choices (Appearance) ---------- */
+.choice-group {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+}
+.choice-group legend {
+  font-weight: 600;
+  font-size: 1.05rem;
+  padding: 0;
+  margin-bottom: var(--space-3);
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.choice {
+  position: relative;
+  flex: 1 1 200px;
+  max-width: 280px;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  align-content: start;
+  padding: var(--space-4);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  cursor: pointer;
+}
+.choice:hover {
+  border-color: var(--brand);
+}
+.choice.on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.choice input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+.choice:has(input:focus-visible) {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+.choice-title {
+  font-weight: 600;
+}
+.choice-hint {
+  font-size: 0.85rem;
+}
+.choice-sample {
+  font-weight: 600;
+  line-height: 1.1;
+  min-height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+}
+.preview {
+  max-width: 420px;
+  display: grid;
+  gap: var(--space-1);
+}
+.preview-name {
+  font-weight: 600;
+}
+.preview-price {
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+label.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  cursor: pointer;
+}
+
+/* Shop and receipts: two columns (the shop and prices on the left, the receipt and printer on the right); one on a narrow screen. */
+.shop-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+  max-width: 1100px;
+}
+.shop-col {
+  display: grid;
+  gap: var(--space-4);
+}
+.shop-wide {
+  grid-column: 1 / -1;
+}
+@media (max-width: 1100px) {
+  .shop-form {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 720px;
   }
 }
