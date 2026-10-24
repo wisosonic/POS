@@ -37,6 +37,8 @@ function setup(settings: { at?: string; withDir?: boolean } = {}) {
   return {
     service,
     at: (hours: number) => (now = new Date(midnight + hours * HOUR)),
+    // h hours after the shop's midnight TOMORROW. Not midnight + 24 h: on the day the clocks change a day is 23 or 25 hours long.
+    tomorrow: (hours: number) => (now = new Date(shopDayStart(new Date(midnight + 36 * HOUR)).getTime() + hours * HOUR)),
     advance: (ms: number) => (now = new Date(now.getTime() + ms)),
   };
 }
@@ -63,9 +65,9 @@ describe('when a backup is due', () => {
     const t = setup();
     t.at(3);
     await t.service.run('schedule');
-    t.at(24 + 1);
+    t.tomorrow(1);
     expect(await t.service.due()).toBe(false);
-    t.at(24 + 2);
+    t.tomorrow(2);
     expect(await t.service.due()).toBe(true);
   });
 
