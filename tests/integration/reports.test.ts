@@ -98,17 +98,13 @@ describe('sales report', () => {
     expect(r.body.data[0]).toMatchObject({ count: 2, grossLbp: 300000, returnedLbp: 75000, netLbp: 225000, profitLbp: 38000 });
   });
 
-  it('by category: products with no category fall under "No category"', async () => {
+  it('by category: each line falls under its product’s category, and the rows add up to the totals', async () => {
     const r = await c.http.get(`${api}/reports/sales?groupBy=category`).set(auth(manager));
-    expect(r.body.data).toHaveLength(1);
-    expect(r.body.data[0]).toMatchObject({
-      label: 'No category',
-      count: 2,
-      grossLbp: 300000,
-      returnedLbp: 75000,
-      netLbp: 225000,
-      profitLbp: 38000,
-    });
+    const row = (label: string) => r.body.data.find((x: { label: string }) => x.label === label);
+    expect(r.body.data).toHaveLength(2);
+    expect(row('Household')).toMatchObject({ count: 1, grossLbp: 150000, returnedLbp: 75000, netLbp: 75000, profitLbp: 8000 }); // the towels
+    expect(row('Snacks')).toMatchObject({ count: 1, grossLbp: 150000, returnedLbp: 0, netLbp: 150000, profitLbp: 30000 }); // the chocolate
+    expect(r.body.totals).toMatchObject({ grossLbp: 300000, returnedLbp: 75000, netLbp: 225000, profitLbp: 38000 });
   });
 
   it('a range with no sales gives no rows and zero totals', async () => {

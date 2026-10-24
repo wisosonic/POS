@@ -7,7 +7,9 @@ import type { Product } from './types';
 // unreachable. It is refreshed with the server's delta feed (/products/sync), which also delivers deactivated products.
 
 type Feed = { data: Product[]; serverTime: string };
-type Saved = { since: string; products: Product[] };
+/** Bump when the saved copy gains a field the till needs: an older copy is dropped and fetched whole again. */
+const CACHE_VERSION = 2;
+type Saved = { since: string; products: Product[]; v?: number };
 
 export class Catalog {
   private byId = new Map<number, Product>();
@@ -31,7 +33,7 @@ export class Catalog {
   /** Load the copy saved on this computer, so the till is usable before the first network round trip. */
   async loadFromCache(): Promise<boolean> {
     const saved = await this.kv.get<Saved>('catalog');
-    if (!saved?.products?.length) return false;
+    if (!saved?.products?.length || saved.v !== CACHE_VERSION) return false;
     this.since = saved.since;
     for (const p of saved.products) this.byId.set(p.id, p);
     this.reindex();
@@ -47,7 +49,7 @@ export class Catalog {
     }
     this.since = feed.serverTime;
     this.reindex();
-    await this.kv.set('catalog', { since: this.since, products: [...this.byId.values()] } satisfies Saved);
+    await this.kv.set('catalog', { since: this.since, products: [...this.byId.values()], v: CACHE_VERSION } satisfies Saved);
     return feed.data.length;
   }
 
@@ -67,6 +69,11 @@ export class Catalog {
       if (p.barcode) (this.byBarcode.get(p.barcode) ?? this.byBarcode.set(p.barcode, []).get(p.barcode)!).push(p);
       this.haystack.set(p.id, `${p.name} ${p.receiptName ?? ''} ${p.barcode}`.toLowerCase());
     }
+  }
+
+  /** Every active product, sorted by name, for browsing. */
+  all(): Product[] {
+    return this.list;
   }
 
   get(id: number): Product | undefined {

@@ -22,12 +22,13 @@ export type Product = {
   updatedAt: string;
   /** `/uploads/<name>` when the product has a picture. */
   imagePath?: string | null;
+  /** For browsing the catalog by category. Missing in a copy saved by an older version of the till. */
+  categoryId?: number | null;
 };
 
 /** The full product as the back office edits it (the till only needs `Product`). */
 export type ProductFull = Product & {
   receiptNameManual: boolean;
-  categoryId: number | null;
   brandId: number | null;
   unitId: number | null;
   supplierId: number | null;

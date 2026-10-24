@@ -21,6 +21,8 @@ import { DiscountDialog } from './DiscountDialog';
 import { PriceDialog } from './PriceDialog';
 import { PayDialog } from './PayDialog';
 import { Icon } from '../../components/Icon';
+import { useLookup } from '../products/lookups';
+import { CatalogBrowser } from './CatalogBrowser';
 
 type PrintState = 'idle' | 'printing' | 'done' | 'failed';
 type Done = { kind: 'sale'; sale: SaleResult; print: PrintState; printError?: string } | { kind: 'offline'; total: number };
@@ -45,6 +47,8 @@ export function CheckoutPage() {
   const [choices, setChoices] = useState<Product[] | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
+  const [browsing, setBrowsing] = useState(false);
+  const categories = useLookup('categories');
   const search = useRef<HTMLInputElement>(null);
 
   const lbpRounding = settings?.lbpRounding ?? 5000;
@@ -56,6 +60,7 @@ export function CheckoutPage() {
   const pct = discountPct(totals.discountLbp, totals.subtotalLbp);
   // catalogVersion is how a change of the catalog copy reaches the search results
   const results = useMemo(() => (catalogVersion >= 0 ? catalog.search(text) : []), [text, catalogVersion]);
+  const everything = useMemo(() => (browsing && catalogVersion >= 0 ? catalog.all() : []), [browsing, catalogVersion]);
   const last = lines.find((l) => l.key === lastKey);
 
   // The cart changed under a discount: drop what no longer fits, and say so rather than silently charging a different price.
@@ -264,31 +269,37 @@ export function CheckoutPage() {
   return (
     <main className="checkout" data-testid="checkout">
       <div className="left">
-        <div className="search">
-          <Icon name="search" size={24} />
-          <input
-            ref={search}
-            type="search"
-            role="searchbox"
-            aria-label="Scan or search product"
-            placeholder="Scan a barcode or search by name (F2)"
-            autoComplete="off"
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setHighlight(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') e.preventDefault();
-              if (e.key === 'Enter') searchEnter();
-              else if (e.key === 'ArrowDown') setHighlight((h) => Math.min(h + 1, results.length - 1));
-              else if (e.key === 'ArrowUp') setHighlight((h) => Math.max(h - 1, 0));
-              else if (e.key === 'Escape') setText('');
-            }}
-          />
-          {!text && (
-            <div className="hint-line">The scanner works without clicking anywhere. Items without a barcode: type part of the name.</div>
-          )}
+        <div className="search-row">
+          <div className="search">
+            <Icon name="search" size={24} />
+            <input
+              ref={search}
+              type="search"
+              role="searchbox"
+              aria-label="Scan or search product"
+              placeholder="Scan a barcode or search by name (F2)"
+              autoComplete="off"
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                setHighlight(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') e.preventDefault();
+                if (e.key === 'Enter') searchEnter();
+                else if (e.key === 'ArrowDown') setHighlight((h) => Math.min(h + 1, results.length - 1));
+                else if (e.key === 'ArrowUp') setHighlight((h) => Math.max(h - 1, 0));
+                else if (e.key === 'Escape') setText('');
+              }}
+            />
+            {!text && (
+              <div className="hint-line">The scanner works without clicking anywhere. Items without a barcode: type part of the name.</div>
+            )}
+          </div>
+          <button type="button" className="btn catalog-toggle" aria-pressed={browsing} onClick={() => setBrowsing((b) => !b)}>
+            <Icon name="products" size={20} />
+            {browsing ? 'Hide catalog' : 'Browse catalog'}
+          </button>
         </div>
 
         {text.trim() !== '' && (
@@ -373,7 +384,22 @@ export function CheckoutPage() {
           </section>
         )}
 
-        {text.trim() === '' && !done && last && (
+        {/* Kept (but hidden) while a search is typed, so the categories are still open when the search is cleared. */}
+        {browsing && (
+          <div className="catalog-slot" hidden={text.trim() !== ''}>
+            <CatalogBrowser
+              products={everything}
+              categories={categories.data ?? []}
+              rate={rate}
+              onPick={(p) => {
+                addProduct(p);
+                search.current?.focus();
+              }}
+            />
+          </div>
+        )}
+
+        {text.trim() === '' && !browsing && !done && last && (
           <section className="last" aria-label="Last item" style={{ position: 'relative' }}>
             {last.product.imagePath && (
               <div style={{ position: 'absolute', top: 12, insetInlineEnd: 12 }}>

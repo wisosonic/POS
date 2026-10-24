@@ -49,13 +49,17 @@ export async function seedTestData(target: string | Db): Promise<Seed> {
         );
         const supplier = Number(db.prepare(`INSERT INTO suppliers (name) VALUES ('Test Supplier')`).run().lastInsertRowid);
         const unit = (name: string) => (db.prepare('SELECT id FROM units WHERE name = ?').get(name) as { id: number }).id;
+        const category = (name: string) => Number(db.prepare('INSERT INTO categories (name) VALUES (?)').run(name).lastInsertRowid);
+        const household = category('Household');
+        const snacks = category('Snacks');
+        const drinks = category('Drinks');
         const piece = unit('Piece');
         const kg = unit('KG');
         const warehouse = (db.prepare('SELECT id FROM warehouses ORDER BY id LIMIT 1').get() as { id: number }).id;
 
         const insertProduct = db.prepare(
-          `INSERT INTO products (name, receipt_name, barcode, cost_minor, price_minor, currency, unit_id, supplier_id)
-         VALUES (@name, @receiptName, @barcode, @cost, @price, @currency, @unitId, @supplierId)`,
+          `INSERT INTO products (name, receipt_name, barcode, cost_minor, price_minor, currency, unit_id, supplier_id, category_id)
+         VALUES (@name, @receiptName, @barcode, @cost, @price, @currency, @unitId, @supplierId, @categoryId)`,
         );
         const insertLevel = db.prepare('INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)');
         const insertMovement = db.prepare(
@@ -71,6 +75,7 @@ export async function seedTestData(target: string | Db): Promise<Seed> {
           currency: 'USD' | 'LBP';
           unitId: number;
           stockMilli: number;
+          categoryId?: number;
         }) => {
           const id = Number(
             insertProduct.run({
@@ -82,6 +87,7 @@ export async function seedTestData(target: string | Db): Promise<Seed> {
               currency: p.currency,
               unitId: p.unitId,
               supplierId: supplier,
+              categoryId: p.categoryId ?? null,
             }).lastInsertRowid,
           );
           insertLevel.run(id, warehouse, p.stockMilli);
@@ -103,6 +109,7 @@ export async function seedTestData(target: string | Db): Promise<Seed> {
               currency: 'LBP',
               unitId: piece,
               stockMilli: 10_000,
+              categoryId: household,
             }),
             choc: product({
               name: 'Crispy chocolate',
@@ -112,6 +119,7 @@ export async function seedTestData(target: string | Db): Promise<Seed> {
               currency: 'LBP',
               unitId: piece,
               stockMilli: 100_000,
+              categoryId: snacks,
             }),
             usd: product({
               name: 'Starbucks Caffe Latte 220ml',
@@ -121,6 +129,7 @@ export async function seedTestData(target: string | Db): Promise<Seed> {
               currency: 'USD',
               unitId: piece,
               stockMilli: 10_000,
+              categoryId: drinks,
             }),
             rare: product({
               name: 'Rare item',

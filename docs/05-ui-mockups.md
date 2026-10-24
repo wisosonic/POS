@@ -45,6 +45,8 @@ The mockups below were the starting point. This section says what the interface 
 └───────────────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
 
+**Browsing the catalog.** Next to the search box is a **Browse catalog** button (it reads **Hide catalog** while open). It shows every active product from the till's own copy of the catalog, so it works offline too. First comes a **grid of squares, one per category**: an icon, the category name and its number of products. Squares are sorted by name with **No category** last, and a category without products is not shown. The icon is chosen from the words in the name (drinks, dairy, snacks, hygiene, household, grocery; English or Arabic) and is a plain box when the name is not recognised; **No category** is a folder (`lib/categoryIcon.ts`: add a word there to teach it a new one). Pressing a square replaces the grid with that category's products (sorted by name) under a header with its name, and an **All categories** button goes back to the grid. Pressing a product adds it to the cart and leaves the category open, so several items can be picked in a row. Typing in the search box shows the search results instead; clearing the box brings back the same view. Hiding the catalog and showing it again starts at the grid. While the catalog is open the "Last item" card is not shown, to leave the room.
+
 Behaviour: scanner input is captured globally (no focus needed). A beep sounds on success and an error tone on failure. The last scanned item is highlighted. Qty `−/+` and tap-to-type are supported. A swipe or `Del` removes a line.
 
 ## 2. Payment dialog
@@ -152,7 +154,12 @@ DASHBOARD (live)
 └─────────────────────────────────┴───────────────────┘
 
 PRODUCTS                                 [ + New product ] [ Import CSV ]
- Search…  Category ▾  Brand ▾  Stock ▾   ☐ Low stock only
+ Search…  Category ▾  Brand ▾   ☐ Show hidden products
+```
+
+The **Category** and **Brand** boxes list every category and brand (first entry "All categories" / "All brands"). They narrow the list together with each other, with the search and with "Show hidden products"; when nothing matches the page says "No products match these filters." The filtering is done by the server (`GET /products?categoryId=&brandId=`), so it covers the whole catalog, not just the rows already loaded.
+
+```
  ┌───┬──────────────────────┬──────────────┬────────┬───────┬──────┐
  │img│ Name                 │ Barcode      │ Price  │ Stock │ ⋮    │
  └───┴──────────────────────┴──────────────┴────────┴───────┴──────┘
