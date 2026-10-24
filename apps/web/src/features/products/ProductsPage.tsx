@@ -7,6 +7,7 @@ import { ProductImage } from '../../components/ProductImage';
 import { ImportDialog } from './ImportDialog';
 import { ProductDialog } from './ProductDialog';
 import { StockDialog } from './StockDialog';
+import { useLookup } from './lookups';
 import { Icon } from '../../components/Icon';
 
 type Page = { data: ProductFull[]; nextCursor: number | null };
@@ -24,17 +25,21 @@ function useDebounced<T>(value: T, ms: number): T {
 export function ProductsPage() {
   const [q, setQ] = useState('');
   const [showHidden, setShowHidden] = useState(false);
+  const [categoryId, setCategoryId] = useState('');
+  const [brandId, setBrandId] = useState('');
+  const categories = useLookup('categories');
+  const brands = useLookup('brands');
   const [editing, setEditing] = useState<ProductFull | 'new' | null>(null);
   const [adjusting, setAdjusting] = useState<ProductFull | null>(null);
   const [importing, setImporting] = useState(false);
   const search = useDebounced(q.trim(), 250);
 
   const products = useInfiniteQuery({
-    queryKey: ['products', search, showHidden],
+    queryKey: ['products', search, showHidden, categoryId, brandId],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       get<Page>(
-        `/products?limit=50&active=${showHidden ? 'all' : 'true'}&q=${encodeURIComponent(search)}${pageParam ? `&cursor=${pageParam}` : ''}`,
+        `/products?limit=50&active=${showHidden ? 'all' : 'true'}&q=${encodeURIComponent(search)}${categoryId ? `&categoryId=${categoryId}` : ''}${brandId ? `&brandId=${brandId}` : ''}${pageParam ? `&cursor=${pageParam}` : ''}`,
       ),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
@@ -50,6 +55,28 @@ export function ProductsPage() {
         <label className="field">
           Search
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or barcode" autoFocus />
+        </label>
+        <label className="field" style={{ minWidth: 200 }}>
+          Category
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">All categories</option>
+            {(categories.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name.trim()}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field" style={{ minWidth: 200 }}>
+          Brand
+          <select value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+            <option value="">All brands</option>
+            {(brands.data ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name.trim()}
+              </option>
+            ))}
+          </select>
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} style={{ width: 20, height: 20 }} />
@@ -69,7 +96,7 @@ export function ProductsPage() {
       {products.isLoading ? (
         <p className="muted">Loading…</p>
       ) : rows.length === 0 ? (
-        <div className="card empty">No products found.</div>
+        <div className="card empty">{categoryId || brandId ? 'No products match these filters.' : 'No products found.'}</div>
       ) : (
         <table>
           <thead>

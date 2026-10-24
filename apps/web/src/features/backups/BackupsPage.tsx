@@ -174,7 +174,8 @@ export function BackupsPage() {
             </div>
           </div>
           <label className="check">
-            <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} /> I understand and want to restore this backup
+            <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} /> I understand and want to restore this
+            backup
           </label>
           <div className="dialog-actions">
             <button className="btn" onClick={() => setRestoring(null)}>

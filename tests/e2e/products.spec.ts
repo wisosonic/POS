@@ -69,10 +69,13 @@ test('US-15: a manager adds a dollar product, changes its price, and the till se
   const till = await cashierPage(browser, baseURL);
   await till.reload();
   await expect(till.getByTestId('checkout')).toBeVisible();
-  await till.locator('body').click({ position: { x: 5, y: 5 } });
-  await till.keyboard.type('7771234500012', { delay: 5 });
-  await till.keyboard.press('Enter');
-  await expect(till.getByTestId('cart-total')).toHaveText(/450,000/);
+  // The till's copy of the catalog may still be arriving, so a scan that comes first is retried (it is only lost, never doubled).
+  await expect(async () => {
+    await till.locator('body').click({ position: { x: 5, y: 5 } });
+    await till.keyboard.type('7771234500012', { delay: 5 });
+    await till.keyboard.press('Enter');
+    await expect(till.getByTestId('cart-total')).toHaveText(/450,000/, { timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
 });
 
 test('US-15: a hidden product leaves the default list, shows under "Show hidden", and can be restored', async ({ page }) => {
@@ -105,8 +108,9 @@ test('US-15: a new category appears in the product form; a duplicate name is ref
   await expect(page.getByText(/already a category/i)).toBeVisible();
 
   await openMenu(page, 'Products');
+  await expect(page.getByLabel('Category').locator('option', { hasText: 'Spices' })).toHaveCount(1); // the list's filter offers it too
   await page.getByRole('button', { name: 'New product' }).click();
-  await expect(page.getByLabel('Category').locator('option', { hasText: 'Spices' })).toHaveCount(1);
+  await expect(page.getByRole('dialog').getByLabel('Category').locator('option', { hasText: 'Spices' })).toHaveCount(1);
 });
 
 test('US-26: a cashier has no Products menu and is sent back to the till from /products', async ({ browser, baseURL }) => {
@@ -115,4 +119,41 @@ test('US-26: a cashier has no Products menu and is sent back to the till from /p
   await expect(page.getByRole('link', { name: 'Products', exact: true })).toHaveCount(0);
   await page.goto('/products');
   await expect(page).toHaveURL(/\/$/);
+});
+
+test('US-15: the product list can be filtered by category and by brand', async ({ page, request }) => {
+  // a brand with one product, made through the API (the screen only picks from existing brands)
+  const login = await request.post('/api/v1/auth/login', { data: { username: 'manager', password: PASSWORDS.manager } });
+  const headers = { Authorization: `Bearer ${(await login.json()).accessToken}` };
+  const brand = await (await request.post('/api/v1/brands', { headers, data: { name: 'Filterbrand' } })).json();
+  const made = await request.post('/api/v1/products', {
+    headers,
+    data: { name: 'Branded kettle', barcode: '7790000000015', priceMinor: 90000, currency: 'LBP', brandId: brand.id },
+  });
+  expect(made.status()).toBe(201);
+
+  await managerAt(page, '/products');
+  const rows = page.getByTestId('product-row');
+  await expect(rows.filter({ hasText: 'Cedars silver towel' })).toHaveCount(1);
+
+  await page.getByRole('combobox', { name: 'Category' }).selectOption({ label: 'Household' });
+  await expect(rows.filter({ hasText: 'Cedars silver towel' })).toHaveCount(1);
+  await expect(rows.filter({ hasText: 'Crispy chocolate' })).toHaveCount(0); // another category
+  await expect(rows.filter({ hasText: 'Branded kettle' })).toHaveCount(0);
+
+  await page.getByRole('combobox', { name: 'Category' }).selectOption({ label: 'Snacks' });
+  await expect(rows.filter({ hasText: 'Crispy chocolate' })).toHaveCount(1);
+  await expect(rows.filter({ hasText: 'Cedars silver towel' })).toHaveCount(0);
+
+  // both filters have to match: no Snacks product has this brand
+  await page.getByRole('combobox', { name: 'Brand' }).selectOption({ label: 'Filterbrand' });
+  await expect(page.getByText('No products match these filters.')).toBeVisible();
+
+  await page.getByRole('combobox', { name: 'Category' }).selectOption({ label: 'All categories' });
+  await expect(rows.filter({ hasText: 'Branded kettle' })).toHaveCount(1);
+  await expect(rows).toHaveCount(1); // only that brand's product
+
+  await page.getByRole('combobox', { name: 'Brand' }).selectOption({ label: 'All brands' });
+  await expect(rows.filter({ hasText: 'Cedars silver towel' })).toHaveCount(1);
+  await expect(rows.filter({ hasText: 'Branded kettle' })).toHaveCount(1);
 });

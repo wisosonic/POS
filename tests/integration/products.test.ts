@@ -366,3 +366,27 @@ describe('dashboard', () => {
     expect(res.body.openRegisters).toBe(0);
   });
 });
+
+describe('filtering the list by category and brand (US-15)', () => {
+  it('returns only the products of the chosen category and/or brand, combined with search and the hidden switch', async () => {
+    const cat = (await c.http.post(`${api}/categories`).set(auth(manager)).send({ name: 'Filter category' })).body.id as number;
+    const other = (await c.http.post(`${api}/categories`).set(auth(manager)).send({ name: 'Other category' })).body.id as number;
+    const brand = (await c.http.post(`${api}/brands`).set(auth(manager)).send({ name: 'Filter brand' })).body.id as number;
+    const a = await create({ name: 'Filter A', barcode: '7100000000001', categoryId: cat, brandId: brand });
+    const b = await create({ name: 'Filter B', barcode: '7100000000002', categoryId: cat });
+    const d = await create({ name: 'Filter D', barcode: '7100000000003', categoryId: other, brandId: brand });
+    const names = async (qs: string) =>
+      ((await c.http.get(`${api}/products?${qs}`).set(auth(cashier))).body.data as { name: string }[]).map((p) => p.name).sort();
+
+    expect(await names(`categoryId=${cat}`)).toEqual(['Filter A', 'Filter B']);
+    expect(await names(`brandId=${brand}`)).toEqual(['Filter A', 'Filter D']);
+    expect(await names(`categoryId=${cat}&brandId=${brand}`)).toEqual(['Filter A']); // both must match
+    expect(await names(`categoryId=${cat}&q=Filter B`)).toEqual(['Filter B']); // together with the search
+    expect(await names(`categoryId=${other}&brandId=${brand}&q=Filter A`)).toEqual([]);
+
+    await c.http.patch(`${api}/products/${b.body.id}`).set(auth(manager)).send({ active: false });
+    expect(await names(`categoryId=${cat}`)).toEqual(['Filter A']); // hidden ones stay out unless asked for
+    expect(await names(`categoryId=${cat}&active=all`)).toEqual(['Filter A', 'Filter B']);
+    expect(d.status).toBe(201);
+  });
+});
