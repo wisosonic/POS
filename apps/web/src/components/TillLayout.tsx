@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { setShopTitle } from '../lib/shopTitle';
 import { SwitchCashierDialog } from '../features/auth/SwitchCashierDialog';
 import { HoldsDialog } from '../features/checkout/HoldsDialog';
 import { OpenRegisterDialog } from '../features/register/OpenRegisterDialog';
@@ -65,6 +66,7 @@ export function TillLayout() {
   const holdCount = holds.data?.length ?? 0;
   const lowCount = alerts.data?.length ?? 0;
   const shopName = settings.data?.name ?? 'Till';
+  useEffect(() => setShopTitle(settings.data?.name), [settings.data?.name]); // the tab is named after the shop
   // A page that is opened for the first time is fetched now: the header stays, only the page area waits.
   const outlet = (
     <Suspense fallback={<main className="page muted">Loading…</main>}>

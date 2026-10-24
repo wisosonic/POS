@@ -71,6 +71,7 @@ test('the admin changes the shop details, and the test slip reaches the printer'
   await page.getByLabel('Line at the bottom').fill('Thank you, see you soon');
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByRole('link', { name: 'Darwish Market Hamra' })).toBeVisible(); // the header follows at once
+  await expect(page).toHaveTitle('Darwish Market Hamra'); // and so does the browser tab
 
   // the test slip goes to the saved printer, so changing the box turns the button off until it is saved
   await page.getByLabel('Printer name').fill('Another printer');
@@ -91,6 +92,10 @@ test('the admin changes the shop details, and the test slip reaches the printer'
   await page.getByLabel('Line at the bottom').fill('');
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByRole('link', { name: 'Darwish Market', exact: true })).toBeVisible();
+  await expect(page).toHaveTitle('Darwish Market');
+  // a reload shows the name at once, and so does the sign-in page (the name is remembered on this computer)
+  await page.goto('/login');
+  await expect(page).toHaveTitle('Darwish Market');
 });
 
 test('the gear opens Settings with a side menu: the admin has every section, a manager only Appearance; the header shows no rate', async ({
