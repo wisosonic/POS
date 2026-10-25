@@ -1440,3 +1440,20 @@ label.check {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A payment method that already has an amount typed, while another method's boxes are showing. */
+.tabs button {
+  position: relative;
+}
+.tab-dot {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+.tabs button[aria-selected='true'] .tab-dot {
+  background: var(--brand-ink);
+}

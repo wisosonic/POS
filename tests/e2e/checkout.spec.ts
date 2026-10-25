@@ -146,10 +146,48 @@ test('Q6: pay with Whish, then split OMT + cash', async ({ page }) => {
   await scan(page, CHOC);
   await scan(page, CHOC);
   await page.keyboard.press('F9');
+  await page.getByRole('tab', { name: 'OMT' }).click();
   await page.getByLabel('OMT LBP').fill('60000');
+  await page.getByRole('tab', { name: 'Cash' }).click();
   await page.getByLabel('Cash LBP').fill('40000');
   await expect(page.getByTestId('change-due')).toHaveText(/0/);
   await page.getByRole('button', { name: 'Complete' }).click();
+  await expect(page.getByText(/Sale \d+ completed/)).toBeVisible();
+});
+
+test('the Pay window shows only the boxes of the chosen payment method, and keeps what was typed under the others', async ({ page }) => {
+  await scan(page, TOWEL); // 75,000 LL
+  await page.getByRole('button', { name: /PAY/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Payment' });
+  const cash = dialog.getByRole('tab', { name: 'Cash' });
+  const whish = dialog.getByRole('tab', { name: 'Whish' });
+  const omt = dialog.getByRole('tab', { name: 'OMT' });
+
+  // Cash is chosen to begin with: its two boxes only
+  await expect(cash).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByLabel('Cash LBP')).toBeVisible();
+  await expect(dialog.getByLabel('Cash USD')).toBeVisible();
+  for (const hidden of ['Whish LBP', 'Whish USD', 'OMT LBP', 'OMT USD']) await expect(dialog.getByLabel(hidden)).toHaveCount(0);
+
+  await dialog.getByLabel('Cash LBP').fill('25000');
+  await whish.click();
+  await expect(whish).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByLabel('Whish LBP')).toBeVisible();
+  await expect(dialog.getByLabel('Whish USD')).toBeVisible();
+  await expect(dialog.getByLabel('Cash LBP')).toHaveCount(0); // the cash boxes are put away
+  await expect(dialog.getByLabel('OMT LBP')).toHaveCount(0);
+
+  // what was typed under Cash still counts, and its tab shows a dot while another method is showing
+  await expect(cash.locator('.tab-dot')).toHaveCount(1);
+  await expect(whish.locator('.tab-dot')).toHaveCount(0);
+  await dialog.getByLabel('Whish LBP').fill('50000');
+  await expect(dialog.getByTestId('change-due')).toHaveText(/0/); // 25,000 cash + 50,000 Whish = the total
+  await expect(whish.locator('.tab-dot')).toHaveCount(1);
+  await expect(omt.locator('.tab-dot')).toHaveCount(0);
+
+  await cash.click();
+  await expect(dialog.getByLabel('Cash LBP')).toHaveValue('25000'); // kept
+  await dialog.getByRole('button', { name: 'Complete' }).click();
   await expect(page.getByText(/Sale \d+ completed/)).toBeVisible();
 });
 
@@ -179,7 +217,7 @@ test('the Pay window shows the change and the buttons without scrolling; a regis
   await expect(dialog.getByTestId('change-due')).toHaveText(/25,000/);
   await expect(dialog.getByTestId('change-due')).toBeInViewport({ ratio: 1 });
   await expect(dialog.getByRole('button', { name: 'Complete' })).toBeInViewport({ ratio: 1 });
-  await expect(dialog.getByLabel('OMT USD')).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByLabel('Cash USD')).toBeInViewport({ ratio: 1 });
 
   // Walk-In cannot owe: no such button
   await expect(dialog.getByRole('button', { name: 'Put it all on account' })).toHaveCount(0);

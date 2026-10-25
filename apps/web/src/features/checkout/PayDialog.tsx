@@ -104,12 +104,14 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
                   }}
                 >
                   {m.name}
+                  {(inputs[m.lbp].trim() !== '' || inputs[m.usd].trim() !== '') && <span className="tab-dot" aria-hidden="true" />}
                 </button>
               ))}
             </div>
 
-            {METHODS.map((m) => (
-              <div key={m.method} className={`method ${active === m.method ? 'active' : ''}`}>
+            {/* Only the chosen method's boxes are shown; what was typed under the others is kept, and its tab shows a dot. */}
+            {METHODS.filter((m) => m.method === active).map((m) => (
+              <div key={m.method} className="method active">
                 <label className="field">
                   {`${m.name} LBP`}
                   <input
@@ -136,21 +138,19 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
                     onChange={(e) => set(m.usd, e.target.value)}
                   />
                 </label>
-                {active === m.method && (
-                  <div className="quick">
-                    <button type="button" className="btn small" onClick={() => set(m.lbp, String(totalLbp))}>
-                      Exact
-                    </button>
-                    {m.method === 'cash' &&
-                      NOTES.filter((n) => n >= totalLbp)
-                        .slice(0, 3)
-                        .map((n) => (
-                          <button key={n} type="button" className="btn small" onClick={() => set(m.lbp, String(n))}>
-                            {groupThousands(n)}
-                          </button>
-                        ))}
-                  </div>
-                )}
+                <div className="quick">
+                  <button type="button" className="btn small" onClick={() => set(m.lbp, String(totalLbp))}>
+                    Exact
+                  </button>
+                  {m.method === 'cash' &&
+                    NOTES.filter((n) => n >= totalLbp)
+                      .slice(0, 3)
+                      .map((n) => (
+                        <button key={n} type="button" className="btn small" onClick={() => set(m.lbp, String(n))}>
+                          {groupThousands(n)}
+                        </button>
+                      ))}
+                </div>
               </div>
             ))}
           </div>

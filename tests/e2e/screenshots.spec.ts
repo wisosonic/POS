@@ -95,7 +95,6 @@ test('screens', async ({ page }) => {
   await shot(page, '09-pay-on-account');
 
   await page.getByLabel('Cash LBP').fill('600000');
-  await page.getByLabel('OMT LBP').fill('');
   await shot(page, '10-pay-change');
   await page.getByLabel('Cash LBP').fill('300000'); // part-paid: the rest stays on Ahmad's account
   await expect(page.getByTestId('rest-due')).toBeVisible();
