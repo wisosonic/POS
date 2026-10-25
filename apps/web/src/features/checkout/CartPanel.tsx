@@ -2,9 +2,11 @@ import { useEffect, useRef } from 'react';
 import { fmtLbp, lbpAsUsd, trimQty } from '../../lib/money';
 import { useCart, type CartLine, type CartTotals } from '../../store/cart';
 import { toast } from '../../store/toast';
+import { tNow, useT } from '../../store/lang';
 import { Icon } from '../../components/Icon';
 
 function QtyBox({ line, autoFocus }: { line: CartLine; autoFocus: boolean }) {
+  const t = useT();
   const step = useCart((s) => s.step);
   const setQty = useCart((s) => s.setQty);
   const input = useRef<HTMLInputElement>(null);
@@ -18,13 +20,13 @@ function QtyBox({ line, autoFocus }: { line: CartLine; autoFocus: boolean }) {
   }, [autoFocus]);
 
   const commit = (text: string) => {
-    const t = text.trim();
-    if (t === trimQty(line.qty)) return;
-    if (!setQty(line.key, t)) {
+    const typed = text.trim();
+    if (typed === trimQty(line.qty)) return;
+    if (!setQty(line.key, typed)) {
       toast.warning(
         line.product.fractional
-          ? 'Enter a quantity such as 2 or 0.35 (up to 3 decimals)'
-          : `"${line.product.name.trim()}" is sold by the piece: enter a whole number`,
+          ? tNow('Enter a quantity such as 2 or 0.35 (up to 3 decimals)')
+          : tNow('"{name}" is sold by the piece: enter a whole number', { name: line.product.name.trim() }),
       );
       if (input.current) input.current.value = trimQty(line.qty);
     }
@@ -32,7 +34,7 @@ function QtyBox({ line, autoFocus }: { line: CartLine; autoFocus: boolean }) {
 
   return (
     <span className="qty">
-      <button type="button" aria-label={`One less ${line.product.name}`} onClick={() => step(line.key, -1)}>
+      <button type="button" aria-label={t('One less {name}', { name: line.product.name })} onClick={() => step(line.key, -1)}>
         −
       </button>
       <input
@@ -40,7 +42,7 @@ function QtyBox({ line, autoFocus }: { line: CartLine; autoFocus: boolean }) {
         key={line.qty}
         defaultValue={trimQty(line.qty)}
         inputMode="decimal"
-        aria-label={`Quantity of ${line.product.name}`}
+        aria-label={t('Quantity of {name}', { name: line.product.name })}
         onBlur={(e) => commit(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -50,7 +52,7 @@ function QtyBox({ line, autoFocus }: { line: CartLine; autoFocus: boolean }) {
           }
         }}
       />
-      <button type="button" aria-label={`One more ${line.product.name}`} onClick={() => step(line.key, 1)}>
+      <button type="button" aria-label={t('One more {name}', { name: line.product.name })} onClick={() => step(line.key, 1)}>
         +
       </button>
     </span>
@@ -87,17 +89,18 @@ export function CartPanel({
   onRemoveDiscount,
   onPrice,
 }: Props) {
+  const t = useT();
   const remove = useCart((s) => s.remove);
   const empty = lines.length === 0;
   const priced = new Map(totals.lines.map((l) => [l.key, l]));
 
   return (
     <>
-      <section className="card cart" aria-label="Cart">
+      <section className="card cart" aria-label={t('Cart')}>
         {empty ? (
           <div className="empty">
-            <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>Cart is empty</div>
-            <div>Scan an item or search by name</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{t('Cart is empty')}</div>
+            <div>{t('Scan an item or search by name')}</div>
           </div>
         ) : (
           <ul className="cart-list">
@@ -109,20 +112,20 @@ export function CartPanel({
                     <div className="name">{l.product.name.trim()}</div>
                     <div className="sub">
                       {p ? fmtLbp(p.unitPriceLbp) : ''}
-                      {l.product.fractional ? ` per ${l.product.unitName ?? 'unit'}` : ''}
+                      {l.product.fractional ? ` ${t('per {unit}', { unit: l.product.unitName ?? t('unit') })}` : ''}
                       {l.price && (
                         <span
                           className="muted"
                           data-testid="price-note"
-                        >{` · price changed${l.price.approvedBy ? `, approved by ${l.price.approvedBy}` : ''}`}</span>
+                        >{` · ${l.price.approvedBy ? t('price changed, approved by {name}', { name: l.price.approvedBy }) : t('price changed')}`}</span>
                       )}{' '}
                       <button
                         type="button"
                         className="btn ghost small"
-                        aria-label={`Change the price of ${l.product.name.trim()}`}
+                        aria-label={t('Change the price of {name}', { name: l.product.name.trim() })}
                         onClick={() => onPrice(l.key)}
                       >
-                        Price
+                        {t('Price')}
                       </button>
                     </div>
                   </div>
@@ -130,7 +133,12 @@ export function CartPanel({
                   <div className="num" style={{ minWidth: 96, fontWeight: 700 }}>
                     {p ? fmtLbp(p.lineTotalLbp) : ''}
                   </div>
-                  <button type="button" className="btn ghost small" aria-label={`Remove ${l.product.name}`} onClick={() => remove(l.key)}>
+                  <button
+                    type="button"
+                    className="btn ghost small"
+                    aria-label={t('Remove {name}', { name: l.product.name })}
+                    onClick={() => remove(l.key)}
+                  >
                     <Icon name="close" size={18} />
                   </button>
                 </li>
@@ -141,11 +149,11 @@ export function CartPanel({
         <div className="totals">
           <div className="row">
             <span>
-              Subtotal{' '}
+              {t('Subtotal')}{' '}
               {!empty && totals.discountLbp === 0 && (
                 <button type="button" className="btn ghost small" onClick={onDiscount}>
                   <Icon name="discount" size={16} />
-                  Discount (F6)
+                  {t('Discount (F6)')}
                 </button>
               )}
             </span>
@@ -154,11 +162,11 @@ export function CartPanel({
           {totals.discountLbp > 0 && (
             <div className="row" data-testid="discount-row">
               <span>
-                <button type="button" className="btn ghost small" aria-label="Change the discount" onClick={onDiscount}>
-                  Discount
+                <button type="button" className="btn ghost small" aria-label={t('Change the discount')} onClick={onDiscount}>
+                  {t('Discount')}
                 </button>
-                {approvedBy && <span className="muted">{` · approved by ${approvedBy}`}</span>}{' '}
-                <button type="button" className="btn ghost small" aria-label="Remove the discount" onClick={onRemoveDiscount}>
+                {approvedBy && <span className="muted">{` · ${t('approved by {name}', { name: approvedBy })}`}</span>}{' '}
+                <button type="button" className="btn ghost small" aria-label={t('Remove the discount')} onClick={onRemoveDiscount}>
                   <Icon name="close" size={16} />
                 </button>
               </span>
@@ -167,7 +175,7 @@ export function CartPanel({
           )}
           {totals.roundingLbp !== 0 && (
             <div className="row">
-              <span>Rounding</span>
+              <span>{t('Rounding')}</span>
               <span className="num">{`${totals.roundingLbp > 0 ? '+' : ''}${fmtLbp(totals.roundingLbp)}`}</span>
             </div>
           )}
@@ -176,7 +184,7 @@ export function CartPanel({
 
       <div className="grand">
         <span>
-          TOTAL <span className="usd">{`≈ ${lbpAsUsd(totals.totalLbp, rate)}`}</span>
+          {t('TOTAL')} <span className="usd">{`≈ ${lbpAsUsd(totals.totalLbp, rate)}`}</span>
         </span>
         <span className="amount" data-testid="cart-total">
           {fmtLbp(totals.totalLbp)}
@@ -186,15 +194,15 @@ export function CartPanel({
       <div className="actions">
         <button className="btn big" onClick={onClear} disabled={empty}>
           <Icon name="trash" size={22} />
-          Clear
+          {t('Clear')}
         </button>
         <button className="btn big" onClick={onHold} disabled={empty}>
           <Icon name="hold" size={22} />
-          Hold (F4)
+          {t('Hold (F4)')}
         </button>
         <button className="btn big primary" onClick={onPay} disabled={empty}>
           <Icon name="pay" size={24} />
-          PAY (F9)
+          {t('PAY (F9)')}
         </button>
       </div>
     </>

@@ -4,6 +4,7 @@ import { Modal } from '../../components/Modal';
 import { ApiError, get, post } from '../../lib/api';
 import { groupThousands, parseLbpInput, parseUsdInput } from '../../lib/money';
 import type { Currency, Method } from '../../lib/types';
+import { tNow, useT } from '../../store/lang';
 
 type Suggestion = { balances: { method: Method; currency: Currency; amount: number }[] };
 
@@ -19,6 +20,7 @@ const keyOf = (m: Method, c: Currency) => `${m}/${c}`;
  * both currencies (decision Q6), pre-filled from what was counted when the register was last closed.
  */
 export function OpenRegisterDialog() {
+  const t = useT();
   const queryClient = useQueryClient();
   const suggestion = useQuery({
     queryKey: ['suggested-opening'],
@@ -44,7 +46,7 @@ export function OpenRegisterDialog() {
       for (const currency of ['USD', 'LBP'] as const) {
         const text = values[keyOf(method, currency)] ?? '';
         const amount = currency === 'USD' ? parseUsdInput(text) : parseLbpInput(text);
-        if (Number.isNaN(amount)) return setError(`Check the amount in ${name} ${currency}`);
+        if (Number.isNaN(amount)) return setError(tNow('Check the amount in {field}', { field: `${tNow(name)} ${currency}` }));
         openingBalances.push({ method, currency, amount });
       }
     }
@@ -55,7 +57,7 @@ export function OpenRegisterDialog() {
     } catch (err) {
       // Already open (another screen opened it a moment ago) is fine: just show it.
       if (!(err instanceof ApiError && err.code === 'REGISTER_ALREADY_OPEN')) {
-        setError(err instanceof ApiError ? err.message : 'Could not open the register');
+        setError(err instanceof ApiError ? err.message : tNow('Could not open the register'));
         setBusy(false);
         return;
       }
@@ -65,17 +67,17 @@ export function OpenRegisterDialog() {
   }
 
   return (
-    <Modal label="Open register" dismissible={false}>
+    <Modal label={t('Open register')} dismissible={false}>
       <form onSubmit={submit} className="dialog-body" style={{ padding: 0 }}>
-        <h2>Open the register</h2>
+        <h2>{t('Open the register')}</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Count the cash in the drawer and the balance of each wallet, then type them in.
+          {t('Count the cash in the drawer and the balance of each wallet, then type them in.')}
         </p>
         {METHODS.map(({ method, name }) => (
           <div key={method} className="method">
             {(['LBP', 'USD'] as const).map((currency) => (
               <label key={currency} className="field">
-                {`${name} ${currency}`}
+                {`${t(name)} ${currency}`}
                 <input
                   className="num"
                   inputMode="decimal"
@@ -94,7 +96,7 @@ export function OpenRegisterDialog() {
         )}
         <div className="dialog-actions">
           <button className="btn primary big" type="submit" disabled={busy || suggestion.isLoading}>
-            Open register
+            {t('Open register')}
           </button>
         </div>
       </form>

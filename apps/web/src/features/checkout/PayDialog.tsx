@@ -4,6 +4,7 @@ import { ApiError } from '../../lib/api';
 import { fmtLbp, groupThousands, lbpAsUsd } from '../../lib/money';
 import { NO_PAYMENT, analyzePayment, type PayAnalysis, type PayInputs } from '../../lib/payment';
 import type { Customer, Method } from '../../lib/types';
+import { tNow, useT } from '../../store/lang';
 import { CustomerPicker } from './CustomerPicker';
 
 const METHODS: { method: Method; name: string; lbp: keyof PayInputs; usd: keyof PayInputs }[] = [
@@ -11,6 +12,13 @@ const METHODS: { method: Method; name: string; lbp: keyof PayInputs; usd: keyof 
   { method: 'whish', name: 'Whish', lbp: 'whishLbp', usd: 'whishUsd' },
   { method: 'omt', name: 'OMT', lbp: 'omtLbp', usd: 'omtUsd' },
 ];
+
+/** The reason a payment cannot be completed yet, in the chosen language. */
+function payError(error: string | null, t: (text: string, vars?: Record<string, string>) => string): string {
+  if (!error) return '';
+  const field = /^Check the amount in (.+)$/.exec(error);
+  return field ? t('Check the amount in {field}', { field: field[1]! }) : t(error);
+}
 
 /** Round-number bills worth offering as one-tap amounts for a lira payment. */
 const NOTES = [50_000, 100_000, 200_000, 500_000, 1_000_000];
@@ -27,6 +35,7 @@ type Props = {
 };
 
 export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, onComplete, onClose }: Props) {
+  const t = useT();
   const [inputs, setInputs] = useState<PayInputs>(NO_PAYMENT);
   const [active, setActive] = useState<Method>('cash');
   const [busy, setBusy] = useState(false);
@@ -51,7 +60,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
     try {
       await onComplete(a);
     } catch (err) {
-      setServerError(err instanceof ApiError ? err.message : 'The sale could not be completed');
+      setServerError(err instanceof ApiError ? err.message : tNow('The sale could not be completed'));
       setBusy(false);
     }
   }
@@ -74,24 +83,24 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
   }
 
   return (
-    <Modal label="Payment" onClose={onClose} wide>
+    <Modal label={t('Payment')} onClose={onClose} wide>
       <form onSubmit={submit} style={{ display: 'grid', gap: 14 }}>
-        <h2>Pay</h2>
+        <h2>{t('Pay')}</h2>
         <div className="pay-cols">
           <div className="pay-col">
             <div className="due">
-              <span>Total due</span>
+              <span>{t('Total due')}</span>
               <div style={{ textAlign: 'right' }}>
                 <div className="amount num" data-testid="pay-total">
                   {fmtLbp(totalLbp)}
                 </div>
-                <div className="muted">{`about ${lbpAsUsd(totalLbp, rate)}`}</div>
+                <div className="muted">{t('about {amount}', { amount: lbpAsUsd(totalLbp, rate) })}</div>
               </div>
             </div>
 
             <CustomerPicker value={customer} onChange={onCustomer} />
 
-            <div className="tabs" role="tablist" aria-label="Payment method">
+            <div className="tabs" role="tablist" aria-label={t('Payment method')}>
               {METHODS.map((m) => (
                 <button
                   key={m.method}
@@ -103,7 +112,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
                     fields.current[m.lbp]?.focus();
                   }}
                 >
-                  {m.name}
+                  {t(m.name)}
                   {(inputs[m.lbp].trim() !== '' || inputs[m.usd].trim() !== '') && <span className="tab-dot" aria-hidden="true" />}
                 </button>
               ))}
@@ -113,7 +122,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
             {METHODS.filter((m) => m.method === active).map((m) => (
               <div key={m.method} className="method active">
                 <label className="field">
-                  {`${m.name} LBP`}
+                  {`${t(m.name)} LBP`}
                   <input
                     ref={(el) => void (fields.current[m.lbp] = el)}
                     className="num"
@@ -126,7 +135,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
                   />
                 </label>
                 <label className="field">
-                  {`${m.name} USD`}
+                  {`${t(m.name)} USD`}
                   <input
                     ref={(el) => void (fields.current[m.usd] = el)}
                     className="num"
@@ -140,7 +149,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
                 </label>
                 <div className="quick">
                   <button type="button" className="btn small" onClick={() => set(m.lbp, String(totalLbp))}>
-                    Exact
+                    {t('Exact')}
                   </button>
                   {m.method === 'cash' &&
                     NOTES.filter((n) => n >= totalLbp)
@@ -158,18 +167,18 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
           <div className="pay-col">
             <div className="summary" aria-live="polite">
               <div className="row">
-                <span>Received</span>
+                <span>{t('Received')}</span>
                 <span className="num">{fmtLbp(analysis.receivedLbp)}</span>
               </div>
               <div className="row big change">
-                <span>Change (cash)</span>
+                <span>{t('Change (cash)')}</span>
                 <span className="num" data-testid="change-due">
                   {fmtLbp(analysis.changeLbp)}
                 </span>
               </div>
               {analysis.restLbp > 0 && (
                 <div className="row big rest">
-                  <span>Left on account</span>
+                  <span>{t('Left on account')}</span>
                   <span className="num" data-testid="rest-due">
                     {fmtLbp(analysis.restLbp)}
                   </span>
@@ -179,7 +188,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
 
             {showWarning && (
               <div className="warning" role="alert">
-                {analysis.error}
+                {payError(analysis.error, t)}
               </div>
             )}
             {serverError && (
@@ -191,9 +200,9 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
             {customer && (
               <div className="on-account">
                 <button type="button" className="btn big" disabled={busy || onAccount.error !== null} onClick={putOnAccount}>
-                  Put it all on account
+                  {t('Put it all on account')}
                 </button>
-                <span className="muted">{`Nothing is paid now: the whole total is owed by ${customer.name}.`}</span>
+                <span className="muted">{t('Nothing is paid now: the whole total is owed by {name}.', { name: customer.name })}</span>
               </div>
             )}
           </div>
@@ -201,10 +210,10 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
 
         <div className="dialog-actions">
           <button type="button" className="btn" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </button>
           <button type="submit" className="btn primary big" disabled={analysis.error !== null || busy}>
-            Complete
+            {t('Complete')}
           </button>
         </div>
       </form>

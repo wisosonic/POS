@@ -19,6 +19,7 @@ const DebtsPage = page(() => import('./features/customers/DebtsPage'), 'DebtsPag
 const BackupsPage = page(() => import('./features/backups/BackupsPage'), 'BackupsPage');
 const RatePage = page(() => import('./features/settings/RatePage'), 'RatePage');
 const SettingsLayout = page(() => import('./features/settings/SettingsLayout'), 'SettingsLayout');
+const LanguagePage = page(() => import('./features/settings/LanguagePage'), 'LanguagePage');
 const AppearancePage = page(() => import('./features/settings/AppearancePage'), 'AppearancePage');
 const SettingsPage = page(() => import('./features/settings/SettingsPage'), 'SettingsPage');
 const CashPage = page(() => import('./features/register/CashPage'), 'CashPage');
@@ -81,6 +82,7 @@ export function App() {
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="appearance" replace />} />
               <Route path="appearance" element={<AppearancePage />} />
+              <Route path="language" element={<LanguagePage />} />
               <Route element={<AdminOnly otherwise="/settings/appearance" />}>
                 <Route path="shop" element={<SettingsPage />} />
                 <Route path="rate" element={<RatePage />} />

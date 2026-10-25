@@ -49,6 +49,7 @@ export const NAV: NavSection[] = [
  */
 export const SETTINGS_NAV: NavItem[] = [
   { to: '/settings/appearance', label: 'Appearance', icon: 'appearance', min: 'cashier' },
+  { to: '/settings/language', label: 'Language', icon: 'language', min: 'cashier' },
   { to: '/settings/shop', label: 'Shop and receipts', icon: 'shop', min: 'admin' },
   { to: '/settings/rate', label: 'Exchange rate', icon: 'rate', min: 'admin' },
   { to: '/settings/users', label: 'Users', icon: 'users', min: 'admin' },

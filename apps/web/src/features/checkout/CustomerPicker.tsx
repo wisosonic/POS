@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, get, post } from '../../lib/api';
 import { fmtLbp } from '../../lib/money';
 import type { Customer } from '../../lib/types';
+import { tNow, useT } from '../../store/lang';
 
 /**
  * Choose who is paying. Walk-In is the default and cannot owe anything. A registered customer can pay part now and the rest
  * later (decision Q4), so this is where a credit sale gets its customer.
  */
 export function CustomerPicker({ value, onChange }: { value: Customer | null; onChange: (c: Customer | null) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [found, setFound] = useState<Customer[]>([]);
@@ -31,7 +33,9 @@ export function CustomerPicker({ value, onChange }: { value: Customer | null; on
           setProblem('');
         })
         .catch((e) =>
-          setProblem(e instanceof ApiError && e.isNetwork ? 'Cannot search customers while offline' : 'Could not search customers'),
+          setProblem(
+            e instanceof ApiError && e.isNetwork ? tNow('Cannot search customers while offline') : tNow('Could not search customers'),
+          ),
         );
     }, 200);
     return () => clearTimeout(timer);
@@ -51,21 +55,21 @@ export function CustomerPicker({ value, onChange }: { value: Customer | null; on
       setNewName('');
       setNewPhone('');
     } catch (e) {
-      setProblem(e instanceof ApiError ? e.message : 'Could not add the customer');
+      setProblem(e instanceof ApiError ? e.message : tNow('Could not add the customer'));
     }
   }
 
   return (
     <div className="picker">
       <button type="button" className="btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {`Customer: ${value ? value.name : 'Walk-In'} ▾`}
+        {`${t('Customer: {name}', { name: value ? value.name : t('Walk-In') })} ▾`}
       </button>
       {open && (
         <>
           <input
             ref={input}
-            placeholder="Search customer"
-            aria-label="Search customer"
+            placeholder={t('Search customer')}
+            aria-label={t('Search customer')}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -77,16 +81,16 @@ export function CustomerPicker({ value, onChange }: { value: Customer | null; on
             }}
             style={{ minHeight: 48, padding: '0 12px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg)' }}
           />
-          <ul className="options" role="listbox" aria-label="Customers">
+          <ul className="options" role="listbox" aria-label={t('Customers')}>
             <li role="option" aria-selected={!value} onClick={() => choose(null)}>
-              <span>Walk-In</span>
-              <span className="muted">no account</span>
+              <span>{t('Walk-In')}</span>
+              <span className="muted">{t('no account')}</span>
             </li>
             {found.map((c) => (
               <li key={c.id} role="option" aria-selected={value?.id === c.id} onClick={() => choose(c)}>
                 <span>{c.name}</span>
                 <span className="muted">
-                  {[c.phone, c.balanceLbp > 0 ? `owes ${fmtLbp(c.balanceLbp)}` : null].filter(Boolean).join(' · ')}
+                  {[c.phone, c.balanceLbp > 0 ? t('owes {amount}', { amount: fmtLbp(c.balanceLbp) }) : null].filter(Boolean).join(' · ')}
                 </span>
               </li>
             ))}
@@ -94,20 +98,20 @@ export function CustomerPicker({ value, onChange }: { value: Customer | null; on
           {problem && <div className="error-text">{problem}</div>}
           {!adding ? (
             <button type="button" className="btn small" onClick={() => setAdding(true)}>
-              + New customer
+              {t('+ New customer')}
             </button>
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
               <label className="field">
-                Name
+                {t('Name')}
                 <input value={newName} onChange={(e) => setNewName(e.target.value)} />
               </label>
               <label className="field">
-                Phone (optional)
+                {t('Phone (optional)')}
                 <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
               </label>
               <button type="button" className="btn small primary" onClick={() => void addCustomer()} disabled={!newName.trim()}>
-                Add and select
+                {t('Add and select')}
               </button>
             </div>
           )}

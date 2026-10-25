@@ -35,12 +35,12 @@ describe('the menu', () => {
     expect(visible('admin')).toHaveLength(visible('manager').length);
   });
 
-  it('Settings: Appearance is for everyone; the shop, exchange rate, users and backups are for the admin only', () => {
-    expect(SETTINGS_NAV.map((i) => i.label)).toEqual(['Appearance', 'Shop and receipts', 'Exchange rate', 'Users', 'Backups']);
+  it('Settings: Appearance and Language are for everyone; the shop, exchange rate, users and backups are for the admin only', () => {
+    expect(SETTINGS_NAV.map((i) => i.label)).toEqual(['Appearance', 'Language', 'Shop and receipts', 'Exchange rate', 'Users', 'Backups']);
     const only = (role: 'cashier' | 'manager' | 'admin') => SETTINGS_NAV.filter((i) => atLeast(role, i.min)).map((i) => i.label);
-    expect(only('cashier')).toEqual(['Appearance']);
-    expect(only('manager')).toEqual(['Appearance']);
-    expect(only('admin')).toHaveLength(5);
+    expect(only('cashier')).toEqual(['Appearance', 'Language']);
+    expect(only('manager')).toEqual(['Appearance', 'Language']);
+    expect(only('admin')).toHaveLength(6);
     expect(NAV.flatMap((s) => s.items).some((i) => SETTINGS_NAV.some((a) => a.to === i.to))).toBe(false); // listed once
   });
 

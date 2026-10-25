@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Icon, type IconName } from '../../components/Icon';
+import { useT } from '../../store/lang';
 import { DEFAULT_APPEARANCE, readAppearance, setAppearance, SIZE_PERCENT, type TextSize, type Theme } from '../../lib/appearance';
 
 const THEMES: { value: Theme; label: string; hint: string; icon: IconName }[] = [
@@ -16,6 +17,7 @@ const SIZES: { value: TextSize; label: string }[] = [
 
 /** The look of the screen on this computer: light or dark, and the size of the letters. Saved here, for this browser only. */
 export function AppearancePage() {
+  const t = useT();
   const [a, setA] = useState(readAppearance);
   const change = (part: Partial<typeof a>) => setA(setAppearance(part));
 
@@ -23,28 +25,28 @@ export function AppearancePage() {
     <main className="page">
       <h1>
         <Icon name="appearance" size={26} />
-        Appearance
+        {t('Appearance')}
       </h1>
       <p className="muted">
-        These choices are for this computer and this browser only. They are applied at once and kept the next time you open the till.
+        {t('This choice is for this computer and this browser only. It is applied at once and kept the next time you open the till.')}
       </p>
 
       <fieldset className="choice-group">
-        <legend>Colours</legend>
+        <legend>{t('Colours')}</legend>
         <div className="choices">
-          {THEMES.map((t) => (
-            <label key={t.value} className={`choice${a.theme === t.value ? ' on' : ''}`}>
-              <input type="radio" name="theme" value={t.value} checked={a.theme === t.value} onChange={() => change({ theme: t.value })} />
-              <Icon name={t.icon} size={26} />
-              <span className="choice-title">{t.label}</span>
-              <span className="muted choice-hint">{t.hint}</span>
+          {THEMES.map((o) => (
+            <label key={o.value} className={`choice${a.theme === o.value ? ' on' : ''}`}>
+              <input type="radio" name="theme" value={o.value} checked={a.theme === o.value} onChange={() => change({ theme: o.value })} />
+              <Icon name={o.icon} size={26} />
+              <span className="choice-title">{t(o.label)}</span>
+              <span className="muted choice-hint">{t(o.hint)}</span>
             </label>
           ))}
         </div>
       </fieldset>
 
       <fieldset className="choice-group">
-        <legend>Size of the letters</legend>
+        <legend>{t('Size of the letters')}</legend>
         <div className="choices">
           {SIZES.map((s) => (
             <label key={s.value} className={`choice${a.size === s.value ? ' on' : ''}`}>
@@ -52,12 +54,12 @@ export function AppearancePage() {
               <span className="choice-sample" style={{ fontSize: `${SIZE_PERCENT[s.value] / 100}rem` }} aria-hidden="true">
                 Aa
               </span>
-              <span className="choice-title">{s.label}</span>
+              <span className="choice-title">{t(s.label)}</span>
             </label>
           ))}
         </div>
-        <div className="card preview" aria-label="Preview">
-          <div className="muted">Preview</div>
+        <div className="card preview" aria-label={t('Preview')}>
+          <div className="muted">{t('Preview')}</div>
           <div className="preview-name">Almarai Fresh Milk 1L</div>
           <div className="preview-price num">135,000 LL</div>
         </div>
@@ -69,7 +71,7 @@ export function AppearancePage() {
           disabled={a.theme === DEFAULT_APPEARANCE.theme && a.size === DEFAULT_APPEARANCE.size}
           onClick={() => setA(setAppearance({ ...DEFAULT_APPEARANCE }))}
         >
-          Back to the usual look
+          {t('Back to the usual look')}
         </button>
       </div>
     </main>

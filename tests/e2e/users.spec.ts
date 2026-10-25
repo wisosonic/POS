@@ -78,7 +78,7 @@ test('US-26: the admin adds a cashier with a first password; the cashier must ch
   await expect(signedIn(page)).toBeVisible(); // in, on the page she asked for (the Sales page)
   await expect(page.getByRole('heading', { name: 'Sales', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings', exact: true }).click(); // a cashier has the gear too, but only Appearance behind it
-  await expect(page.getByRole('navigation', { name: 'Settings' }).getByRole('link')).toHaveCount(1);
+  await expect(page.getByRole('navigation', { name: 'Settings' }).getByRole('link')).toHaveCount(2); // Appearance and Language
   await page.goto('/users');
   await expect(page).toHaveURL(/\/settings\/appearance$/);
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toHaveCount(0);

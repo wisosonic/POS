@@ -11,9 +11,13 @@ import type { BackupStatus } from '../lib/types';
 import { useConnection, startConnectionWatch } from '../store/connection';
 import { useSession } from '../store/session';
 import { useUi } from '../store/ui';
+import { useT } from '../store/lang';
+import { LanguageSwitch } from './LanguageSwitch';
 import { Drawer } from './Drawer';
 import { Dropdown } from './Dropdown';
 import { Icon } from './Icon';
+
+const ROLE_NAME = { cashier: 'Cashier', manager: 'Manager', admin: 'Admin' } as const;
 
 const initials = (name: string) =>
   name
@@ -25,6 +29,7 @@ const initials = (name: string) =>
 
 /** Header (menu, status, settings, account) and the register gate: nothing is sold until a register is open. */
 export function TillLayout() {
+  const t = useT();
   const queryClient = useQueryClient();
   const user = useSession((s) => s.user)!;
   const logout = useSession((s) => s.logout);
@@ -69,7 +74,7 @@ export function TillLayout() {
   useEffect(() => setShopTitle(settings.data?.name), [settings.data?.name]); // the tab is named after the shop
   // A page that is opened for the first time is fetched now: the header stays, only the page area waits.
   const outlet = (
-    <Suspense fallback={<main className="page muted">Loading…</main>}>
+    <Suspense fallback={<main className="page muted">{t('Loading…')}</main>}>
       <Outlet />
     </Suspense>
   );
@@ -81,7 +86,7 @@ export function TillLayout() {
           className="icon-btn menu-btn"
           aria-haspopup="dialog"
           aria-expanded={menuOpen}
-          aria-label="Menu"
+          aria-label={t('Menu')}
           onClick={() => setMenuOpen(true)}
         >
           <Icon name="menu" size={19} />
@@ -94,19 +99,19 @@ export function TillLayout() {
           {register.data && (
             <span className="chip hide-small">
               <Icon name="register" size={15} />
-              {`Register #${register.data.id} · ${user.name}`}
+              {t('Register #{n} · {name}', { n: register.data.id, name: user.name })}
             </span>
           )}
           {backupOverdue &&
             (isAdmin ? (
               <Link className="chip danger" to="/settings/backups" data-testid="backup-overdue">
                 <Icon name="backups" size={15} />
-                Backup overdue
+                {t('Backup overdue')}
               </Link>
             ) : (
-              <span className="chip danger" data-testid="backup-overdue" title="Tell the owner: the last backup is too old">
+              <span className="chip danger" data-testid="backup-overdue" title={t('Tell the owner: the last backup is too old')}>
                 <Icon name="backups" size={15} />
-                Backup overdue
+                {t('Backup overdue')}
               </span>
             ))}
         </div>
@@ -117,41 +122,48 @@ export function TillLayout() {
           {holdCount > 0 && (
             <button className="btn small" onClick={() => useUi.getState().setHoldsOpen(true)}>
               <Icon name="hold" size={16} />
-              {`Holds (${holdCount})`}
+              {t('Holds ({n})', { n: holdCount })}
             </button>
           )}
           {lowCount > 0 && (
             <Link
               className="chip warn"
               to="/low-stock"
-              title={`${lowCount} products are running low`}
-              aria-label={`${lowCount} products are running low`}
+              title={t('{n} products are running low', { n: lowCount })}
+              aria-label={t('{n} products are running low', { n: lowCount })}
             >
               <Icon name="lowstock" size={15} />
               {lowCount}
             </Link>
           )}
           {waiting > 0 && (
-            <Link className="chip warn" to="/sales" title="Sales waiting to be sent">
-              {waiting} pending
+            <Link className="chip warn" to="/sales" title={t('Sales waiting to be sent')}>
+              {t('{n} pending', { n: waiting })}
             </Link>
           )}
           {blocked > 0 && (
-            <Link className="chip danger" to="/sales" title="Sales the server refused">
-              {blocked} need attention
+            <Link className="chip danger" to="/sales" title={t('Sales the server refused')}>
+              {t('{n} need attention', { n: blocked })}
             </Link>
           )}
           <span className={`chip ${online ? 'ok' : 'danger'}`}>
             <Icon name={online ? 'wifi' : 'wifioff'} size={15} />
-            {online ? 'Online' : 'Offline'}
+            {online ? t('Online') : t('Offline')}
           </span>
 
-          <NavLink to="/settings" className={({ isActive }) => `icon-btn${isActive ? ' on' : ''}`} aria-label="Settings" title="Settings">
+          <LanguageSwitch />
+
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => `icon-btn${isActive ? ' on' : ''}`}
+            aria-label={t('Settings')}
+            title={t('Settings')}
+          >
             <Icon name="settings" size={22} />
           </NavLink>
 
           <Dropdown
-            label={`Account: ${user.name}`}
+            label={t('Account: {name}', { name: user.name })}
             className="account-btn"
             trigger={
               <>
@@ -171,12 +183,12 @@ export function TillLayout() {
                   </span>
                   <div>
                     <div className="dropdown-name">{user.name}</div>
-                    <div className="muted dropdown-sub">{`${user.username} · ${user.role}`}</div>
+                    <div className="muted dropdown-sub">{`${user.username} · ${t(ROLE_NAME[user.role])}`}</div>
                   </div>
                 </div>
                 <Link to="/password" className="dropdown-item" onClick={close}>
                   <Icon name="key" />
-                  Change my password
+                  {t('Change my password')}
                 </Link>
                 <button
                   className="dropdown-item"
@@ -186,11 +198,11 @@ export function TillLayout() {
                   }}
                 >
                   <Icon name="switch" />
-                  Switch cashier
+                  {t('Switch cashier')}
                 </button>
                 <button className="dropdown-item danger" onClick={() => void logout()}>
                   <Icon name="logout" />
-                  {`Sign out (${user.name})`}
+                  {t('Sign out ({name})', { name: user.name })}
                 </button>
               </>
             )}
@@ -201,7 +213,7 @@ export function TillLayout() {
       {!needsRegister ? (
         outlet
       ) : register.isLoading ? (
-        <main className="page muted">Loading…</main>
+        <main className="page muted">{t('Loading…')}</main>
       ) : register.data === null ? (
         <OpenRegisterDialog />
       ) : (

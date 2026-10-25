@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { atLeast, NAV } from '../lib/nav';
 import type { Role } from '../lib/types';
+import { useT } from '../store/lang';
 import { Icon } from './Icon';
 
 /**
@@ -9,6 +10,7 @@ import { Icon } from './Icon';
  * Escape closes it and the page behind cannot be used. Grouped, with an icon for each place and the current one marked.
  */
 export function Drawer({ role, shopName, onClose }: { role: Role; shopName: string; onClose: () => void }) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -20,7 +22,7 @@ export function Drawer({ role, shopName, onClose }: { role: Role; shopName: stri
     <dialog
       ref={ref}
       className="drawer"
-      aria-label="Menu"
+      aria-label={t('Menu')}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -32,21 +34,21 @@ export function Drawer({ role, shopName, onClose }: { role: Role; shopName: stri
       <div className="drawer-body">
         <div className="drawer-head">
           <span className="brand">{shopName}</span>
-          <button className="icon-btn" onClick={onClose} aria-label="Close the menu">
+          <button className="icon-btn" onClick={onClose} aria-label={t('Close the menu')}>
             <Icon name="close" />
           </button>
         </div>
-        <nav aria-label="Menu">
+        <nav aria-label={t('Menu')}>
           {NAV.map((section) => {
             const items = section.items.filter((i) => atLeast(role, i.min));
             if (items.length === 0) return null;
             return (
               <div key={section.title} className="nav-group">
-                <div className="nav-title">{section.title}</div>
+                <div className="nav-title">{t(section.title)}</div>
                 {items.map((i) => (
                   <NavLink key={i.to} to={i.to} end className={({ isActive }) => `nav-link${isActive ? ' on' : ''}`} onClick={onClose}>
                     <Icon name={i.icon} />
-                    <span>{i.label}</span>
+                    <span>{t(i.label)}</span>
                   </NavLink>
                 ))}
               </div>

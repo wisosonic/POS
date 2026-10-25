@@ -108,7 +108,7 @@ test('the gear opens Settings with a side menu: the admin has every section, a m
   await page.getByRole('link', { name: 'Settings', exact: true }).click(); // the gear
   await expect(page).toHaveURL(/\/settings\/appearance$/);
   const menu = page.getByRole('navigation', { name: 'Settings' });
-  for (const name of ['Appearance', 'Shop and receipts', 'Exchange rate', 'Users', 'Backups'])
+  for (const name of ['Appearance', 'Language', 'Shop and receipts', 'Exchange rate', 'Users', 'Backups'])
     await expect(menu.getByRole('link', { name })).toBeVisible();
   await menu.getByRole('link', { name: 'Exchange rate' }).click();
   await expect(page).toHaveURL(/\/settings\/rate$/);
@@ -130,7 +130,7 @@ test('the gear opens Settings with a side menu: the admin has every section, a m
   await expect(other.getByText(/1\$ = /)).toHaveCount(0);
   await other.getByRole('link', { name: 'Settings', exact: true }).click(); // everyone has the gear: Appearance is for everyone
   const otherMenu = other.getByRole('navigation', { name: 'Settings' });
-  await expect(otherMenu.getByRole('link')).toHaveCount(1);
+  await expect(otherMenu.getByRole('link')).toHaveCount(2); // Appearance and Language
   await expect(otherMenu.getByRole('link', { name: 'Appearance' })).toBeVisible();
   for (const path of ['/settings/shop', '/settings/rate', '/settings/users', '/settings/backups', '/rate', '/users']) {
     await other.goto(path);

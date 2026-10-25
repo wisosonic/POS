@@ -16,6 +16,7 @@ import { cartTotals, useCart } from '../../store/cart';
 import { useSession } from '../../store/session';
 import { toast } from '../../store/toast';
 import { useUi } from '../../store/ui';
+import { tNow, useT } from '../../store/lang';
 import { CartPanel } from './CartPanel';
 import { DiscountDialog } from './DiscountDialog';
 import { PriceDialog } from './PriceDialog';
@@ -28,6 +29,7 @@ type PrintState = 'idle' | 'printing' | 'done' | 'failed';
 type Done = { kind: 'sale'; sale: SaleResult; print: PrintState; printError?: string } | { kind: 'offline'; total: number };
 
 export function CheckoutPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const settings = useSettings().data;
   const rate = useRate().data;
@@ -90,7 +92,7 @@ export function CheckoutPage() {
     const hits = catalog.byCode(code);
     if (hits.length === 0) {
       beep('error');
-      toast.error(`Unknown barcode: ${code}`);
+      toast.error(tNow('Unknown barcode: {code}', { code }));
     } else if (hits.length === 1) addProduct(hits[0]!);
     else {
       beep('ok');
@@ -101,13 +103,13 @@ export function CheckoutPage() {
   useScanner(addByCode, !paying && !choices);
 
   function searchEnter() {
-    const t = text.trim();
-    if (!t) return;
-    if (catalog.byCode(t).length > 0) addByCode(t);
+    const typed = text.trim();
+    if (!typed) return;
+    if (catalog.byCode(typed).length > 0) addByCode(typed);
     else if (results[highlight]) addProduct(results[highlight]!);
     else {
       beep('error');
-      toast.error(`Nothing found for "${t}"`);
+      toast.error(tNow('Nothing found for "{text}"', { text: typed }));
     }
     setText('');
     setHighlight(0);
@@ -127,11 +129,11 @@ export function CheckoutPage() {
       await queryClient.invalidateQueries({ queryKey: ['holds'] });
       toast.success(
         hadDiscount
-          ? 'Cart held. The discount is not kept with a held cart: give it again when you bring it back.'
-          : 'Cart held. Open Holds to bring it back.',
+          ? tNow('Cart held. The discount is not kept with a held cart: give it again when you bring it back.')
+          : tNow('Cart held. Open Holds to bring it back.'),
       );
     } catch (e) {
-      toast.error(e instanceof ApiError && e.isNetwork ? 'Cannot hold a cart while offline' : 'Could not hold the cart');
+      toast.error(e instanceof ApiError && e.isNetwork ? tNow('Cannot hold a cart while offline') : tNow('Could not hold the cart'));
     }
   }
   const clear = () => {
@@ -146,7 +148,7 @@ export function CheckoutPage() {
     if (cart.lines.length === 0 || !rate) return;
     // A discount above the cashier's limit has to be approved before the customer pays, not discovered when the sale is refused.
     if (cart.discount && needsApproval(role, pct, limitPct) && !(cart.approval && approvalCovers(cart.approval, pct))) {
-      toast.warning('This discount is above your limit: a manager has to approve it before the customer pays.');
+      toast.warning(tNow('This discount is above your limit: a manager has to approve it before the customer pays.'));
       setDiscounting(true);
       return;
     }
@@ -184,7 +186,7 @@ export function CheckoutPage() {
         unitPriceLbp: priced.get(l.key)!,
         ...(l.price?.token ? { approvalToken: l.price.token } : {}),
       })),
-      payments: analysis.tenders.map((t) => ({ method: t.method ?? 'cash', currency: t.currency, amount: t.amount })),
+      payments: analysis.tenders.map((x) => ({ method: x.method ?? 'cash', currency: x.currency, amount: x.amount })),
       ...(cart.discount ? { discount: cart.discount } : {}),
       ...(cart.discount && cart.approval ? { approvalToken: cart.approval.token } : {}),
     };
@@ -203,7 +205,9 @@ export function CheckoutPage() {
         throw new ApiError(
           0,
           'APPROVAL_NEEDS_SERVER',
-          "A discount or price that needed a manager's approval can only be completed while the connection to the server works. Wait for it, or go back to the normal price.",
+          tNow(
+            "A discount or price that needed a manager's approval can only be completed while the connection to the server works. Wait for it, or go back to the normal price.",
+          ),
         );
       return saveOffline();
     }
@@ -213,7 +217,8 @@ export function CheckoutPage() {
       setPaying(false);
       void queryClient.invalidateQueries({ queryKey: ['register'] });
       void queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      for (const item of sale.lowStock) toast.warning(`Low stock: ${item.name.trim()} (${trimQty(item.qty)} left)`, 6000);
+      for (const item of sale.lowStock)
+        toast.warning(tNow('Low stock: {name} ({qty} left)', { name: item.name.trim(), qty: trimQty(item.qty) }), 6000);
       setDone({ kind: 'sale', sale, print: 'idle' });
       if (settings?.printerConfigured) void print(sale);
     } catch (e) {
@@ -224,7 +229,7 @@ export function CheckoutPage() {
         throw new ApiError(
           e.status,
           e.code,
-          'A price changed while you were selling. The cart has been updated: check the total and complete again.',
+          tNow('A price changed while you were selling. The cart has been updated: check the total and complete again.'),
         );
       }
       if (e instanceof ApiError && e.code === 'DISCOUNT_OVER_LIMIT') {
@@ -233,7 +238,7 @@ export function CheckoutPage() {
         throw new ApiError(
           e.status,
           e.code,
-          "The manager's approval is no longer valid (it may have expired). Close this, press Discount and ask a manager again.",
+          tNow("The manager's approval is no longer valid (it may have expired). Close this, press Discount and ask a manager again."),
         );
       }
       if (e instanceof ApiError && e.code === 'REGISTER_CLOSED') {
@@ -251,7 +256,7 @@ export function CheckoutPage() {
       setDone((d) => (d?.kind === 'sale' && d.sale.id === sale.id ? { ...d, print: 'done' } : d));
     } catch (e) {
       // The sale is already saved. Printing is only a convenience, so say so and offer another way.
-      const why = e instanceof ApiError ? e.message : 'The printer did not answer';
+      const why = e instanceof ApiError ? e.message : tNow('The printer did not answer');
       setDone((d) => (d?.kind === 'sale' && d.sale.id === sale.id ? { ...d, print: 'failed', printError: why } : d));
     }
   }
@@ -260,7 +265,7 @@ export function CheckoutPage() {
     try {
       await printInBrowser(sale.id, duplicate);
     } catch {
-      toast.error('The browser could not open a print window');
+      toast.error(tNow('The browser could not open a print window'));
     }
   }
 
@@ -276,8 +281,8 @@ export function CheckoutPage() {
               ref={search}
               type="search"
               role="searchbox"
-              aria-label="Scan or search product"
-              placeholder="Scan a barcode or search by name (F2)"
+              aria-label={t('Scan or search product')}
+              placeholder={t('Scan a barcode or search by name (F2)')}
               autoComplete="off"
               value={text}
               onChange={(e) => {
@@ -293,18 +298,20 @@ export function CheckoutPage() {
               }}
             />
             {!text && (
-              <div className="hint-line">The scanner works without clicking anywhere. Items without a barcode: type part of the name.</div>
+              <div className="hint-line">
+                {t('The scanner works without clicking anywhere. Items without a barcode: type part of the name.')}
+              </div>
             )}
           </div>
           <button type="button" className="btn catalog-toggle" aria-pressed={browsing} onClick={() => setBrowsing((b) => !b)}>
             <Icon name="products" size={20} />
-            {browsing ? 'Hide catalog' : 'Browse catalog'}
+            {browsing ? t('Hide catalog') : t('Browse catalog')}
           </button>
         </div>
 
         {text.trim() !== '' && (
-          <ul className="results" role="listbox" aria-label="Search results">
-            {results.length === 0 && <li className="empty">No product matches “{text.trim()}”</li>}
+          <ul className="results" role="listbox" aria-label={t('Search results')}>
+            {results.length === 0 && <li className="empty">{t('No product matches “{text}”', { text: text.trim() })}</li>}
             {results.map((p, i) => (
               <li key={p.id}>
                 <button
@@ -322,7 +329,7 @@ export function CheckoutPage() {
                     <span>
                       <strong>{p.name.trim()}</strong>
                       <div className="meta">
-                        {[p.barcode, p.fractional ? `per ${p.unitName ?? 'unit'}` : null].filter(Boolean).join(' · ')}
+                        {[p.barcode, p.fractional ? t('per {unit}', { unit: p.unitName ?? t('unit') }) : null].filter(Boolean).join(' · ')}
                       </div>
                     </span>
                   </span>
@@ -334,51 +341,57 @@ export function CheckoutPage() {
         )}
 
         {text.trim() === '' && done?.kind === 'sale' && (
-          <section className="banner ok" aria-label="Last sale">
-            <div className="title">{`Sale ${done.sale.ref} completed`}</div>
+          <section className="banner ok" aria-label={t('Last sale')}>
+            <div className="title">{t('Sale {ref} completed', { ref: done.sale.ref })}</div>
             <div>
               {fmtLbp(done.sale.totalLbp)}
-              {done.sale.changeLbp > 0 && <strong>{` · give back ${fmtLbp(done.sale.changeLbp)}`}</strong>}
-              {done.sale.restLbp > 0 && <strong>{` · ${fmtLbp(done.sale.restLbp)} left on account`}</strong>}
+              {done.sale.changeLbp > 0 && <strong>{` · ${t('give back {amount}', { amount: fmtLbp(done.sale.changeLbp) })}`}</strong>}
+              {done.sale.restLbp > 0 && <strong>{` · ${t('{amount} left on account', { amount: fmtLbp(done.sale.restLbp) })}`}</strong>}
             </div>
             <div className="buttons">
-              {done.print === 'printing' && <span className="muted">Printing…</span>}
-              {done.print === 'done' && <span className="muted">Receipt printed</span>}
+              {done.print === 'printing' && <span className="muted">{t('Printing…')}</span>}
+              {done.print === 'done' && <span className="muted">{t('Receipt printed')}</span>}
               {done.print === 'failed' && (
                 <>
-                  <span className="muted" style={{ flexBasis: '100%' }}>{`The receipt did not print: ${done.printError}`}</span>
+                  <span className="muted" style={{ flexBasis: '100%' }}>
+                    {t('The receipt did not print: {why}', { why: done.printError ?? '' })}
+                  </span>
                   <button className="btn small" onClick={() => void print(done.sale)}>
-                    Retry print
+                    {t('Retry print')}
                   </button>
                   <button className="btn small" onClick={() => void browserPrint(done.sale)}>
-                    Print in browser
+                    {t('Print in browser')}
                   </button>
                 </>
               )}
               {done.print === 'idle' && (
                 <button className="btn small" onClick={() => void browserPrint(done.sale)}>
-                  Print receipt
+                  {t('Print receipt')}
                 </button>
               )}
               {done.print === 'done' && (
                 <button className="btn small" onClick={() => void print(done.sale, true)}>
-                  Print again
+                  {t('Print again')}
                 </button>
               )}
               <button className="btn small ghost" onClick={() => setDone(null)}>
-                Dismiss
+                {t('Dismiss')}
               </button>
             </div>
           </section>
         )}
 
         {text.trim() === '' && done?.kind === 'offline' && (
-          <section className="banner warn" aria-label="Saved offline">
-            <div className="title">Sale saved on this computer</div>
-            <div>{`${fmtLbp(done.total)}. It will be sent automatically when the connection is back. You can keep selling.`}</div>
+          <section className="banner warn" aria-label={t('Saved offline')}>
+            <div className="title">{t('Sale saved on this computer')}</div>
+            <div>
+              {t('{amount}. It will be sent automatically when the connection is back. You can keep selling.', {
+                amount: fmtLbp(done.total),
+              })}
+            </div>
             <div className="buttons">
               <button className="btn small ghost" onClick={() => setDone(null)}>
-                Dismiss
+                {t('Dismiss')}
               </button>
             </div>
           </section>
@@ -400,20 +413,20 @@ export function CheckoutPage() {
         )}
 
         {text.trim() === '' && !browsing && !done && last && (
-          <section className="last" aria-label="Last item" style={{ position: 'relative' }}>
+          <section className="last" aria-label={t('Last item')} style={{ position: 'relative' }}>
             {last.product.imagePath && (
               <div style={{ position: 'absolute', top: 12, insetInlineEnd: 12 }}>
                 <ProductImage product={last.product} size={96} />
               </div>
             )}
-            <div className="muted">Last item</div>
+            <div className="muted">{t('Last item')}</div>
             <div className="name">{last.product.name.trim()}</div>
             <div className="price">
               {rate
-                ? `${fmtLbp(unitPriceLbp(last.product, rate))}${last.product.fractional ? ` per ${last.product.unitName ?? 'unit'}` : ''}`
+                ? `${fmtLbp(unitPriceLbp(last.product, rate))}${last.product.fractional ? ` ${t('per {unit}', { unit: last.product.unitName ?? t('unit') })}` : ''}`
                 : ''}
             </div>
-            <div className="muted">{`Quantity ${trimQty(last.qty)} · ${last.product.barcode}`}</div>
+            <div className="muted">{`${t('Quantity {qty}', { qty: trimQty(last.qty) })} · ${last.product.barcode}`}</div>
           </section>
         )}
       </div>

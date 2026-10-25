@@ -2,9 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
 import { Icon } from '../../components/Icon';
+import { LanguageSwitch } from '../../components/LanguageSwitch';
+import { tNow, useT } from '../../store/lang';
 import { useSession } from '../../store/session';
 
 export function LoginPage() {
+  const t = useT();
   const status = useSession((s) => s.status);
   const login = useSession((s) => s.login);
   const [username, setUsername] = useState('');
@@ -22,8 +25,8 @@ export function LoginPage() {
       await login(username.trim(), password);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'LOCKED') setError(err.message);
-      else if (err instanceof ApiError && err.isNetwork) setError('Cannot reach the server. Check that it is running.');
-      else setError('Wrong username or password.');
+      else if (err instanceof ApiError && err.isNetwork) setError(tNow('Cannot reach the server. Check that it is running.'));
+      else setError(tNow('Wrong username or password.'));
     } finally {
       setBusy(false);
     }
@@ -31,17 +34,20 @@ export function LoginPage() {
 
   return (
     <main className="login">
+      <div className="login-lang">
+        <LanguageSwitch />
+      </div>
       <form onSubmit={submit}>
         <div className="login-badge" aria-hidden="true">
           <Icon name="till" size={30} />
         </div>
-        <h1>Sign in</h1>
+        <h1>{t('Sign in')}</h1>
         <label className="field">
-          Username
+          {t('Username')}
           <input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
         </label>
         <label className="field">
-          Password
+          {t('Password')}
           <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
         {error && (
@@ -50,7 +56,7 @@ export function LoginPage() {
           </div>
         )}
         <button className="btn primary big" type="submit" disabled={busy}>
-          Sign in
+          {t('Sign in')}
         </button>
       </form>
     </main>

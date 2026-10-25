@@ -283,6 +283,12 @@ const PATHS = {
   drop: <path d="M12 3.5c3.6 4.2 6 7.2 6 10.5a6 6 0 0 1-12 0c0-3.3 2.4-6.3 6-10.5z" />,
   folder: <path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />,
   back: <path d="M15 5l-7 7 7 7" />,
+  language: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.6 2.5 3.8 5.3 3.8 8.5S14.6 18 12 20.5C9.4 18 8.2 15.2 8.2 12S9.4 6 12 3.5z" />
+    </>
+  ),
   lock: (
     <>
       <rect x="5" y="10.5" width="14" height="10" rx="2" />
@@ -297,7 +303,7 @@ export type IconName = keyof typeof PATHS;
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   return (
     <svg
-      className="icon"
+      className={`icon icon-${name}`}
       width={size}
       height={size}
       viewBox="0 0 24 24"

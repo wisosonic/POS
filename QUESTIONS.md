@@ -74,6 +74,25 @@ Answer:
 **D14. Pages not drawn yet:** discount dialog, switch cashier (PIN), held carts, customer accounts, purchases, stocktake, services, expenses, cash in/out, settings, exchange rate, backups, duplicate barcodes, CSV import, product edit. Which should I draw next?
 Answer:
 
+### 9. Arabic: who checks the wording, and which screens next?
+I wrote the Arabic myself. The till flow is done (header, menu, sign-in, settings, checkout, cart, payment, held carts, customers at the till, opening the register). Please have someone who works the till read it (`apps/web/src/lib/ar.ts`, or just switch the screen to Arabic) and tell me the words you would change: for example "Walk-In" is **زبون عابر**, "Debts" is **الديون**, "Hold" is **تعليق**. Which screens should be translated next: Sales and Returns, closing the register, or the back office (products, purchases, reports, users)? Digits stay 0-9; say if you want Arabic-Indic digits (٠١٢) on screen instead. Receipts stay English because the printer cannot print Arabic.
+Answer:
+
 ## Answered
 
-_Nothing yet._
+### 8. Delete a voided sale, or a sale with returns, permanently? 
+Asked for: a button to delete a **voided** sale permanently, and let a **cashier** delete a sale that has **returned items** completely.
+
+Why I have not built it yet: the rule since the first design is that sales, their items, payments, stock movements and the audit log are never deleted, only added to (CLAUDE.md rule 4). The database enforces it with triggers, so a delete fails. Deleting a sale for good would also: change the takings of a register that was already counted and closed (the Z-report would no longer match the cash that was counted), take the sale out of the day's reports and the dashboard, remove the audit trail of what happened (a void or a return is exactly what an owner checks when cash is missing), and put the stock back out of step with its own history. A cashier who can erase a sale can also erase a theft. The cut-over check "revenue less refunds equals the old total" would no longer hold either.
+
+What I suggest instead (gives the tidy list you probably want, keeps the records):
+- **A. Hide it.** A voided sale, or a fully returned one, gets a **Hide** button. It disappears from the Sales list (a "Show hidden" switch brings it back) but stays in the database, the reports and the audit log. Cashiers may hide their own; the action is recorded.
+- **B. Delete for real, managers only, with limits.** Only an admin, only a voided sale (no money moved), only while the register that took it is still open, with a typed confirmation. A sale with returns would still not be deletable (its refund already left the drawer).
+- **C. Delete for real, as you described** (a button for voided sales, and for cashiers on sales with returns). I would remove the delete-blocking triggers for sales, items, payments, returns and stock movements, rebuild the register's expected balances, and accept that closed days can change. I would not do this without you confirming you accept those effects.
+
+Which one? If C, also tell me: may a cashier delete a sale made by another cashier, and does it need a manager's name and password (the same approval used for returns and voids)?
+
+Answer: **Option C** (2026-10-25): delete for real. Built as `POST /sales/{id}/delete`. Two details were left open and I chose the careful default: a cashier may delete only a sale they made, and only with a manager's name and password for that sale (a manager or admin needs no approval). To drop the approval for cashiers, change `deleteSale` in `apps/api/src/modules/sales/delete.ts`.
+
+
+
