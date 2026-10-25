@@ -234,7 +234,7 @@ test('the Pay window shows the change and the buttons without scrolling; a regis
 
 test('Q4: record a payment against a customer account', async ({ page }) => {
   await page.getByRole('button', { name: /Menu/ }).click();
-  await page.getByRole('link', { name: 'Customer accounts' }).click();
+  await page.getByRole('link', { name: 'Debts' }).click();
   await page
     .getByRole('row', { name: /ahmad darwish/i })
     .getByRole('button', { name: 'Receive payment' })
@@ -246,7 +246,7 @@ test('Q4: record a payment against a customer account', async ({ page }) => {
 
 test('US-32: from a customer row, browse the sales behind what they owe', async ({ page }) => {
   await page.getByRole('button', { name: /Menu/ }).click();
-  await page.getByRole('link', { name: 'Customer accounts' }).click();
+  await page.getByRole('link', { name: 'Debts' }).click();
   const row = page.getByRole('row', { name: /ahmad darwish/i });
   const owes = (await row.locator('td.num').first().textContent())!.trim(); // the figure in the Owes column
   await row.getByRole('button', { name: 'Browse sales of Ahmad Darwish' }).click();

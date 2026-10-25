@@ -1457,3 +1457,17 @@ label.check {
 .tabs button[aria-selected='true'] .tab-dot {
   background: var(--brand-ink);
 }
+
+/* The buttons at the end of a table row: one line, the same height, the same gap, pushed to the end. */
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.row-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}

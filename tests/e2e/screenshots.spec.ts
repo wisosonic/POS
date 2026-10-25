@@ -111,9 +111,9 @@ test('screens', async ({ page }) => {
 
   await page.getByRole('button', { name: /Menu/ }).click();
   await shot(page, '13-menu');
-  await page.getByRole('link', { name: 'Customer accounts' }).click();
+  await page.getByRole('link', { name: 'Debts' }).click();
   await expect(page.getByRole('row', { name: /ahmad darwish/i })).toBeVisible();
-  await shot(page, '14-accounts');
+  await shot(page, '14-debts');
   await page.getByRole('button', { name: 'Receive payment' }).first().click();
   await shot(page, '15-receive-payment');
   await page.getByRole('button', { name: 'Cancel' }).click();

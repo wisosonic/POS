@@ -11,6 +11,7 @@ describe('the menu', () => {
       'Sales',
       'Returns',
       'Customer accounts',
+      'Debts',
       'Low stock',
       'Close register',
     ]);

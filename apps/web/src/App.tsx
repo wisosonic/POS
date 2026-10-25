@@ -14,7 +14,8 @@ import { useSession } from './store/session';
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] })));
 const UsersPage = page(() => import('./features/users/UsersPage'), 'UsersPage');
-const AccountsPage = page(() => import('./features/customers/AccountsPage'), 'AccountsPage');
+const CustomersPage = page(() => import('./features/customers/CustomersPage'), 'CustomersPage');
+const DebtsPage = page(() => import('./features/customers/DebtsPage'), 'DebtsPage');
 const BackupsPage = page(() => import('./features/backups/BackupsPage'), 'BackupsPage');
 const RatePage = page(() => import('./features/settings/RatePage'), 'RatePage');
 const SettingsLayout = page(() => import('./features/settings/SettingsLayout'), 'SettingsLayout');
@@ -72,7 +73,8 @@ export function App() {
             <Route path="/sales" element={<SalesPage />} />
             <Route path="/returns" element={<ReturnsPage />} />
             <Route path="/password" element={<ChangePasswordPage />} />
-            <Route path="/customers" element={<AccountsPage />} />
+            <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/debts" element={<DebtsPage />} />
             <Route path="/low-stock" element={<LowStockPage />} />
             <Route path="/register/close" element={<CloseRegisterPage />} />
             {/* Settings: a side menu and a section beside it. Appearance is for everyone, the rest for the admin. */}

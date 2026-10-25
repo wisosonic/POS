@@ -267,7 +267,8 @@ export function createSale(db: Db, actor: Actor, body: SaleBody, idem: { key: st
     const walkInId = walkInCustomerId(db);
 
     const customerId = body.customerId ?? walkInId;
-    const customer = db.prepare('SELECT id, name FROM customers WHERE id = ?').get(customerId) as { id: number; name: string } | undefined;
+    const customer = db.prepare('SELECT id, name FROM customers WHERE id = ? AND deleted_at IS NULL').get(customerId) as
+      { id: number; name: string } | undefined;
     if (!customer) throw E.unprocessable('INVALID_REFERENCE', 'That customer does not exist');
 
     const methods = activeMethods(db);

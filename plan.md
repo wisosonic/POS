@@ -69,7 +69,7 @@ No other questions block work.
 ### M3 · Cashier UI (≈ 2.5 weeks)
 - [x] Checkout screen per docs/05: scan, search, cart, pay dialog (Cash / Whish / OMT, split), change, customer picker, remaining-on-account, hold
 - [x] Open/close register screens with all balances (the close screen shows expected vs counted per bucket)
-- [x] Customer accounts screen: balance, receive payment
+- [x] Customer accounts screen (every customer, add / edit / delete) and Debts screen (who owes: balance, receive payment)
 - [x] Receipt printing: spooler → USB printer (ASCII), browser fallback (drawer pulse not yet wired: needs the printer model, R4)
 - [x] Product cache + outbox (Should): offline sales queue and sync exactly once
 - [x] Low-stock list from the menu and the header badge

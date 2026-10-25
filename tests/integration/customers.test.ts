@@ -313,3 +313,55 @@ describe('the register must be open to take a payment', () => {
     expect((await info(debtor.id)).balanceLbp).toBe(50000);
   });
 });
+
+describe('deleting a customer (US-24)', () => {
+  let admin: string;
+  beforeAll(async () => {
+    admin = await c.login('admin');
+    await c.openRegister(cashier); // an earlier test in this file closed the register
+  });
+
+  it('only a manager may; the customer disappears from the list and the lookups, and it is audited', async () => {
+    const x = await newCustomer('Delete me', { phone: '03999111' });
+    expect((await c.http.delete(`${api}/customers/${x.id}`).set(auth(cashier))).status).toBe(403);
+    expect((await c.http.delete(`${api}/customers/${x.id}`)).status).toBe(401);
+
+    expect((await c.http.delete(`${api}/customers/${x.id}`).set(auth(manager))).status).toBe(204);
+    const list = await c.http.get(`${api}/customers?q=Delete me`).set(auth(cashier));
+    expect(list.body.data.some((k: { id: number }) => k.id === x.id)).toBe(false);
+    expect((await c.http.get(`${api}/customers/${x.id}`).set(auth(cashier))).status).toBe(404);
+    expect((await c.http.delete(`${api}/customers/${x.id}`).set(auth(manager))).status).toBe(404); // already gone
+    expect((await c.http.patch(`${api}/customers/${x.id}`).set(auth(manager)).send({ name: 'x' })).status).toBe(404);
+    const log = await c.http.get(`${api}/audit?entity=customer&entityId=${x.id}&action=customer.delete`).set(auth(admin));
+    expect(log.body.data[0].before).toMatchObject({ name: 'Delete me' });
+  });
+
+  it('a deleted customer cannot be chosen for a new sale', async () => {
+    const x = await newCustomer('Gone before the sale');
+    await c.http.delete(`${api}/customers/${x.id}`).set(auth(manager));
+    const res = await sell(x.id, [cash(50000)], { items: [choc('1')] });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it('keeps their past sales, with their name on them', async () => {
+    const x = await newCustomer('Paid in full then gone');
+    const made = await sell(x.id, [cash(100000)], { items: [choc('2')] });
+    expect(made.status).toBe(201);
+    expect((await c.http.delete(`${api}/customers/${x.id}`).set(auth(manager))).status).toBe(204);
+    const sale = await c.http.get(`${api}/sales?ref=${made.body.ref}`).set(auth(manager));
+    expect(sale.body.data[0].customerName).toBe('Paid in full then gone');
+  });
+
+  it('refuses someone who still owes money, and Walk-In', async () => {
+    const x = await newCustomer('Still owes');
+    expect((await sell(x.id, [cash(0)].slice(1), { items: [choc('1')] })).status).toBe(201); // all on account
+    const owes = await c.http.delete(`${api}/customers/${x.id}`).set(auth(manager));
+    expect(owes.status).toBe(422);
+    expect(owes.body.code).toBe('CUSTOMER_OWES');
+    expect((await info(x.id)).name).toBe('Still owes'); // still there
+
+    const walkIn = await c.http.delete(`${api}/customers/1`).set(auth(manager));
+    expect(walkIn.status).toBe(422);
+    expect(walkIn.body.code).toBe('WALK_IN_PROTECTED');
+  });
+});

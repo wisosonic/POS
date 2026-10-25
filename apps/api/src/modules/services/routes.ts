@@ -79,7 +79,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
     const b = parse(createBody, req.body);
     if (b.categoryId && !db.prepare('SELECT 1 FROM service_categories WHERE id = ?').get(b.categoryId))
       throw E.unprocessable('INVALID_REFERENCE', 'That service type does not exist');
-    if (b.customerId && !db.prepare('SELECT 1 FROM customers WHERE id = ?').get(b.customerId))
+    if (b.customerId && !db.prepare('SELECT 1 FROM customers WHERE id = ? AND deleted_at IS NULL').get(b.customerId))
       throw E.unprocessable('INVALID_REFERENCE', 'That customer does not exist');
     if (b.receivedInto && !activeMethods(db).includes(b.receivedInto.method)) throw E.validation('Unknown payment method');
 

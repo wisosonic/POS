@@ -80,7 +80,7 @@ export default async function holdRoutes(app: FastifyInstance) {
     const find = db.prepare('SELECT id FROM products WHERE id = ?');
     for (const i of b.items)
       if (!find.get(i.productId)) throw E.unprocessable('INVALID_REFERENCE', `Product ${i.productId} does not exist`);
-    if (b.customerId && !db.prepare('SELECT 1 FROM customers WHERE id = ?').get(b.customerId))
+    if (b.customerId && !db.prepare('SELECT 1 FROM customers WHERE id = ? AND deleted_at IS NULL').get(b.customerId))
       throw E.unprocessable('INVALID_REFERENCE', 'That customer does not exist');
 
     const id = inWriteTransaction(db, () => {

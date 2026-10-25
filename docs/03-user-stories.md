@@ -57,7 +57,7 @@ Priority: **M** must-have for go-live, **S** should, **C** could. IDs are refere
 
 | ID | Story | Acceptance criteria | P |
 |---|---|---|:-:|
-| US-24 | As a manager, I manage customers and see their history. | Phone is searchable. History links to receipts. Walk-In is protected: it cannot be deleted or carry a balance. | S |
+| US-24 | As a manager, I manage customers and see their history. | Phone is searchable. History links to receipts. Walk-In is protected: it cannot be deleted or carry a balance. The **Customer accounts** page lists every customer (owing or not) with **Sales**, **Edit** and **Delete** buttons and a **New customer** button (a cashier may add; edit and delete are for managers). Delete hides the customer and keeps their past sales; a customer who still owes cannot be deleted. | S |
 
 ## Epic 7 · Security & admin 
 

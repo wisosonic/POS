@@ -10,16 +10,15 @@ import { usdToLbp } from '@pos/shared';
 import { Icon } from '../../components/Icon';
 import { CustomerSalesDialog } from './CustomerSalesDialog';
 
-/** Who owes the shop money, and a way to take a payment against what they owe (US-32, US-33). */
-export function AccountsPage() {
+/** Debts: who owes the shop money, and a way to take a payment against what they owe (US-32, US-33). */
+export function DebtsPage() {
   const [q, setQ] = useState('');
-  const [everyone, setEveryone] = useState(false);
   const [paying, setPaying] = useState<Customer | null>(null);
   const [browsing, setBrowsing] = useState<Customer | null>(null);
   const customers = useQuery({
-    queryKey: ['customers', q, everyone],
+    queryKey: ['customers', 'debts', q],
     queryFn: () =>
-      get<{ data: Customer[] }>(`/customers?limit=100&withBalance=${!everyone}&q=${encodeURIComponent(q.trim())}`).then((r) =>
+      get<{ data: Customer[] }>(`/customers?limit=100&withBalance=true&q=${encodeURIComponent(q.trim())}`).then((r) =>
         r.data.filter((c) => !c.isWalkIn),
       ),
   });
@@ -29,24 +28,20 @@ export function AccountsPage() {
   return (
     <main className="page">
       <h1>
-        <Icon name="customers" size={26} />
-        Customer accounts
+        <Icon name="pay" size={26} />
+        Debts
       </h1>
       <div className="toolbar">
         <label className="field">
           Search
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or phone" />
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="checkbox" checked={everyone} onChange={(e) => setEveryone(e.target.checked)} style={{ width: 20, height: 20 }} />
-          Show everyone, not only those who owe
-        </label>
         <span className="chip">{`Total owed ${fmtLbp(owed)}`}</span>
       </div>
       {customers.isLoading ? (
         <p className="muted">Loading…</p>
       ) : rows.length === 0 ? (
-        <div className="card empty">{everyone ? 'No customers found.' : 'Nobody owes anything.'}</div>
+        <div className="card empty">{q.trim() ? 'No customer with a debt matches.' : 'Nobody owes anything.'}</div>
       ) : (
         <table>
           <thead>
@@ -64,15 +59,18 @@ export function AccountsPage() {
                 <td className="muted">{c.phone ?? ''}</td>
                 <td className="num">{fmtLbp(c.balanceLbp)}</td>
                 <td className="num">
-                  <button className="btn small" onClick={() => setBrowsing(c)} aria-label={`Browse sales of ${c.name}`}>
-                    <Icon name="sales" size={16} />
-                    Sales
-                  </button>{' '}
-                  {c.balanceLbp > 0 && (
-                    <button className="btn small primary" onClick={() => setPaying(c)}>
-                      Receive payment
+                  <div className="row-actions">
+                    <button className="btn small" onClick={() => setBrowsing(c)} aria-label={`Browse sales of ${c.name}`}>
+                      <Icon name="sales" size={16} />
+                      Sales
                     </button>
-                  )}
+                    {c.balanceLbp > 0 && (
+                      <button className="btn small primary" onClick={() => setPaying(c)}>
+                        <Icon name="pay" size={16} />
+                        Receive payment
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

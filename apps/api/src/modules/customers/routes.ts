@@ -45,7 +45,7 @@ export default async function customerRoutes(app: FastifyInstance) {
 
   app.get('/customers', user, async (req) => {
     const q = parse(listQuery, req.query);
-    const where: string[] = [];
+    const where: string[] = ['deleted_at IS NULL'];
     const params: unknown[] = [];
     if (q.q) {
       where.push(`(name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')`);
@@ -107,6 +107,22 @@ export default async function customerRoutes(app: FastifyInstance) {
       });
     }
     return customerJson(getCustomer(db, id)!);
+  });
+
+  // "Deleting" a customer hides them and keeps the row, because their past sales and payments point at it (history is never
+  // rewritten). Not Walk-In, and not someone who still owes money: that debt would vanish from every list.
+  app.delete('/customers/:id', manager, async (req, reply) => {
+    const id = idOf(req);
+    const before = getCustomer(db, id);
+    if (!before) throw E.notFound('Customer');
+    if (before.is_walk_in) throw E.unprocessable('WALK_IN_PROTECTED', 'Walk-In cannot be deleted');
+    if (before.balance_lbp > 0)
+      throw E.unprocessable('CUSTOMER_OWES', 'This customer still owes money. Take their payment (or write it off) before deleting them');
+    inWriteTransaction(db, () => {
+      db.prepare('UPDATE customers SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+      writeAudit(db, { userId: req.auth.id, action: 'customer.delete', entity: 'customer', entityId: id, before: customerJson(before) });
+    });
+    return reply.status(204).send();
   });
 
   app.get('/customers/:id/sales', user, async (req) => {

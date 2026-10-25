@@ -254,7 +254,15 @@ export type ZReport = Omit<SessionSummary, 'balances'> & {
   };
 };
 
-export type Customer = { id: number; name: string; phone: string | null; balanceLbp: number; isWalkIn: boolean };
+export type Customer = {
+  id: number;
+  name: string;
+  phone: string | null;
+  address?: string | null;
+  email?: string | null;
+  balanceLbp: number;
+  isWalkIn: boolean;
+};
 
 export type LowStockItem = { productId: number; name: string; qty: string; threshold: number | null };
 

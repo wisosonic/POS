@@ -372,7 +372,7 @@ describe('filtering the list by category and brand (US-15)', () => {
     const cat = (await c.http.post(`${api}/categories`).set(auth(manager)).send({ name: 'Filter category' })).body.id as number;
     const other = (await c.http.post(`${api}/categories`).set(auth(manager)).send({ name: 'Other category' })).body.id as number;
     const brand = (await c.http.post(`${api}/brands`).set(auth(manager)).send({ name: 'Filter brand' })).body.id as number;
-    const a = await create({ name: 'Filter A', barcode: '7100000000001', categoryId: cat, brandId: brand });
+    await create({ name: 'Filter A', barcode: '7100000000001', categoryId: cat, brandId: brand });
     const b = await create({ name: 'Filter B', barcode: '7100000000002', categoryId: cat });
     const d = await create({ name: 'Filter D', barcode: '7100000000003', categoryId: other, brandId: brand });
     const names = async (qs: string) =>

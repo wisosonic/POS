@@ -38,7 +38,9 @@ export const customerJson = (c: CustomerRow) => ({
   createdAt: c.created_at,
 });
 
-export const getCustomer = (db: Db, id: number) => db.prepare('SELECT * FROM customers WHERE id = ?').get(id) as CustomerRow | undefined;
+/** A customer who has not been deleted. A deleted one is as good as not there (their old sales keep pointing at the row). */
+export const getCustomer = (db: Db, id: number) =>
+  db.prepare('SELECT * FROM customers WHERE id = ? AND deleted_at IS NULL').get(id) as CustomerRow | undefined;
 
 /**
  * Take a payment on a customer's account (US-32). The amount reduces their balance and is applied to their oldest open
