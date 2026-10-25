@@ -390,3 +390,25 @@ describe('filtering the list by category and brand (US-15)', () => {
     expect(d.status).toBe(201);
   });
 });
+
+describe('filtering the list by supplier (US-15)', () => {
+  it('returns only the products of the chosen supplier, together with category, search and the hidden switch', async () => {
+    const s1 = (await c.http.post(`${api}/suppliers`).set(auth(manager)).send({ name: 'Filter supplier one' })).body.id as number;
+    const s2 = (await c.http.post(`${api}/suppliers`).set(auth(manager)).send({ name: 'Filter supplier two' })).body.id as number;
+    const cat = (await c.http.post(`${api}/categories`).set(auth(manager)).send({ name: 'Supplier test category' })).body.id as number;
+    await create({ name: 'Sup A', barcode: '7200000000001', supplierId: s1, categoryId: cat });
+    const b = await create({ name: 'Sup B', barcode: '7200000000002', supplierId: s1 });
+    await create({ name: 'Sup C', barcode: '7200000000003', supplierId: s2, categoryId: cat });
+    const names = async (qs: string) =>
+      ((await c.http.get(`${api}/products?${qs}`).set(auth(cashier))).body.data as { name: string }[]).map((p) => p.name).sort();
+
+    expect(await names(`supplierId=${s1}`)).toEqual(['Sup A', 'Sup B']);
+    expect(await names(`supplierId=${s2}`)).toEqual(['Sup C']);
+    expect(await names(`supplierId=${s1}&categoryId=${cat}`)).toEqual(['Sup A']); // both must match
+    expect(await names(`supplierId=${s1}&q=Sup B`)).toEqual(['Sup B']);
+    await c.http.patch(`${api}/products/${b.body.id}`).set(auth(manager)).send({ active: false });
+    expect(await names(`supplierId=${s1}`)).toEqual(['Sup A']);
+    expect(await names(`supplierId=${s1}&active=all`)).toEqual(['Sup A', 'Sup B']);
+    expect((await c.http.get(`${api}/products?supplierId=abc`).set(auth(cashier))).status).toBe(400);
+  });
+});

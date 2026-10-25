@@ -102,6 +102,7 @@ const listQuery = z.object({
   q: z.string().max(100).optional(),
   categoryId: z.coerce.number().int().positive().optional(),
   brandId: z.coerce.number().int().positive().optional(),
+  supplierId: z.coerce.number().int().positive().optional(),
   active: z.enum(['true', 'false', 'all']).default('true'),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.coerce.number().int().positive().optional(),
@@ -144,6 +145,7 @@ export default async function productRoutes(app: FastifyInstance) {
     if (q.active !== 'all') filter('p.active = ?', q.active === 'true' ? 1 : 0);
     if (q.categoryId) filter('p.category_id = ?', q.categoryId);
     if (q.brandId) filter('p.brand_id = ?', q.brandId);
+    if (q.supplierId) filter('p.supplier_id = ?', q.supplierId);
     if (q.cursor) filter('p.id > ?', q.cursor);
 
     const text = q.q?.trim();

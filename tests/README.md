@@ -31,7 +31,7 @@ npm run test:e2e               # also runs the built app under the real security
 
 | Story | Covered by |
 |---|---|
-| US-15 products and lookups | `integration/products`, `integration/lookups`, `e2e/products` (add a USD product, edit price, hide/restore, new category, till sells it, filter the list by category and by brand, set and clear a low stock threshold: shown in the list, on the Low stock page, a negative number refused; a category or brand on the Lists page opens its products), `integration/products` (category and brand filters alone, together, with search and with hidden products) |
+| US-15 products and lookups | `integration/products`, `integration/lookups`, `e2e/products` (add a USD product, edit price, hide/restore, new category, till sells it, filter the list by category and by brand, set and clear a low stock threshold: shown in the list, on the Low stock page, a negative number refused; a category, brand or supplier on the Lists page opens its products, the list filtered by supplier), `integration/products` (category and brand filters alone, together, with search and with hidden products) |
 | US-21/22/23 purchases: order, receive in parts, pay the supplier | `integration/purchases`, `db/purchases-schema`, `e2e/purchases` (two deliveries, part payment, overpayment refused, stock 1 → 11, draft delete) |
 | US-14 returns | `integration/returns` (incl. the refund amount carried in `REFUND_REQUIRED`), `e2e/stock-returns` (part return, refund confirmed, cannot return twice, unknown receipt) |
 | US-17 stock adjustments | `integration/inventory-alerts`, `integration/holds-adjustments`, `e2e/stock-returns` (take out damaged stock, ledger, validation) |

@@ -221,3 +221,32 @@ test('US-15: on the Lists page a category or a brand opens the products that bel
   await page.getByRole('tab', { name: 'Units' }).click();
   await expect(page.getByRole('link', { name: /Browse the products of/ })).toHaveCount(0);
 });
+
+test('US-15: on the Lists page a supplier opens the products bought from it, and the list can be filtered by supplier', async ({
+  page,
+  request,
+}) => {
+  const login = await request.post('/api/v1/auth/login', { data: { username: 'manager', password: PASSWORDS.manager } });
+  const headers = { Authorization: `Bearer ${(await login.json()).accessToken}` };
+  const supplier = await (await request.post('/api/v1/suppliers', { headers, data: { name: 'Listsupplier' } })).json();
+  const made = await request.post('/api/v1/products', {
+    headers,
+    data: { name: 'Supplied fan', barcode: '7790000000039', priceMinor: 150000, currency: 'LBP', supplierId: supplier.id },
+  });
+  expect(made.status()).toBe(201);
+
+  await managerAt(page, '/products/lists');
+  await page.getByRole('tab', { name: 'Suppliers' }).click();
+  await page.getByRole('link', { name: 'Browse the products of Listsupplier' }).click();
+  await expect(page).toHaveURL(/\/products\?supplierId=\d+$/);
+  await expect(page.getByRole('combobox', { name: 'Supplier' })).toHaveValue(/\d+/);
+  await expect(page.getByTestId('product-row')).toHaveCount(1);
+  await expect(page.getByTestId('product-row').first()).toContainText('Supplied fan');
+
+  // the same filter box on the Products page, and clearing it brings everything back
+  await page.getByRole('combobox', { name: 'Supplier' }).selectOption({ label: 'All suppliers' });
+  await expect(page.getByTestId('product-row').filter({ hasText: 'Cedars silver towel' })).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Supplier' }).selectOption({ label: 'Test Supplier' });
+  await expect(page.getByTestId('product-row').filter({ hasText: 'Cedars silver towel' })).toHaveCount(1); // the seeded products
+  await expect(page.getByTestId('product-row').filter({ hasText: 'Supplied fan' })).toHaveCount(0);
+});

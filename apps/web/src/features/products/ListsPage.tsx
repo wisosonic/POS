@@ -119,7 +119,9 @@ function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
           Add
         </button>
       </form>
-      {(kind === 'categories' || kind === 'brands') && rows.length > 0 && <p className="muted">{`Press a ${one} to see its products.`}</p>}
+      {(kind === 'categories' || kind === 'brands' || kind === 'suppliers') && rows.length > 0 && (
+        <p className="muted">{`Press a ${one} to see its products.`}</p>
+      )}
       {list.isLoading ? (
         <p className="muted">Loading…</p>
       ) : rows.length === 0 ? (
@@ -138,10 +140,10 @@ function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
             {rows.map((r) => (
               <tr key={r.id} data-testid="lookup-row">
                 <td>
-                  {kind === 'categories' || kind === 'brands' ? (
+                  {kind === 'categories' || kind === 'brands' || kind === 'suppliers' ? (
                     // the products of this one: the Products page, with the filter already chosen
                     <Link
-                      to={`/products?${kind === 'brands' ? 'brandId' : 'categoryId'}=${r.id}`}
+                      to={`/products?${kind === 'brands' ? 'brandId' : kind === 'suppliers' ? 'supplierId' : 'categoryId'}=${r.id}`}
                       aria-label={`Browse the products of ${r.name}`}
                     >
                       {r.name}

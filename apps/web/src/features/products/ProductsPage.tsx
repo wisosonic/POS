@@ -30,19 +30,21 @@ export function ProductsPage() {
   const [params] = useSearchParams();
   const [categoryId, setCategoryId] = useState(() => params.get('categoryId') ?? '');
   const [brandId, setBrandId] = useState(() => params.get('brandId') ?? '');
+  const [supplierId, setSupplierId] = useState(() => params.get('supplierId') ?? '');
   const categories = useLookup('categories');
   const brands = useLookup('brands');
+  const suppliers = useLookup('suppliers');
   const [editing, setEditing] = useState<ProductFull | 'new' | null>(null);
   const [adjusting, setAdjusting] = useState<ProductFull | null>(null);
   const [importing, setImporting] = useState(false);
   const search = useDebounced(q.trim(), 250);
 
   const products = useInfiniteQuery({
-    queryKey: ['products', search, showHidden, categoryId, brandId],
+    queryKey: ['products', search, showHidden, categoryId, brandId, supplierId],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       get<Page>(
-        `/products?limit=50&active=${showHidden ? 'all' : 'true'}&q=${encodeURIComponent(search)}${categoryId ? `&categoryId=${categoryId}` : ''}${brandId ? `&brandId=${brandId}` : ''}${pageParam ? `&cursor=${pageParam}` : ''}`,
+        `/products?limit=50&active=${showHidden ? 'all' : 'true'}&q=${encodeURIComponent(search)}${categoryId ? `&categoryId=${categoryId}` : ''}${brandId ? `&brandId=${brandId}` : ''}${supplierId ? `&supplierId=${supplierId}` : ''}${pageParam ? `&cursor=${pageParam}` : ''}`,
       ),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
@@ -81,6 +83,17 @@ export function ProductsPage() {
             ))}
           </select>
         </label>
+        <label className="field" style={{ minWidth: 200 }}>
+          Supplier
+          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <option value="">All suppliers</option>
+            {(suppliers.data ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name.trim()}
+              </option>
+            ))}
+          </select>
+        </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} style={{ width: 20, height: 20 }} />
           Show hidden products
@@ -99,7 +112,7 @@ export function ProductsPage() {
       {products.isLoading ? (
         <p className="muted">Loading…</p>
       ) : rows.length === 0 ? (
-        <div className="card empty">{categoryId || brandId ? 'No products match these filters.' : 'No products found.'}</div>
+        <div className="card empty">{categoryId || brandId || supplierId ? 'No products match these filters.' : 'No products found.'}</div>
       ) : (
         <table>
           <thead>
