@@ -157,3 +157,67 @@ test('US-15: the product list can be filtered by category and by brand', async (
   await expect(rows.filter({ hasText: 'Cedars silver towel' })).toHaveCount(1);
   await expect(rows.filter({ hasText: 'Branded kettle' })).toHaveCount(1);
 });
+
+test('US-17: a product gets its own low stock threshold, shown in the list and on the Low stock page; empty means never', async ({
+  page,
+}) => {
+  await managerAt(page, '/products');
+  await page.getByRole('searchbox').fill('Loose cheese'); // seeded with 5 kg in stock and no threshold
+  const row = page.getByTestId('product-row').filter({ hasText: 'Loose cheese' });
+  await expect(row.getByTestId('low-at')).toHaveText('');
+
+  await row.getByRole('button', { name: /Edit/ }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Low stock threshold').fill('-1');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('low stock threshold'); // a negative number is refused
+  await dialog.getByLabel('Low stock threshold').fill('8');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(row.getByTestId('low-at')).toHaveText('8');
+
+  await openMenu(page, 'Low stock');
+  await expect(page.getByTestId('low-stock-row').filter({ hasText: 'Loose cheese' })).toBeVisible(); // 5 is at or below 8
+
+  // put it back: empty means no alert
+  await openMenu(page, 'Products');
+  await page.getByRole('searchbox').fill('Loose cheese');
+  await row.getByRole('button', { name: /Edit/ }).click();
+  await page.getByRole('dialog').getByLabel('Low stock threshold').fill('');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await expect(row.getByTestId('low-at')).toHaveText('');
+  await openMenu(page, 'Low stock');
+  await expect(page.getByTestId('low-stock-row').filter({ hasText: 'Loose cheese' })).toHaveCount(0);
+});
+
+test('US-15: on the Lists page a category or a brand opens the products that belong to it', async ({ page, request }) => {
+  const login = await request.post('/api/v1/auth/login', { data: { username: 'manager', password: PASSWORDS.manager } });
+  const headers = { Authorization: `Bearer ${(await login.json()).accessToken}` };
+  const brand = await (await request.post('/api/v1/brands', { headers, data: { name: 'Listbrand' } })).json();
+  const made = await request.post('/api/v1/products', {
+    headers,
+    data: { name: 'Listed lamp', barcode: '7790000000022', priceMinor: 120000, currency: 'LBP', brandId: brand.id },
+  });
+  expect(made.status()).toBe(201);
+
+  await managerAt(page, '/products/lists');
+  // categories (the first tab): Household has only the towel
+  await page.getByRole('link', { name: 'Browse the products of Household' }).click();
+  await expect(page).toHaveURL(/\/products\?categoryId=\d+$/);
+  await expect(page.getByRole('combobox', { name: 'Category' })).toHaveValue(/\d+/);
+  await expect(page.getByTestId('product-row').filter({ hasText: 'Cedars silver towel' })).toHaveCount(1);
+  await expect(page.getByTestId('product-row').filter({ hasText: 'Crispy chocolate' })).toHaveCount(0);
+
+  // brands: the brand's own product only
+  await openMenu(page, 'Lists');
+  await page.getByRole('tab', { name: 'Brands' }).click();
+  await page.getByRole('link', { name: 'Browse the products of Listbrand' }).click();
+  await expect(page).toHaveURL(/\/products\?brandId=\d+$/);
+  await expect(page.getByRole('combobox', { name: 'Brand' })).toHaveValue(/\d+/);
+  await expect(page.getByTestId('product-row')).toHaveCount(1);
+  await expect(page.getByTestId('product-row').first()).toContainText('Listed lamp');
+
+  // the other lists are plain names (nothing to browse)
+  await openMenu(page, 'Lists');
+  await page.getByRole('tab', { name: 'Units' }).click();
+  await expect(page.getByRole('link', { name: /Browse the products of/ })).toHaveCount(0);
+});

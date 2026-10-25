@@ -159,7 +159,7 @@ PRODUCTS                                 [ + New product ] [ Import CSV ]
  Search…  Category ▾  Brand ▾   ☐ Show hidden products
 ```
 
-The **Category** and **Brand** boxes list every category and brand (first entry "All categories" / "All brands"). They narrow the list together with each other, with the search and with "Show hidden products"; when nothing matches the page says "No products match these filters." The filtering is done by the server (`GET /products?categoryId=&brandId=`), so it covers the whole catalog, not just the rows already loaded.
+Each row also shows **Low at**, the product's own low stock threshold (empty when it has none); it is set in the product form as **Low stock threshold**, and saving it updates the Low stock badge and list at once. On the **Lists** page the names in the **Categories** and **Brands** tabs are links: pressing one opens the Products page with that category or brand already chosen (`/products?categoryId=3`, `/products?brandId=3`), so its products can be browsed, edited and filtered further; the other lists are plain names. The **Category** and **Brand** boxes list every category and brand (first entry "All categories" / "All brands"). They narrow the list together with each other, with the search and with "Show hidden products"; when nothing matches the page says "No products match these filters." The filtering is done by the server (`GET /products?categoryId=&brandId=`), so it covers the whole catalog, not just the rows already loaded.
 
 ```
  ┌───┬──────────────────────┬──────────────┬────────┬───────┬──────┐

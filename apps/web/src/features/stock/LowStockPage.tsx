@@ -12,7 +12,7 @@ export function LowStockPage() {
         <Icon name="lowstock" size={26} />
         Low stock
       </h1>
-      <p className="muted">Products at or below their own reorder level, most urgent first.</p>
+      <p className="muted">Products at or below their own low stock threshold, most urgent first.</p>
       {alerts.isLoading ? (
         <p className="muted">Loading…</p>
       ) : rows.length === 0 ? (
@@ -23,7 +23,7 @@ export function LowStockPage() {
             <tr>
               <th>Product</th>
               <th className="num">In stock</th>
-              <th className="num">Reorder level</th>
+              <th className="num">Threshold</th>
             </tr>
           </thead>
           <tbody>

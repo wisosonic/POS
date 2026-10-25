@@ -50,7 +50,9 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
       if (dryRun) setResult(res);
       else {
         toast.success(`Imported: ${res.summary.create} new, ${res.summary.update} changed`);
-        await Promise.all(['products', 'categories', 'brands', 'suppliers'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
+        await Promise.all(
+          ['products', 'alerts', 'categories', 'brands', 'suppliers'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })),
+        );
         onClose();
       }
     } catch (err) {

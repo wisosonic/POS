@@ -88,7 +88,7 @@ export function ProductDialog({ product, onClose }: { product: ProductFull | nul
     if (!Number.isFinite(priceMinor) || price.trim() === '') return setError('Enter the selling price');
     if (!Number.isFinite(costMinor)) return setError('The cost is not a valid amount');
     const alertValue = alert.trim() === '' ? null : Number(alert.replace(',', '.'));
-    if (alertValue !== null && !(alertValue >= 0)) return setError('The reorder level must be a number, or empty for no alert');
+    if (alertValue !== null && !(alertValue >= 0)) return setError('The low stock threshold must be a number, or empty for no alert');
 
     const body = {
       name: name.trim(),
@@ -127,7 +127,8 @@ export function ProductDialog({ product, onClose }: { product: ProductFull | nul
           8000,
         );
       }
-      await queryClient.invalidateQueries({ queryKey: ['products'] });
+      // a changed low stock threshold changes the badge and the Low stock list too
+      await Promise.all(['products', 'alerts'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The product could not be saved');
@@ -202,8 +203,9 @@ export function ProductDialog({ product, onClose }: { product: ProductFull | nul
             </select>
           </label>
           <label className="field">
-            Reorder level
+            Low stock threshold
             <input className="num" inputMode="decimal" value={alert} onChange={(e) => setAlert(e.target.value)} placeholder="No alert" />
+            <span className="hint">The owner is told when the quantity falls to this number or below. Empty means never.</span>
           </label>
         </div>
         <div className="field">

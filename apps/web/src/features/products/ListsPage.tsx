@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError, patch, post } from '../../lib/api';
 import type { Lookup, LookupKind, SupplierLookup, UnitLookup } from '../../lib/types';
 import { toast } from '../../store/toast';
@@ -118,6 +119,7 @@ function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
           Add
         </button>
       </form>
+      {(kind === 'categories' || kind === 'brands') && rows.length > 0 && <p className="muted">{`Press a ${one} to see its products.`}</p>}
       {list.isLoading ? (
         <p className="muted">Loading…</p>
       ) : rows.length === 0 ? (
@@ -135,7 +137,19 @@ function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} data-testid="lookup-row">
-                <td>{r.name}</td>
+                <td>
+                  {kind === 'categories' || kind === 'brands' ? (
+                    // the products of this one: the Products page, with the filter already chosen
+                    <Link
+                      to={`/products?${kind === 'brands' ? 'brandId' : 'categoryId'}=${r.id}`}
+                      aria-label={`Browse the products of ${r.name}`}
+                    >
+                      {r.name}
+                    </Link>
+                  ) : (
+                    r.name
+                  )}
+                </td>
                 {kind === 'units' && (
                   <td>
                     <input

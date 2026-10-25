@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { get } from '../../lib/api';
 import { fmtMoney, trimQty } from '../../lib/money';
 import type { ProductFull } from '../../lib/types';
@@ -25,8 +26,10 @@ function useDebounced<T>(value: T, ms: number): T {
 export function ProductsPage() {
   const [q, setQ] = useState('');
   const [showHidden, setShowHidden] = useState(false);
-  const [categoryId, setCategoryId] = useState('');
-  const [brandId, setBrandId] = useState('');
+  // The Lists page links here with a category or a brand already chosen (/products?brandId=3).
+  const [params] = useSearchParams();
+  const [categoryId, setCategoryId] = useState(() => params.get('categoryId') ?? '');
+  const [brandId, setBrandId] = useState(() => params.get('brandId') ?? '');
   const categories = useLookup('categories');
   const brands = useLookup('brands');
   const [editing, setEditing] = useState<ProductFull | 'new' | null>(null);
@@ -107,6 +110,7 @@ export function ProductsPage() {
               <th className="num">Price</th>
               <th className="num">Cost</th>
               <th className="num">In stock</th>
+              <th className="num">Low at</th>
               <th />
             </tr>
           </thead>
@@ -128,6 +132,9 @@ export function ProductsPage() {
                   <td
                     className={`num ${low ? 'variance-bad' : ''}`}
                   >{`${trimQty(p.qty)}${p.unitName && p.fractional ? ` ${p.unitName}` : ''}`}</td>
+                  <td className="num muted" data-testid="low-at">
+                    {p.stockAlert === null ? '' : trimQty(String(p.stockAlert))}
+                  </td>
                   <td className="num">
                     <button className="btn small" onClick={() => setAdjusting(p)} aria-label={`Stock of ${p.name.trim()}`}>
                       <Icon name="stock" size={16} />
