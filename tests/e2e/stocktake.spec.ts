@@ -111,3 +111,50 @@ test('US-18: a count can be cancelled and changes nothing; a name that matches n
   await expect(p.getByRole('heading', { name: 'Stocktake' })).toHaveCount(0);
   await cashier.close();
 });
+
+test('US-18: a count is deleted from the list after a confirmation, and the stock it changed stays changed', async ({ page, request }) => {
+  await stockUp(request, TOWEL);
+  const before = await onHand(request, TOWEL);
+  await managerAt(page, '/stocktake');
+
+  // a finished count: counted 2 more than the system holds
+  await page.getByLabel(/Name of this count/).fill('Doomed count');
+  await page.getByRole('button', { name: 'Start a count' }).click();
+  await page.getByLabel(/Scan a barcode/).fill(TOWEL);
+  await page.keyboard.press('Enter');
+  const counted = page.getByTestId('count-line').getByLabel(/Counted:/);
+  await counted.fill(String(before + 2));
+  await counted.press('Enter');
+  await page.getByRole('button', { name: 'Finish and adjust stock' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Finish and adjust' }).click();
+  await expect(page.getByText(/Finished: \d+ products? adjusted/)).toBeVisible();
+  expect(await onHand(request, TOWEL)).toBe(before + 2);
+
+  await page.goto('/stocktake');
+  const row = page.getByTestId('count-row').filter({ hasText: 'Doomed count' });
+  await expect(row).toContainText('Finished');
+
+  // Cancel keeps it
+  await row.getByRole('button', { name: /^Delete / }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete count' });
+  await expect(dialog).toContainText('stay in each product');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(row).toBeVisible();
+
+  // Delete removes it from the list, and the quantity stays as the count left it
+  await row.getByRole('button', { name: /^Delete / }).click();
+  await page.getByRole('dialog', { name: 'Delete count' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(row).toHaveCount(0);
+  expect(await onHand(request, TOWEL)).toBe(before + 2);
+
+  // a count that is still being made is cancelled and removed in one step
+  await page.getByLabel(/Name of this count/).fill('Half done');
+  await page.getByRole('button', { name: 'Start a count' }).click();
+  await page.goto('/stocktake');
+  const open = page.getByTestId('count-row').filter({ hasText: 'Half done' });
+  await expect(open).toContainText('Counting');
+  await open.getByRole('button', { name: /^Delete / }).click();
+  await expect(page.getByRole('dialog', { name: 'Delete count' })).toContainText('not finished');
+  await page.getByRole('dialog', { name: 'Delete count' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(open).toHaveCount(0);
+});

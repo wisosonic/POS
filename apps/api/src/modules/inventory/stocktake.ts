@@ -48,7 +48,7 @@ const lineBody = z.object({
 });
 
 const getCount = (db: Db, id: number): Count => {
-  const c = db.prepare('SELECT * FROM stocktakes WHERE id = ?').get(id) as Count | undefined;
+  const c = db.prepare('SELECT * FROM stocktakes WHERE id = ? AND deleted_at IS NULL').get(id) as Count | undefined;
   if (!c) throw E.notFound('Stocktake');
   return c;
 };
@@ -119,7 +119,9 @@ export function registerStocktakeRoutes(app: FastifyInstance) {
   const manager = { preHandler: app.requireRole('manager') };
 
   app.get('/stocktakes', manager, async () => ({
-    data: (db.prepare('SELECT * FROM stocktakes ORDER BY id DESC LIMIT 100').all() as Count[]).map((c) => summary(db, c)),
+    data: (db.prepare('SELECT * FROM stocktakes WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 100').all() as Count[]).map((c) =>
+      summary(db, c),
+    ),
   }));
 
   app.post('/stocktakes', manager, async (req, reply) => {
@@ -188,6 +190,32 @@ export function registerStocktakeRoutes(app: FastifyInstance) {
       writeAudit(db, { userId: req.auth.id, action: 'stocktake.cancel', entity: 'stocktake', entityId: c.id });
     });
     return summary(db, getCount(db, c.id));
+  });
+
+  // "Deleting" a count takes it off the list and no further. The count, its lines and the adjustments a finished one posted to the
+  // stock ledger all stay (the ledger is never rewritten, and it names the count that caused each adjustment). A count still being
+  // made is cancelled in the same step, so nothing is posted.
+  app.delete('/stocktakes/:id', manager, async (req, reply) => {
+    const c = getCount(db, Number((req.params as { id: string }).id));
+    inWriteTransaction(db, () => {
+      const now = new Date().toISOString();
+      if (c.status === 'open')
+        db.prepare("UPDATE stocktakes SET status = 'cancelled', finished_by = ?, finished_at = ?, deleted_at = ? WHERE id = ?").run(
+          req.auth.id,
+          now,
+          now,
+          c.id,
+        );
+      else db.prepare('UPDATE stocktakes SET deleted_at = ? WHERE id = ?').run(now, c.id);
+      writeAudit(db, {
+        userId: req.auth.id,
+        action: 'stocktake.delete',
+        entity: 'stocktake',
+        entityId: c.id,
+        before: { name: c.name, status: c.status },
+      });
+    });
+    return reply.status(204).send();
   });
 
   // Finish the count: every product whose count differs from what the system held when it was counted gets one adjustment.

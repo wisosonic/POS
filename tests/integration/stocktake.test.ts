@@ -191,3 +191,67 @@ describe('who may count', () => {
     expect(list.body.data[0].id).toBeGreaterThan(list.body.data[1].id); // newest first
   });
 });
+
+describe('deleting a count from the list (US-18)', () => {
+  const del = (id: number, token = manager) => c.http.delete(`${api}/stocktakes/${id}`).set(auth(token));
+  const listed = async () => ((await c.http.get(`${api}/stocktakes`).set(auth(manager))).body.data as { id: number }[]).map((x) => x.id);
+
+  it('only a manager may; a finished count leaves the list but its adjustments stay in the ledger', async () => {
+    const towel = c.seed.products.towel.id;
+    const before = await qtyOf(towel);
+    const id = (await start('To delete after finishing')).id;
+    await count(id, towel, before + 4);
+    expect((await commit(id)).status).toBe(200);
+    const ledgerBefore = (await ledger(towel)).length;
+
+    expect((await del(id, cashier)).status).toBe(403);
+    expect((await del(id)).status).toBe(204);
+    expect(await listed()).not.toContain(id);
+    expect((await c.http.get(`${api}/stocktakes/${id}`).set(auth(manager))).status).toBe(404);
+    expect((await del(id)).status).toBe(404); // already gone
+    // nothing posted to the ledger is touched, and the stock is as the count left it
+    expect((await ledger(towel)).length).toBe(ledgerBefore);
+    expect(await qtyOf(towel)).toBe(before + 4);
+
+    const log = await c.http.get(`${api}/audit?entity=stocktake&entityId=${id}&action=stocktake.delete`).set(auth(admin));
+    expect(log.body.data[0].before).toMatchObject({ name: 'To delete after finishing', status: 'committed' });
+  });
+
+  it('a count still being made is cancelled and hidden in one step, and posts nothing', async () => {
+    const choc = c.seed.products.choc.id;
+    const before = await qtyOf(choc);
+    const id = (await start('Abandoned')).id;
+    await count(id, choc, before + 50);
+    expect((await del(id)).status).toBe(204);
+    expect(await listed()).not.toContain(id);
+    expect(await qtyOf(choc)).toBe(before); // it was never finished
+  });
+
+  it('a cancelled count can be deleted too, and a deleted count can no longer be counted into or finished', async () => {
+    const id = (await start('Cancelled then deleted')).id;
+    await c.http.post(`${api}/stocktakes/${id}/cancel`).set(auth(manager));
+    expect((await del(id)).status).toBe(204);
+    expect(await listed()).not.toContain(id);
+    expect((await count(id, c.seed.products.choc.id, 1)).status).toBe(404);
+    expect((await commit(id)).status).toBe(404);
+  });
+
+  it('the database still refuses every other change to a finished count: only gaining deleted_at is allowed', async () => {
+    const id = (await start('Frozen')).id;
+    await count(id, c.seed.products.choc.id, 1);
+    await commit(id);
+    const db = new Database(c.databasePath);
+    try {
+      expect(() => db.prepare("UPDATE stocktakes SET name = 'changed' WHERE id = ?").run(id)).toThrow(
+        /finished stocktake cannot be changed/,
+      );
+      expect(() => db.prepare("UPDATE stocktakes SET status = 'open', finished_at = NULL WHERE id = ?").run(id)).toThrow();
+      expect(() => db.prepare("UPDATE stocktakes SET name = 'changed', deleted_at = 'x' WHERE id = ?").run(id)).toThrow(); // not both at once
+      expect(() => db.prepare('DELETE FROM stocktakes WHERE id = ?').run(id)).toThrow(/append-only/); // the row itself is never removed
+      expect(() => db.prepare("UPDATE stocktakes SET deleted_at = '2026-01-01' WHERE id = ?").run(id)).not.toThrow();
+      expect(() => db.prepare("UPDATE stocktakes SET deleted_at = '2027-01-01' WHERE id = ?").run(id)).toThrow(); // and it cannot be moved again
+    } finally {
+      db.close();
+    }
+  });
+});
