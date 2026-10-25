@@ -42,6 +42,8 @@ export function ProductDialog({ product, onClose }: { product: ProductFull | nul
   const [categoryId, setCategoryId] = useState(String(product?.categoryId ?? ''));
   const [brandId, setBrandId] = useState(String(product?.brandId ?? ''));
   const [supplierId, setSupplierId] = useState(String(product?.supplierId ?? ''));
+  // No alert is its own choice (a tick box), not an empty number: a threshold of 0 is a real one, "tell me when none are left".
+  const [noAlert, setNoAlert] = useState(!product || product.stockAlert === null);
   const [alert, setAlert] = useState(product && product.stockAlert !== null ? String(product.stockAlert) : '');
   const [active, setActive] = useState(product?.active ?? true);
   const [error, setError] = useState('');
@@ -87,8 +89,8 @@ export function ProductDialog({ product, onClose }: { product: ProductFull | nul
     if (!name.trim()) return setError('Enter the product name');
     if (!Number.isFinite(priceMinor) || price.trim() === '') return setError('Enter the selling price');
     if (!Number.isFinite(costMinor)) return setError('The cost is not a valid amount');
-    const alertValue = alert.trim() === '' ? null : Number(alert.replace(',', '.'));
-    if (alertValue !== null && !(alertValue >= 0)) return setError('The low stock threshold must be a number, or empty for no alert');
+    const alertValue = noAlert ? null : alert.trim() === '' ? NaN : Number(alert.replace(',', '.'));
+    if (alertValue !== null && !(alertValue >= 0)) return setError('Type the low stock threshold (0 or more), or tick No alert');
 
     const body = {
       name: name.trim(),
@@ -202,11 +204,28 @@ export function ProductDialog({ product, onClose }: { product: ProductFull | nul
               {options(suppliers.data, 'None')}
             </select>
           </label>
-          <label className="field">
-            Low stock threshold
-            <input className="num" inputMode="decimal" value={alert} onChange={(e) => setAlert(e.target.value)} placeholder="No alert" />
-            <span className="hint">The owner is told when the quantity falls to this number or below. Empty means never.</span>
-          </label>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <label className="field">
+              Low stock threshold
+              <input
+                className="num"
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                value={alert}
+                disabled={noAlert}
+                onChange={(e) => setAlert(e.target.value)}
+              />
+              <span className="hint">
+                The owner is told when the quantity falls to this number or below. 0 means: when there are none left.
+              </span>
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={noAlert} onChange={(e) => setNoAlert(e.target.checked)} />
+              No alert for this product
+            </label>
+          </div>
         </div>
         <div className="field">
           <span>Picture</span>

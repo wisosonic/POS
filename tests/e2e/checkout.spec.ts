@@ -180,6 +180,34 @@ test('Q4: record a payment against a customer account', async ({ page }) => {
   await expect(page.getByText(/Payment recorded/)).toBeVisible();
 });
 
+test('US-32: from a customer row, browse the sales behind what they owe', async ({ page }) => {
+  await page.getByRole('button', { name: /Menu/ }).click();
+  await page.getByRole('link', { name: 'Customer accounts' }).click();
+  const row = page.getByRole('row', { name: /ahmad darwish/i });
+  const owes = (await row.locator('td.num').first().textContent())!.trim(); // the figure in the Owes column
+  await row.getByRole('button', { name: 'Browse sales of Ahmad Darwish' }).click();
+
+  const dialog = page.getByRole('dialog', { name: /Sales of Ahmad Darwish/ });
+  await expect(dialog.getByText(`Owes ${owes}`)).toBeVisible();
+  const unpaid = dialog.getByTestId('customer-sale-row');
+  expect(await unpaid.count()).toBeGreaterThan(0); // the sale left on account in the test above
+  await expect(dialog.getByTestId('debt-total')).toHaveText(owes); // the unpaid sales add up to what they owe
+
+  // a sale opens to what was bought
+  await unpaid
+    .first()
+    .getByRole('button', { name: /Show items of receipt/ })
+    .click();
+  await expect(dialog.getByRole('list', { name: /Items of receipt/ })).toContainText('Cedars silver towel');
+
+  // all their sales, with a status column
+  await dialog.getByLabel('Show').selectOption('all');
+  await expect(dialog.getByRole('columnheader', { name: 'Status' })).toBeVisible();
+  await expect(dialog.getByTestId('debt-total')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('Q6: closing the register shows expected vs counted for cash, Whish and OMT', async ({ page }) => {
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('link', { name: 'Close register' }).click();

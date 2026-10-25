@@ -8,12 +8,14 @@ import type { Currency, Customer, Method } from '../../lib/types';
 import { toast } from '../../store/toast';
 import { usdToLbp } from '@pos/shared';
 import { Icon } from '../../components/Icon';
+import { CustomerSalesDialog } from './CustomerSalesDialog';
 
 /** Who owes the shop money, and a way to take a payment against what they owe (US-32, US-33). */
 export function AccountsPage() {
   const [q, setQ] = useState('');
   const [everyone, setEveryone] = useState(false);
   const [paying, setPaying] = useState<Customer | null>(null);
+  const [browsing, setBrowsing] = useState<Customer | null>(null);
   const customers = useQuery({
     queryKey: ['customers', q, everyone],
     queryFn: () =>
@@ -62,6 +64,10 @@ export function AccountsPage() {
                 <td className="muted">{c.phone ?? ''}</td>
                 <td className="num">{fmtLbp(c.balanceLbp)}</td>
                 <td className="num">
+                  <button className="btn small" onClick={() => setBrowsing(c)} aria-label={`Browse sales of ${c.name}`}>
+                    <Icon name="sales" size={16} />
+                    Sales
+                  </button>{' '}
                   {c.balanceLbp > 0 && (
                     <button className="btn small primary" onClick={() => setPaying(c)}>
                       Receive payment
@@ -73,6 +79,7 @@ export function AccountsPage() {
           </tbody>
         </table>
       )}
+      {browsing && <CustomerSalesDialog customer={browsing} onClose={() => setBrowsing(null)} />}
       {paying && <PaymentDialog customer={paying} onClose={() => setPaying(null)} />}
     </main>
   );

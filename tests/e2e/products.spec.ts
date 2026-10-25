@@ -158,35 +158,61 @@ test('US-15: the product list can be filtered by category and by brand', async (
   await expect(rows.filter({ hasText: 'Branded kettle' })).toHaveCount(1);
 });
 
-test('US-17: a product gets its own low stock threshold, shown in the list and on the Low stock page; empty means never', async ({
-  page,
-}) => {
+test('US-17: the low stock threshold is a number with a "No alert" tick box; 0 is a real threshold', async ({ page }) => {
   await managerAt(page, '/products');
   await page.getByRole('searchbox').fill('Loose cheese'); // seeded with 5 kg in stock and no threshold
   const row = page.getByTestId('product-row').filter({ hasText: 'Loose cheese' });
   await expect(row.getByTestId('low-at')).toHaveText('');
+  const edit = async () => {
+    await row.getByRole('button', { name: /Edit/ }).click();
+    return page.getByRole('dialog');
+  };
+  const lowStockHas = async (yes: boolean) => {
+    await openMenu(page, 'Low stock');
+    await expect(page.getByTestId('low-stock-row').filter({ hasText: 'Loose cheese' })).toHaveCount(yes ? 1 : 0);
+    await openMenu(page, 'Products');
+    await page.getByRole('searchbox').fill('Loose cheese');
+  };
 
-  await row.getByRole('button', { name: /Edit/ }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Low stock threshold').fill('-1');
+  // no threshold to begin with: the box is ticked and the number is switched off
+  let dialog = await edit();
+  const threshold = dialog.getByLabel('Low stock threshold');
+  const noAlert = dialog.getByLabel('No alert for this product');
+  await expect(threshold).toHaveAttribute('type', 'number');
+  await expect(noAlert).toBeChecked();
+  await expect(threshold).toBeDisabled();
+
+  // untick it: a number is needed, and a negative one is refused
+  await noAlert.uncheck();
+  await expect(threshold).toBeEnabled();
   await dialog.getByRole('button', { name: 'Save' }).click();
-  await expect(dialog.getByRole('alert')).toContainText('low stock threshold'); // a negative number is refused
+  await expect(dialog.getByRole('alert')).toContainText('Type the low stock threshold');
+  await threshold.fill('-1');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Type the low stock threshold');
+
+  // 0 is kept as 0 (not "no alert"); 5 kg in stock is above it, so nothing is flagged yet
+  await threshold.fill('0');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(row.getByTestId('low-at')).toHaveText('0');
+  await lowStockHas(false);
+
+  // a higher threshold flags it (5 is at or below 8)
+  dialog = await edit();
+  await expect(dialog.getByLabel('No alert for this product')).not.toBeChecked();
+  await expect(dialog.getByLabel('Low stock threshold')).toHaveValue('0'); // 0 comes back as 0
   await dialog.getByLabel('Low stock threshold').fill('8');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(row.getByTestId('low-at')).toHaveText('8');
+  await lowStockHas(true);
 
-  await openMenu(page, 'Low stock');
-  await expect(page.getByTestId('low-stock-row').filter({ hasText: 'Loose cheese' })).toBeVisible(); // 5 is at or below 8
-
-  // put it back: empty means no alert
-  await openMenu(page, 'Products');
-  await page.getByRole('searchbox').fill('Loose cheese');
-  await row.getByRole('button', { name: /Edit/ }).click();
-  await page.getByRole('dialog').getByLabel('Low stock threshold').fill('');
-  await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  // put it back: ticking No alert switches the number off and removes the alert
+  dialog = await edit();
+  await dialog.getByLabel('No alert for this product').check();
+  await expect(dialog.getByLabel('Low stock threshold')).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(row.getByTestId('low-at')).toHaveText('');
-  await openMenu(page, 'Low stock');
-  await expect(page.getByTestId('low-stock-row').filter({ hasText: 'Loose cheese' })).toHaveCount(0);
+  await lowStockHas(false);
 });
 
 test('US-15: on the Lists page a category or a brand opens the products that belong to it', async ({ page, request }) => {
