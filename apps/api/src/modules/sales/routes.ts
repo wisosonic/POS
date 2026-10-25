@@ -8,6 +8,7 @@ import { PrinterError } from '../printing/driver';
 import { hashRequest, requireIdempotencyKey } from '../../util/idempotency';
 import { parse } from '../../util/validate';
 import { createSale, getSale, receiptFor, saleBody, saleJson, saleSummaryJson } from './service';
+import { deleteBody, deleteSale } from './delete';
 import { voidBody, voidSale } from './void';
 
 const listQuery = z.object({
@@ -99,6 +100,17 @@ export default async function saleRoutes(app: FastifyInstance) {
     const id = Number((req.params as { id: string }).id);
     const body = parse(voidBody, req.body);
     const result = voidSale(db, req.auth, id, body, { key, hash: hashRequest({ id, ...body }) });
+    if (result.replay) void reply.header('Idempotent-Replay', 'true');
+    return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
+  });
+
+  // Delete a cancelled sale, or one that has had items returned, for good (QUESTIONS.md #8). A cashier needs a manager's approval
+  // (DELETE_NEEDS_APPROVAL) and sees only their own sales.
+  app.post('/sales/:id/delete', user, async (req, reply) => {
+    const key = requireIdempotencyKey(req);
+    const id = Number((req.params as { id: string }).id);
+    const body = parse(deleteBody, req.body);
+    const result = deleteSale(db, req.auth, id, body, { key, hash: hashRequest({ id, ...body }) });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
     return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
   });

@@ -49,6 +49,12 @@ const approveBody = z.discriminatedUnion('scope', [
   }),
   z.object({
     ...approver,
+    scope: z.literal('delete'),
+    /** The sale the manager is being shown and agrees to delete for good. */
+    saleId: z.number().int().positive(),
+  }),
+  z.object({
+    ...approver,
     scope: z.literal('price'),
     /** The product and the unit price (whole LBP) the manager is being shown. The approval covers that price for that product and no other. */
     productId: z.number().int().positive(),
@@ -142,7 +148,10 @@ export default async function authRoutes(app: FastifyInstance) {
     }
     recordAttempt(db, key, true);
 
-    if ((body.scope === 'return' || body.scope === 'void') && !db.prepare('SELECT 1 FROM sales WHERE id = ?').get(body.saleId))
+    if (
+      (body.scope === 'return' || body.scope === 'void' || body.scope === 'delete') &&
+      !db.prepare('SELECT 1 FROM sales WHERE id = ?').get(body.saleId)
+    )
       throw E.notFound('Sale');
     if (body.scope === 'price' && !db.prepare('SELECT 1 FROM products WHERE id = ?').get(body.productId)) throw E.notFound('Product');
     const grant =
@@ -152,7 +161,9 @@ export default async function authRoutes(app: FastifyInstance) {
           ? ({ scope: 'return', saleId: body.saleId, maxLbp: body.maxLbp } as const)
           : body.scope === 'void'
             ? ({ scope: 'void', saleId: body.saleId } as const)
-            : ({ scope: 'price', productId: body.productId, priceLbp: body.priceLbp } as const);
+            : body.scope === 'delete'
+              ? ({ scope: 'delete', saleId: body.saleId } as const)
+              : ({ scope: 'price', productId: body.productId, priceLbp: body.priceLbp } as const);
     const { token, expiresAt } = issueApproval(db, { requestedBy: req.auth.id, approvedBy: manager.id, ...grant });
     writeAudit(db, {
       userId: req.auth.id,

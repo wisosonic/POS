@@ -10,6 +10,7 @@ import { printInBrowser, printOnPrinter } from '../../lib/print';
 import type { SaleDetail, SaleListItem } from '../../lib/types';
 import { useSession } from '../../store/session';
 import { toast } from '../../store/toast';
+import { DeleteSaleDialog } from './DeleteSaleDialog';
 import { VoidSaleDialog } from './VoidSaleDialog';
 import { Icon } from '../../components/Icon';
 
@@ -360,6 +361,7 @@ function SaleDialog({ sale, onClose }: { sale: SaleListItem; onClose: () => void
   const detail = useQuery({ queryKey: ['sale', sale.id], queryFn: () => get<SaleDetail>(`/sales/${sale.id}`) });
   const [printing, setPrinting] = useState<'idle' | 'busy' | 'done'>('idle');
   const [cancelling, setCancelling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [problem, setProblem] = useState('');
 
   async function printAgain() {
@@ -382,9 +384,12 @@ function SaleDialog({ sale, onClose }: { sale: SaleListItem; onClose: () => void
   }
 
   const voided = sale.status === 'void';
+  // A cancelled sale, or one that has had items taken back, can be deleted for good.
+  const hasReturns = (detail.data?.items ?? []).some((i) => Number(i.returnedQty) > 0);
   return (
     <Modal label={`Receipt ${sale.ref}`} onClose={onClose}>
       {cancelling && <VoidSaleDialog sale={sale} onClose={() => setCancelling(false)} onDone={onClose} />}
+      {deleting && <DeleteSaleDialog sale={sale} voided={voided} onClose={() => setDeleting(false)} onDone={onClose} />}
       <div style={{ display: 'grid', gap: 12 }}>
         <h2>{`Receipt ${sale.ref}`}</h2>
         {voided && <div className="banner warn">This sale was voided.</div>}
@@ -404,6 +409,12 @@ function SaleDialog({ sale, onClose }: { sale: SaleListItem; onClose: () => void
           </div>
         )}
         <div className="dialog-actions">
+          {(voided || hasReturns) && (
+            <button className="btn danger" onClick={() => setDeleting(true)} disabled={detail.isLoading}>
+              <Icon name="trash" size={18} />
+              Delete for good…
+            </button>
+          )}
           {!voided && (
             <button className="btn danger" onClick={() => setCancelling(true)} disabled={detail.isLoading}>
               <Icon name="cancel" size={18} />

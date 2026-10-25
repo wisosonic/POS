@@ -6,7 +6,7 @@ import type { Db } from '../db/open';
 // one sale and up to the value the manager was shown. Using it happens inside the sale's (or return's) own transaction, so
 // one that fails does not burn it.
 
-export type ApprovalScope = 'discount' | 'return' | 'void' | 'price';
+export type ApprovalScope = 'discount' | 'return' | 'void' | 'price' | 'delete';
 export const APPROVAL_TTL_MINUTES = 10;
 /** Both sides round the percent to the cent of a percent; this much slack stops that rounding refusing an honest sale. */
 const PCT_SLACK = 0.011;
@@ -17,6 +17,7 @@ export type ApprovalGrant = { requestedBy: number; approvedBy: number } & (
   | { scope: 'discount'; maxPct: number }
   | { scope: 'return'; saleId: number; maxLbp: number }
   | { scope: 'void'; saleId: number }
+  | { scope: 'delete'; saleId: number }
   | { scope: 'price'; productId: number; priceLbp: number }
 );
 
@@ -31,7 +32,7 @@ export function issueApproval(db: Db, grant: ApprovalGrant, now: Date = new Date
     grant.requestedBy,
     grant.approvedBy,
     grant.scope === 'discount' ? grant.maxPct : null,
-    grant.scope === 'return' || grant.scope === 'void' ? grant.saleId : null,
+    grant.scope === 'return' || grant.scope === 'void' || grant.scope === 'delete' ? grant.saleId : null,
     grant.scope === 'return' ? grant.maxLbp : null,
     grant.scope === 'price' ? grant.productId : null,
     grant.scope === 'price' ? grant.priceLbp : null,
@@ -102,6 +103,25 @@ export function consumeVoidApproval(
     .prepare(
       `UPDATE approvals SET used_at = ?
        WHERE token_hash = ? AND scope = 'void' AND requested_by = ? AND sale_id = ? AND used_at IS NULL AND expires_at > ?`,
+    )
+    .run(now.toISOString(), hash, requestedBy, saleId, now.toISOString());
+  if (used.changes !== 1) return null;
+  return db.prepare('SELECT approved_by AS approvedBy FROM approvals WHERE token_hash = ?').get(hash) as { approvedBy: number };
+}
+
+/** Use a delete approval: a delete one, for this cashier and this sale, unused and unexpired. Returns who approved, or null. */
+export function consumeDeleteApproval(
+  db: Db,
+  token: string,
+  requestedBy: number,
+  saleId: number,
+  now: Date = new Date(),
+): { approvedBy: number } | null {
+  const hash = sha256(token);
+  const used = db
+    .prepare(
+      `UPDATE approvals SET used_at = ?
+       WHERE token_hash = ? AND scope = 'delete' AND requested_by = ? AND sale_id = ? AND used_at IS NULL AND expires_at > ?`,
     )
     .run(now.toISOString(), hash, requestedBy, saleId, now.toISOString());
   if (used.changes !== 1) return null;

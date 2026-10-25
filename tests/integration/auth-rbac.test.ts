@@ -78,6 +78,13 @@ describe('RBAC matrix (US-26)', () => {
     ['manager can read services', 'get', '/api/v1/services', 'manager', 200],
     ['manager can read the barcode status', 'get', '/api/v1/barcodes/status', 'manager', 200],
     ['cashier may start a void (it then needs an approval; an empty one is just invalid)', 'post', '/api/v1/sales/1/void', 'cashier', 400],
+    [
+      'cashier may start a delete (it then needs an approval; an empty one is just invalid)',
+      'post',
+      '/api/v1/sales/1/delete',
+      'cashier',
+      400,
+    ],
     ['cashier can read the service types', 'get', '/api/v1/service-categories', 'cashier', 200],
     ['cashier cannot list the returns', 'get', '/api/v1/returns', 'cashier', 403],
     ['cashier may start a return (it then needs an approval; an empty one is just invalid)', 'post', '/api/v1/returns', 'cashier', 400],

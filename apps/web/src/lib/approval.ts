@@ -7,6 +7,7 @@ export type ApprovalRequest =
   | { scope: 'discount'; pct: number }
   | { scope: 'return'; saleId: number; maxLbp: number }
   | { scope: 'void'; saleId: number }
+  | { scope: 'delete'; saleId: number }
   | { scope: 'price'; productId: number; priceLbp: number };
 
 type Answer = { approvalToken: string; approvedBy: { name: string } };
