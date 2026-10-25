@@ -1416,3 +1416,27 @@ label.check {
 .catalog-slot[hidden] {
   display: none;
 }
+
+/* The Pay dialog: what is being paid on the left, what it comes to on the right, so Change is never below the fold. */
+.pay-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.pay-col {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+.on-account {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .pay-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -45,129 +45,159 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
   // Before anything is typed, "enter what the customer pays" is a prompt, not a complaint.
   const showWarning = analysis.error !== null && !(analysis.error === 'Enter what the customer pays' && !typedSomething);
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (analysis.error || busy) return;
+  async function send(a: PayAnalysis) {
     setBusy(true);
     setServerError('');
     try {
-      await onComplete(analysis);
+      await onComplete(a);
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : 'The sale could not be completed');
       setBusy(false);
     }
   }
 
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (analysis.error || busy) return;
+    void send(analysis);
+  }
+
+  // A registered customer may take the goods and owe all of it: the same sale with no payment (the server leaves it all on their account).
+  const onAccount = useMemo(
+    () => analyzePayment({ inputs: NO_PAYMENT, totalLbp, rate, lbpRounding, registeredCustomer: customer !== null }),
+    [totalLbp, rate, lbpRounding, customer],
+  );
+  function putOnAccount() {
+    if (busy || onAccount.error) return;
+    setInputs(NO_PAYMENT);
+    void send(onAccount);
+  }
+
   return (
-    <Modal label="Payment" onClose={onClose}>
+    <Modal label="Payment" onClose={onClose} wide>
       <form onSubmit={submit} style={{ display: 'grid', gap: 14 }}>
         <h2>Pay</h2>
-        <div className="due">
-          <span>Total due</span>
-          <div style={{ textAlign: 'right' }}>
-            <div className="amount num" data-testid="pay-total">
-              {fmtLbp(totalLbp)}
+        <div className="pay-cols">
+          <div className="pay-col">
+            <div className="due">
+              <span>Total due</span>
+              <div style={{ textAlign: 'right' }}>
+                <div className="amount num" data-testid="pay-total">
+                  {fmtLbp(totalLbp)}
+                </div>
+                <div className="muted">{`about ${lbpAsUsd(totalLbp, rate)}`}</div>
+              </div>
             </div>
-            <div className="muted">{`about ${lbpAsUsd(totalLbp, rate)}`}</div>
-          </div>
-        </div>
 
-        <CustomerPicker value={customer} onChange={onCustomer} />
+            <CustomerPicker value={customer} onChange={onCustomer} />
 
-        <div className="tabs" role="tablist" aria-label="Payment method">
-          {METHODS.map((m) => (
-            <button
-              key={m.method}
-              type="button"
-              role="tab"
-              aria-selected={active === m.method}
-              onClick={() => {
-                setActive(m.method);
-                fields.current[m.lbp]?.focus();
-              }}
-            >
-              {m.name}
-            </button>
-          ))}
-        </div>
-
-        {METHODS.map((m) => (
-          <div key={m.method} className={`method ${active === m.method ? 'active' : ''}`}>
-            <label className="field">
-              {`${m.name} LBP`}
-              <input
-                ref={(el) => void (fields.current[m.lbp] = el)}
-                className="num"
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="0"
-                value={inputs[m.lbp]}
-                onFocus={() => setActive(m.method)}
-                onChange={(e) => set(m.lbp, e.target.value)}
-              />
-            </label>
-            <label className="field">
-              {`${m.name} USD`}
-              <input
-                ref={(el) => void (fields.current[m.usd] = el)}
-                className="num"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0"
-                value={inputs[m.usd]}
-                onFocus={() => setActive(m.method)}
-                onChange={(e) => set(m.usd, e.target.value)}
-              />
-            </label>
-            {active === m.method && (
-              <div className="quick">
-                <button type="button" className="btn small" onClick={() => set(m.lbp, String(totalLbp))}>
-                  Exact
+            <div className="tabs" role="tablist" aria-label="Payment method">
+              {METHODS.map((m) => (
+                <button
+                  key={m.method}
+                  type="button"
+                  role="tab"
+                  aria-selected={active === m.method}
+                  onClick={() => {
+                    setActive(m.method);
+                    fields.current[m.lbp]?.focus();
+                  }}
+                >
+                  {m.name}
                 </button>
-                {m.method === 'cash' &&
-                  NOTES.filter((n) => n >= totalLbp)
-                    .slice(0, 3)
-                    .map((n) => (
-                      <button key={n} type="button" className="btn small" onClick={() => set(m.lbp, String(n))}>
-                        {groupThousands(n)}
-                      </button>
-                    ))}
+              ))}
+            </div>
+
+            {METHODS.map((m) => (
+              <div key={m.method} className={`method ${active === m.method ? 'active' : ''}`}>
+                <label className="field">
+                  {`${m.name} LBP`}
+                  <input
+                    ref={(el) => void (fields.current[m.lbp] = el)}
+                    className="num"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="0"
+                    value={inputs[m.lbp]}
+                    onFocus={() => setActive(m.method)}
+                    onChange={(e) => set(m.lbp, e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  {`${m.name} USD`}
+                  <input
+                    ref={(el) => void (fields.current[m.usd] = el)}
+                    className="num"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="0"
+                    value={inputs[m.usd]}
+                    onFocus={() => setActive(m.method)}
+                    onChange={(e) => set(m.usd, e.target.value)}
+                  />
+                </label>
+                {active === m.method && (
+                  <div className="quick">
+                    <button type="button" className="btn small" onClick={() => set(m.lbp, String(totalLbp))}>
+                      Exact
+                    </button>
+                    {m.method === 'cash' &&
+                      NOTES.filter((n) => n >= totalLbp)
+                        .slice(0, 3)
+                        .map((n) => (
+                          <button key={n} type="button" className="btn small" onClick={() => set(m.lbp, String(n))}>
+                            {groupThousands(n)}
+                          </button>
+                        ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="pay-col">
+            <div className="summary" aria-live="polite">
+              <div className="row">
+                <span>Received</span>
+                <span className="num">{fmtLbp(analysis.receivedLbp)}</span>
+              </div>
+              <div className="row big change">
+                <span>Change (cash)</span>
+                <span className="num" data-testid="change-due">
+                  {fmtLbp(analysis.changeLbp)}
+                </span>
+              </div>
+              {analysis.restLbp > 0 && (
+                <div className="row big rest">
+                  <span>Left on account</span>
+                  <span className="num" data-testid="rest-due">
+                    {fmtLbp(analysis.restLbp)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {showWarning && (
+              <div className="warning" role="alert">
+                {analysis.error}
+              </div>
+            )}
+            {serverError && (
+              <div className="warning" role="alert">
+                {serverError}
+              </div>
+            )}
+
+            {customer && (
+              <div className="on-account">
+                <button type="button" className="btn big" disabled={busy || onAccount.error !== null} onClick={putOnAccount}>
+                  Put it all on account
+                </button>
+                <span className="muted">{`Nothing is paid now: the whole total is owed by ${customer.name}.`}</span>
               </div>
             )}
           </div>
-        ))}
-
-        <div className="summary" aria-live="polite">
-          <div className="row">
-            <span>Received</span>
-            <span className="num">{fmtLbp(analysis.receivedLbp)}</span>
-          </div>
-          <div className="row big change">
-            <span>Change (cash)</span>
-            <span className="num" data-testid="change-due">
-              {fmtLbp(analysis.changeLbp)}
-            </span>
-          </div>
-          {analysis.restLbp > 0 && (
-            <div className="row big rest">
-              <span>Left on account</span>
-              <span className="num" data-testid="rest-due">
-                {fmtLbp(analysis.restLbp)}
-              </span>
-            </div>
-          )}
         </div>
-
-        {showWarning && (
-          <div className="warning" role="alert">
-            {analysis.error}
-          </div>
-        )}
-        {serverError && (
-          <div className="warning" role="alert">
-            {serverError}
-          </div>
-        )}
 
         <div className="dialog-actions">
           <button type="button" className="btn" onClick={onClose}>

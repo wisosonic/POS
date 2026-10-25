@@ -74,6 +74,8 @@ Behaviour: scanner input is captured globally (no focus needed). A beep sounds o
 └──────────────────────────────────────────────────────┘
 ```
 
+- **Two columns.** The window is wide (880 px at most) so it fits a 1366 x 768 or 1024 x 768 screen without scrolling: on the left the total, the customer, the payment methods and their amounts; on the right the Received / Change / Left on account figures, any warning, and the on-account button; **Cancel** and **Complete** stay at the bottom. On a phone it is one column again.
+- **Put it all on account.** With a registered customer chosen, this button sells on credit with nothing paid now: the whole total is added to their balance (the same as Complete with every amount empty, made explicit). It is not shown for Walk-In.
 - Short or empty payment with **Walk-In**: inline error "Select a registered customer", and Complete is disabled.
 - Short or empty payment with a **registered** customer: a "Remaining 135,000 LL goes on account" line appears and Complete is enabled.
 - Change is cash only. A Whish/OMT amount above the total is flagged.

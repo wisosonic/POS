@@ -168,6 +168,32 @@ test('Q4: credit sale needs a registered customer; Walk-In is blocked', async ({
   await expect(page.getByText(/Sale \d+ completed/)).toBeVisible();
 });
 
+test('the Pay window shows the change and the buttons without scrolling; a registered customer can take it all on account', async ({
+  page,
+}) => {
+  await scan(page, TOWEL); // 75,000 LL
+  await page.getByRole('button', { name: /PAY/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Payment' });
+  await dialog.getByLabel('Cash LBP').fill('100000');
+  // two columns on a 1366 x 768 screen: the change and both buttons are in view, nothing below the fold
+  await expect(dialog.getByTestId('change-due')).toHaveText(/25,000/);
+  await expect(dialog.getByTestId('change-due')).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole('button', { name: 'Complete' })).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByLabel('OMT USD')).toBeInViewport({ ratio: 1 });
+
+  // Walk-In cannot owe: no such button
+  await expect(dialog.getByRole('button', { name: 'Put it all on account' })).toHaveCount(0);
+
+  // a registered customer can: nothing is paid now and the whole total is left on their account
+  await dialog.getByRole('button', { name: 'Customer' }).click();
+  await page.getByPlaceholder('Search customer').fill('ahmad');
+  await page.getByRole('option', { name: /ahmad darwish/i }).click();
+  await expect(dialog.getByRole('button', { name: 'Put it all on account' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Put it all on account' }).click();
+  await expect(page.getByText(/Sale \d+ completed/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Last sale' })).toContainText('75,000 LL left on account');
+});
+
 test('Q4: record a payment against a customer account', async ({ page }) => {
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('link', { name: 'Customer accounts' }).click();
@@ -190,7 +216,7 @@ test('US-32: from a customer row, browse the sales behind what they owe', async 
   const dialog = page.getByRole('dialog', { name: /Sales of Ahmad Darwish/ });
   await expect(dialog.getByText(`Owes ${owes}`)).toBeVisible();
   const unpaid = dialog.getByTestId('customer-sale-row');
-  expect(await unpaid.count()).toBeGreaterThan(0); // the sale left on account in the test above
+  await expect(unpaid.first()).toBeVisible(); // the sale left on account in the tests above (the rows arrive after the window opens)
   await expect(dialog.getByTestId('debt-total')).toHaveText(owes); // the unpaid sales add up to what they owe
 
   // a sale opens to what was bought
@@ -201,7 +227,7 @@ test('US-32: from a customer row, browse the sales behind what they owe', async 
   await expect(dialog.getByRole('list', { name: /Items of receipt/ })).toContainText('Cedars silver towel');
 
   // all their sales, with a status column
-  await dialog.getByLabel('Show').selectOption('all');
+  await dialog.getByRole('combobox', { name: 'Show' }).selectOption('all');
   await expect(dialog.getByRole('columnheader', { name: 'Status' })).toBeVisible();
   await expect(dialog.getByTestId('debt-total')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Close' }).click();
