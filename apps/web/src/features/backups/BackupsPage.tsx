@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Modal } from '../../components/Modal';
-import { ApiError, get, post } from '../../lib/api';
+import { ApiError, api, get, post } from '../../lib/api';
 import type { BackupDetail, BackupFile } from '../../lib/types';
 import { toast } from '../../store/toast';
 import { Icon } from '../../components/Icon';
@@ -32,6 +32,7 @@ export function BackupsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [restoring, setRestoring] = useState<BackupFile | null>(null);
+  const [deleting, setDeleting] = useState<BackupFile | null>(null);
   const [sure, setSure] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const backups = useQuery({ queryKey: ['backups'], queryFn: () => get<BackupDetail>('/backups') });
@@ -138,17 +139,23 @@ export function BackupsPage() {
                     <td className="muted">{when(f.modifiedAt)}</td>
                     <td className="num">{mb(f.bytes)}</td>
                     <td className="num">
-                      <button
-                        className="btn small"
-                        disabled={busy}
-                        aria-label={`Restore ${f.file}`}
-                        onClick={() => {
-                          setSure(false);
-                          setRestoring(f);
-                        }}
-                      >
-                        Restore
-                      </button>
+                      <div className="row-actions">
+                        <button
+                          className="btn small"
+                          disabled={busy}
+                          aria-label={`Restore ${f.file}`}
+                          onClick={() => {
+                            setSure(false);
+                            setRestoring(f);
+                          }}
+                        >
+                          Restore
+                        </button>
+                        <button className="btn small danger" disabled={busy} aria-label={`Delete ${f.file}`} onClick={() => setDeleting(f)}>
+                          <Icon name="trash" size={16} />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -156,6 +163,16 @@ export function BackupsPage() {
             </table>
           )}
         </>
+      )}
+      {deleting && (
+        <DeleteBackupDialog
+          file={deleting}
+          isNewest={b.files[0]?.file === deleting.file}
+          isOnly={b.files.length === 1}
+          hasSecondCopy={b.hasSecondCopy}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => Promise.all(['backups', 'backup-status'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })))}
+        />
       )}
       {restoring && (
         <Modal label="Restore a backup" onClose={() => setRestoring(null)}>
@@ -188,5 +205,76 @@ export function BackupsPage() {
         </Modal>
       )}
     </main>
+  );
+}
+
+function DeleteBackupDialog({
+  file,
+  isNewest,
+  isOnly,
+  hasSecondCopy,
+  onClose,
+  onDeleted,
+}: {
+  file: BackupFile;
+  isNewest: boolean;
+  isOnly: boolean;
+  hasSecondCopy: boolean;
+  onClose: () => void;
+  onDeleted: () => unknown;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function remove() {
+    setBusy(true);
+    setError('');
+    try {
+      await api('DELETE', `/backups/${encodeURIComponent(file.file)}`);
+      toast.success(`Backup ${file.file} was deleted`);
+      await onDeleted();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The backup could not be deleted');
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal label="Delete a backup" onClose={onClose}>
+      <div style={{ display: 'grid', gap: 14 }}>
+        <h2>Delete this backup?</h2>
+        <p style={{ margin: 0 }}>
+          <strong>{file.file}</strong>
+          <br />
+          <span className="muted">{`Made ${when(file.modifiedAt)} · ${mb(file.bytes)}`}</span>
+        </p>
+        <p style={{ margin: 0 }}>
+          The file is removed from this PC and cannot be brought back.{' '}
+          {hasSecondCopy ? 'The copy in the second folder is not touched.' : 'There is no second copy of it.'}
+        </p>
+        {(isOnly || isNewest) && (
+          <div className="banner warn">
+            <div className="title">{isOnly ? 'This is the only backup you have' : 'This is the newest backup'}</div>
+            <div>
+              {isOnly
+                ? 'Without it there is nothing to restore from until the next backup is made.'
+                : 'The Backups warning will say the last backup is older until the next one is made.'}
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="warning" role="alert">
+            {error}
+          </div>
+        )}
+        <div className="dialog-actions">
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn danger" disabled={busy} onClick={() => void remove()}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

@@ -188,3 +188,69 @@ describe('restoring a backup from the screen (US-30)', () => {
   });
 });
 const BACKUP_NAME_RE = /^pos-\d{8}-\d{6}(-\d+)?\.db\.enc$/;
+
+describe('deleting a backup by hand (US-30)', () => {
+  let c: TestCtx;
+  let dir: string;
+  let copyDir: string;
+  let cashier: string;
+  let manager: string;
+  let admin: string;
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'pos-bk-del-'));
+    copyDir = mkdtempSync(join(tmpdir(), 'pos-bk-del-copy-'));
+    c = await startCtx({ backup: { dir, copyDir, keep: 5 } });
+    cashier = await c.login('cashier');
+    manager = await c.login('manager');
+    admin = await c.login('admin');
+  });
+  afterAll(async () => {
+    await c.close();
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(copyDir, { recursive: true, force: true });
+  });
+
+  it('only an admin may; the file goes from the folder and the list, the second copy stays, and it is audited', async () => {
+    const made = await c.http.post(`${api}/backups`).set(auth(admin));
+    const file = made.body.file as string;
+    expect(existsSync(join(dir, file))).toBe(true);
+    expect(existsSync(join(copyDir, file))).toBe(true);
+
+    expect((await c.http.delete(`${api}/backups/${file}`).set(auth(cashier))).status).toBe(403);
+    expect((await c.http.delete(`${api}/backups/${file}`).set(auth(manager))).status).toBe(403);
+    expect((await c.http.delete(`${api}/backups/${file}`)).status).toBe(401);
+    expect(existsSync(join(dir, file))).toBe(true);
+
+    expect((await c.http.delete(`${api}/backups/${file}`).set(auth(admin))).status).toBe(204);
+    expect(existsSync(join(dir, file))).toBe(false);
+    expect(existsSync(join(copyDir, file))).toBe(true); // the copy that survives this PC is left alone
+    const list = await c.http.get(`${api}/backups`).set(auth(admin));
+    expect(list.body.files.some((f: { file: string }) => f.file === file)).toBe(false);
+    expect((await c.http.delete(`${api}/backups/${file}`).set(auth(admin))).status).toBe(404); // already gone
+
+    const log = await c.http.get(`${api}/audit?entity=backup&entityId=${file}&action=backup.delete`).set(auth(admin));
+    expect(log.body.data[0].before).toMatchObject({ wasNewest: true, remaining: 0 });
+  });
+
+  it('only a file the folder lists, by its own name: nothing else can be named', async () => {
+    writeFileSync(join(dir, 'notes.txt'), 'not a backup');
+    writeFileSync(join(dir, 'pos-20200101-000000.txt'), 'not a backup either');
+    for (const bad of ['notes.txt', '..%2F..%2Fpackage.json', '%2e%2e%2fpos.db', 'pos-2020.db']) {
+      const r = await c.http.delete(`${api}/backups/${bad}`).set(auth(admin));
+      expect([400, 404], bad).toContain(r.status);
+    }
+    expect(existsSync(join(dir, 'notes.txt'))).toBe(true);
+  });
+
+  it('without backups set up the answer says so', async () => {
+    const bare = await startCtx();
+    try {
+      const token = await bare.login('admin');
+      const r = await bare.http.delete(`${api}/backups/pos-20260101-000000.db`).set(auth(token));
+      expect(r.status).toBe(409);
+      expect(r.body.code).toBe('BACKUP_NOT_CONFIGURED');
+    } finally {
+      await bare.close();
+    }
+  });
+});

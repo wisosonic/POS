@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { BACKUP_NAME, BackupError, verifyBackupFile } from '../../backup/backup';
@@ -39,6 +40,27 @@ export default async function backupRoutes(app: FastifyInstance) {
       // Say what went wrong in words the admin can act on (a full disk, a missing drive); the details stay in the log.
       throw new AppError(500, 'BACKUP_FAILED', `The backup could not be made: ${(err as Error).message}`);
     }
+  });
+
+  // Delete one backup file by hand (the daily run already prunes the oldest). Only a file this folder lists, by its own name, so a
+  // request can never name any other path. The second copy, if there is one, is left alone: it is the one that survives this PC.
+  app.delete('/backups/:file', admin, async (req, reply) => {
+    const file = (req.params as { file: string }).file;
+    const dir = app.backups.settings.dir;
+    if (!dir) throw E.conflict('BACKUP_NOT_CONFIGURED', 'Backups are not set up: set BACKUP_DIR');
+    if (!BACKUP_NAME.test(file)) throw E.notFound('Backup');
+    const files = await app.backups.files();
+    const target = files.find((f) => f.file === file);
+    if (!target) throw E.notFound('Backup');
+    await rm(join(dir, file), { force: true });
+    writeAudit(db, {
+      userId: req.auth.id,
+      action: 'backup.delete',
+      entity: 'backup',
+      entityId: file,
+      before: { bytes: target.bytes, modifiedAt: target.modifiedAt, wasNewest: files[0]?.file === file, remaining: files.length - 1 },
+    });
+    return reply.status(204).send();
   });
 
   // Put one of the listed backups in place as the live database. The server owns the file, so it cannot be swapped under a running

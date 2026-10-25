@@ -65,3 +65,23 @@ test('US-30: the admin sees when and how big the last backup is, and a restore n
   await expect(dialog).toHaveCount(0);
   await expect(page.getByTestId('backup-file')).toHaveCount(2); // cancelling changed nothing: no safety backup was made
 });
+
+test('US-30: the admin deletes a backup file by hand, after a confirmation', async ({ page }) => {
+  await login(page, 'admin');
+  await page.goto('/settings/backups');
+  await page.getByRole('button', { name: 'Back up now' }).click();
+  await expect(page.getByTestId('backup-file')).toHaveCount(3);
+
+  const newest = page.getByTestId('backup-file').first();
+  const name = (await newest.locator('td').first().textContent())!;
+  await newest.getByRole('button', { name: `Delete ${name}` }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete a backup' });
+  await expect(dialog).toContainText('This is the newest backup');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('backup-file')).toHaveCount(3); // Cancel keeps it
+
+  await newest.getByRole('button', { name: `Delete ${name}` }).click();
+  await page.getByRole('dialog', { name: 'Delete a backup' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByTestId('backup-file')).toHaveCount(2);
+  await expect(page.getByTestId('backup-file').filter({ hasText: name })).toHaveCount(0);
+});
