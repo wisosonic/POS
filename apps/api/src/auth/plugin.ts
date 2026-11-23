@@ -3,6 +3,7 @@ import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { BackupService } from '../backup/service';
+import type { Database } from '../db/adapter';
 import type { Db } from '../db/open';
 import type { ReceiptPrinter } from '../modules/printing/driver';
 import { AppError, E } from '../errors';
@@ -13,6 +14,11 @@ export type AuthUser = { id: number; username: string; name: string; role: Role 
 declare module 'fastify' {
   interface FastifyInstance {
     db: Db;
+    /**
+     * The database through the portable async adapter (docs/11-multi-branch.md §4). New and converted code uses this;
+     * `db` stays until every module is converted. Both share one connection.
+     */
+    database: Database;
     /** Sends receipts to the USB printer. Replaced by a fake in tests. */
     printer: ReceiptPrinter;
     /** Runs, schedules and reports on database backups. */

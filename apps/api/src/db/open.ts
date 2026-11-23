@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { adapterTxState, txStore } from './txstate';
 
 export type Db = Database.Database;
 
@@ -23,5 +24,10 @@ export function openDatabase(path: string, options: { readonly?: boolean } = {})
  * can never interleave their stock and balance updates. Rolls back if `fn` throws.
  */
 export function inWriteTransaction<T>(db: Db, fn: () => T): T {
+  // While modules move to the async adapter (docs/11 §4), a legacy synchronous transaction must never start in the middle
+  // of an adapter transaction that belongs to another request: it would silently join it. Code that runs inside the
+  // adapter transaction itself is allowed (it has the same context).
+  if (adapterTxState.open > 0 && txStore.getStore() === undefined)
+    throw new Error('DB_TX_COLLISION: a synchronous transaction was started while an adapter transaction is open');
   return db.transaction(fn).immediate();
 }

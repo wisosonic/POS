@@ -9,6 +9,7 @@ import { BackupService, type BackupSettings } from './backup/service';
 import backupRoutes from './modules/backup/routes';
 import authRoutes, { meRoute } from './auth/routes';
 import { loadConfig } from './config';
+import { createSqliteDatabase } from './db/drivers/sqlite';
 import { openDatabase } from './db/open';
 import { errorHandler, notFoundHandler, problem } from './errors';
 import { windowsSpoolerPrinter, type ReceiptPrinter } from './modules/printing/driver';
@@ -143,6 +144,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   if (options.rateLimit ?? config.production) await app.register(rateLimit, { global: false });
   await app.register(authPlugin, { db, jwtSecret: config.jwtSecret });
   app.decorate('dbPath', resolve(options.databasePath));
+  app.decorate('database', createSqliteDatabase(db));
   app.decorate('requestRestart', options.restart ?? (() => undefined));
   app.decorate('printer', options.printer ?? windowsSpoolerPrinter);
   app.decorate(

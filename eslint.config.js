@@ -49,5 +49,44 @@ export default tseslint.config(
       globals: { process: 'readonly', fetch: 'readonly', setTimeout: 'readonly', AbortSignal: 'readonly' },
     },
   },
+  {
+    // The database seam (docs/11-multi-branch.md §4): application code must not import a database library, so that a server
+    // can move from SQLite to PostgreSQL by changing the driver only. Only `db/` (the drivers) and the tools below, which
+    // work on the database FILE itself (backup, restore checks, rehearsal), may. This list only ever shrinks.
+    files: ['apps/api/src/**/*.ts'],
+    ignores: [
+      'apps/api/src/db/**',
+      'apps/api/src/backup/backup.ts',
+      'apps/api/src/cli/backup.ts',
+      'apps/api/src/cli/preflight.ts',
+      'apps/api/src/cli/rehearse.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'better-sqlite3', message: 'Use the database adapter (app.database, db/adapter.ts). See docs/11-multi-branch.md §4.' },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Modules already converted to the adapter must stay converted: no legacy synchronous handle, no raw SQLite helpers.
+    // Add a module's folder here when it is converted.
+    files: ['apps/api/src/modules/holds/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [{ name: 'better-sqlite3', message: 'Use the database adapter.' }],
+          patterns: [
+            { group: ['**/db/open'], message: 'This module uses the database adapter (db/adapter.ts), not the legacy synchronous handle.' },
+          ],
+        },
+      ],
+    },
+  },
   prettier,
 );

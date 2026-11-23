@@ -7,6 +7,7 @@ Guidance for Claude Code and other AI assistants working in this repository.
 Market POS for Darwish Market (Beirut). Replaces a legacy ASP.NET + SQL Server app. React PWA front end, Fastify + TypeScript API, SQLite (`better-sqlite3`).
 The full design is in `docs/`. **Read the relevant doc before changing a related area, and update the doc when behaviour changes.**
 Deployment: one Windows PC at the till runs the API (which owns the SQLite file) + the browser. Current state: design and tests only. Implementation follows `plan.md`.
+**Growing into a chain (multi-branch, HR, online shop) is planned in `PLAN-MULTI-BRANCH.md` (architecture in `docs/11-multi-branch.md`). Read it before touching the database layer, registers, sync or users, and update its Progress section at the end of every piece of work.** Until a phase there says otherwise, the one-till rules below still hold.
 
 ## Commands (once scaffolded)
 
@@ -58,6 +59,8 @@ npm run preflight -w @pos/api -- --env <service.env>      # read-only check of t
 
 ## Pitfalls already hit (do not repeat)
 
+- **Run tests from the drive-letter case Windows reports, `C:\`, not `c:\`.** From `c:\...` (what the Bash tool's `cd /c/...` gives) vitest loads its own library twice and every test file dies with `Cannot read properties of undefined (reading 'config')`. Use PowerShell with `Set-Location 'C:\Users\...\POS'`. If tests say `Cannot find package '@pos/shared'`, the workspace junctions in `node_modules/@pos` point at a folder that was renamed: recreate them (`New-Item -ItemType Junction`) or run `npm install`.
+- **Database adapter (`db/adapter.ts`, docs/11 §4).** Converted modules (listed in `eslint.config.js`, starting with `holds`) use `app.database` (`one`, `all`, `run`, `tx`), never `better-sqlite3` or `db/open`. Inside `db.tx()` only `await` database calls: waiting on the event loop (hashing, I/O, a timer) rolls the transaction back with `TX_YIELDED`, so do slow work first. Use `RETURNING id`, `ON CONFLICT`, `?` parameters and `x = x + ?` so the code runs on PostgreSQL later. The legacy `inWriteTransaction` still exists for unconverted modules and refuses (`DB_TX_COLLISION`) to start while another request's adapter transaction is open. Convert a module fully, add its folder to the lint list, keep its tests green.
 - **Zod `.partial()` keeps `.default()`.** A PATCH schema built from defaulted fields silently resets those fields on every edit. Keep patch fields free of defaults and put defaults on create only (regression test in `tests/integration/products.test.ts`).
 - **SQL aliases can shadow columns.** `SUM(l.qty_milli) AS qty_milli` made `HAVING qty_milli` read a single row. Never reuse a real column name as an alias (regression test in `tests/db/stock-alerts.test.ts`).
 - **Return the row after the update, not before.** Build responses from a fresh read when a write changes what the response shows.

@@ -1,4 +1,15 @@
+import type { Queryable } from '../../db/adapter';
 import type { Db } from '../../db/open';
+
+/** `currentRate` for code that uses the database adapter. Same rule, same answer. */
+export async function currentRateQ(q: Queryable, at: Date = new Date()): Promise<number> {
+  const row = await q.one<{ rate: number }>(
+    'SELECT rate_lbp_per_usd AS rate FROM exchange_rates WHERE effective_from <= ? ORDER BY effective_from DESC, id DESC LIMIT 1',
+    [at.toISOString()],
+  );
+  if (!row) throw new Error('No exchange rate is configured. Was the reference data seeded?');
+  return row.rate;
+}
 
 /** The LBP-per-USD rate in force right now. Each sale snapshots it; changing the rate never touches old sales. */
 export function currentRate(db: Db, at: Date = new Date()): number {
