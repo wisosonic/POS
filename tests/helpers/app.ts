@@ -37,6 +37,8 @@ export async function startCtx(
     restart?: () => void;
     /** Tests run reports on the server's own thread (vitest cannot load TypeScript inside a worker); one test turns the worker on. */
     reports?: BuildOptions['reports'];
+    /** The loop that keeps the branch in touch with HQ stays off in tests; a test that exercises it turns it on. */
+    sync?: BuildOptions['sync'];
   } = {},
 ): Promise<TestCtx> {
   const dir = mkdtempSync(join(tmpdir(), 'pos-it-'));
@@ -52,6 +54,7 @@ export async function startCtx(
     webDist: options.webDist,
     restart: options.restart,
     reports: options.reports ?? { worker: false },
+    sync: options.sync ?? { enabled: false },
   });
   await app.ready();
   // Listen once on a free port. Letting supertest start and stop the server per request breaks requests that are

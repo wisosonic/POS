@@ -11,7 +11,8 @@
   },
   "scripts": {
     "build": "npm run build -w @pos/web",
-    "test": "vitest run --project unit --project db --project web",
+    "test": "vitest run --project unit --project db --project web --project central",
+    "test:central": "vitest run --project central",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration --no-file-parallelism",
     "test:migration": "vitest run --project migration",
@@ -24,7 +25,8 @@
     "format:check": "prettier --check .",
     "test:db": "vitest run --project db",
     "test:web": "vitest run --project web",
-    "dev": "node scripts/dev.mjs"
+    "dev": "node scripts/dev.mjs",
+    "dev:chain": "node scripts/dev-chain.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

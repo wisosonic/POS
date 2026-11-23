@@ -6,7 +6,7 @@ Guidance for Claude Code and other AI assistants working in this repository.
 
 Market POS for Darwish Market (Beirut). Replaces a legacy ASP.NET + SQL Server app. React PWA front end, Fastify + TypeScript API, SQLite (`better-sqlite3`).
 The full design is in `docs/`. **Read the relevant doc before changing a related area, and update the doc when behaviour changes.**
-Deployment: one Windows PC at the till runs the API (which owns the SQLite file) + the browser. Current state: design and tests only. Implementation follows `plan.md`.
+Deployment: a Windows PC runs the API (which owns the SQLite file); the tills are browsers, on that same PC or on others, and a till whose printer is elsewhere runs a print agent (`docs/04-architecture.md` §1, `docs/07-operations.md`). Current state: the single-branch system is built and tested (milestones in `plan.md`), with several tills per branch; it has **not** been run on a real till PC yet. The multi-branch / HQ plan is in `PLAN-MULTI-BRANCH.md`.
 **Growing into a chain (multi-branch, HR, online shop) is planned in `PLAN-MULTI-BRANCH.md` (architecture in `docs/11-multi-branch.md`). Read it before touching the database layer, registers, sync or users, and update its Progress section at the end of every piece of work.** Until a phase there says otherwise, the one-till rules below still hold.
 
 ## Commands (once scaffolded)
@@ -15,6 +15,8 @@ Deployment: one Windows PC at the till runs the API (which owns the SQLite file)
 npm run test:unit          # fast, pure logic (packages/shared)
 npm run test:db            # schema, constraints, triggers, seed (temp SQLite files)
 npm run test:integration   # HTTP + a throwaway SQLite file, no Docker
+npm run test:central       # the HQ server (apps/central): branches, enrolment, its own security checks
+npm run dev:chain          # HQ (:4000) + branch A (:3000) + branch B (:3001), separate data folders under data/chain/ (CHAIN_ADMIN_PASSWORD=... also connects them)
 POSDB_DUMP=./POSDB.sql npm run test:migration
 npm run test:e2e           # Playwright, needs the stack running
 npm run typecheck
@@ -58,6 +60,10 @@ npm run preflight -w @pos/api -- --env <service.env>      # read-only check of t
 22. **No inline scripts, no `eval`, no foreign origins.** The Content-Security-Policy is `script-src 'self'`. Styles may be inline (React writes `style=""`). The `production-build` e2e project runs the built app under the real policy.
 
 ## Pitfalls already hit (do not repeat)
+
+- **Two servers, one shared core.** The branch server (`apps/api`) and the HQ server (`apps/central`, docs/12-sync-and-hq.md) share `packages/core` (`@pos/core`): the database adapter and SQLite driver, the migrations runner (`migrateFrom(dir, target)`, each server has its OWN migrations folder and database), errors, validation and the credential helpers. The old paths in `apps/api` (`db/adapter`, `db/open`, `errors`, ...) are one-line re-exports: new code may import `@pos/core/...` directly. A new workspace package needs `npm install` (it links `node_modules/@pos/<name>`); without the link, tests fail with `Cannot find package '@pos/...'`.
+- **HQ is the first internet-facing part.** Its open doors are `/healthz` and `/sync/enrol` only (the one-time code is the credential); `tests/central/hq.test.ts` proves every other route refuses an anonymous request and a garbage token. A branch signs in with `X-Branch-Token` (never a person's sign-in), HQ staff with the interim `HQ_ADMIN_TOKEN` (replaced by HQ users in P3). Codes and tokens are stored only as hashes, shown once, and never reach a log, an audit row or an answer. The branch keeps ITS token in `hq_link` and never returns it.
+- **The sync loop is background work that must never block a sale or a shutdown.** `modules/sync/agent.ts` only ever uses short transactions, does its network calls OUTSIDE any transaction, never throws out of its loop, and stops in `preClose` (like the SSE stream and the print agent's long poll). The first success after an outage calls `onReconnect`: that is where data sync plugs in.
 
 - **Live updates (`events/bus.ts`, `GET /events`).** Events are hints with no data (`{ type, at }`); a screen asks for the real thing through the normal calls and refreshes everything after a reconnect. They are published from one place, the `onResponse` hook in `app.ts`, from the route pattern and the status (`eventsFor`), so a new route that changes what other screens show needs a line there. **Anything that holds a connection open must be ended in a `preClose` hook, not `onClose`** (Fastify runs `onClose` only after the server has finished waiting for its connections, so the server hangs): the SSE stream destroys its sockets and the agent's long poll answers at once. A test starts a server with a stream open and closes it.
 

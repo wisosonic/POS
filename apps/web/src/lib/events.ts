@@ -10,6 +10,7 @@ export const LIVE_EVENTS = [
   'settings.changed',
   'register.updated',
   'sale.completed',
+  'sync.changed',
 ] as const;
 export type LiveEvent = (typeof LIVE_EVENTS)[number];
 

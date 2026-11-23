@@ -33,6 +33,8 @@ import terminalRoutes from './modules/terminals/routes';
 import agentRoutes from './modules/printing/agentRoutes';
 import { EventBus, eventsFor } from './events/bus';
 import { ReportRunner } from './modules/reports/runner';
+import { SyncAgent } from './modules/sync/agent';
+import syncRoutes from './modules/sync/routes';
 import eventRoutes from './events/routes';
 import { AGENT_HEADER, TERMINAL_HEADER, resolveAgent, resolveTerminal, type Terminal } from './modules/terminals/service';
 import settingsRoutes from './modules/settings/routes';
@@ -63,6 +65,11 @@ export type BuildOptions = {
    * cannot hold up a sale. `{ worker: false }` runs them on the server's own thread (tests, which cannot load TypeScript in a worker).
    */
   reports?: { worker?: boolean; execArgv?: string[]; timeoutMs?: number };
+  /**
+   * The loop that keeps this branch in touch with HQ (modules/sync/agent.ts). It does nothing until an admin connects the branch to HQ.
+   * `{ enabled: false }` (tests) never starts it; the intervals can be shortened to watch an outage and a recovery.
+   */
+  sync?: { enabled?: boolean; intervalMs?: number; backoffMs?: [number, number]; refusedRetryMs?: number; idleMs?: number };
 };
 
 /**
@@ -162,6 +169,13 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   app.decorate('events', events);
   const reports = new ReportRunner({ databasePath: options.databasePath, db, ...options.reports });
   app.decorate('reports', reports);
+  const sync = new SyncAgent({ db: app.database, onChange: () => events.publish('sync.changed'), ...options.sync });
+  app.decorate('sync', sync);
+  app.addHook('onReady', async () => {
+    if (options.sync?.enabled !== false) sync.start();
+  });
+  // `preClose`, not `onClose`: the loop is waiting on timers and the network, and the server must not wait for it (docs: CLAUDE.md pitfalls).
+  app.addHook('preClose', async () => sync.stop());
   app.addHook('onClose', async () => reports.close());
   app.addHook('onResponse', async (req, reply) => {
     const route = req.routeOptions?.url;
@@ -224,6 +238,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(customerRoutes);
       await api.register(terminalRoutes);
       await api.register(agentRoutes);
+      await api.register(syncRoutes);
       await api.register(eventRoutes, { bus: events });
       await api.register(registerRoutes);
       await api.register(saleRoutes);

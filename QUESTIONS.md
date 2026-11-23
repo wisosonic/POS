@@ -93,6 +93,10 @@ Answer:
 
 ## Answered
 
+### 15. Once branches are connected to HQ, who may add or change products, prices and categories?
+(Design: `docs/12-sync-and-hq.md`.) The catalog is owned by HQ so that a product number means the same thing in every branch. Today a manager can add and edit products at the till. Options: **A)** only at HQ; the products screens at a branch become read-only (simplest, no clashes, but a branch that is offline cannot add a new product it just received on the shelf). **B)** a branch can *propose* a product or a price change; HQ approves it. **C)** a branch can add a new product locally with a temporary number and HQ adopts it later (works offline, but two branches can add the same product twice and someone has to merge them).
+Answer: **A) Only at HQ** (2026-11-23). The products, categories, brands, units and suppliers screens become read-only at a branch once it is connected to HQ; HQ is the only place a product or a price is added or changed. (Until a branch is connected, it works as before.)
+
 ### 1. Which receipt printer is it?
 The model decides how the cash drawer is opened (the drawer pulse command) and how many characters fit on a line (42 is assumed for an 80 mm printer, 32 for 58 mm).
 Answer: **Buerotika BP110N** (2026-10-26, from a photo of its label): thermal receipt printer, 80 mm paper, 230 mm/s, interfaces RJ11 (cash drawer) + USB + LAN. So the width is 42 characters. Still to confirm on the real PC with "Print a test slip": that it prints the slip correctly (ESC/POS) and that the drawer opens on "Also open the cash drawer" (the app sends the standard pulse on pin 2).

@@ -17,6 +17,7 @@ export default defineConfig({
     projects: [
       { extends: true, test: { name: 'db', include: ['tests/db/**/*.test.ts'], testTimeout: 30_000 } },
       { extends: true, test: { name: 'web', include: ['tests/web/**/*.test.ts'] } },
+      { extends: true, test: { name: 'central', include: ['tests/central/**/*.test.ts'], testTimeout: 30_000 } },
       { extends: true, test: { name: 'unit', include: ['tests/unit/**/*.test.ts'] } },
       {
         extends: true,

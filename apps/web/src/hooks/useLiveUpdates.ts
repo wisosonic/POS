@@ -26,6 +26,7 @@ export function useLiveUpdates(): void {
       'settings.changed': () => invalidate('settings'),
       'register.updated': () => invalidate('register'),
       'sale.completed': () => undefined, // the stock event that comes with it does the work
+      'sync.changed': () => invalidate('sync'),
     };
 
     const stop = startEvents({

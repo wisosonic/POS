@@ -3,7 +3,8 @@
 // instead of on a timer. The events are HINTS ("the catalog changed"), never data: a till that hears one asks the server for the real
 // thing through the normal, authorised calls, and a till that missed any (it was offline) simply refreshes everything when it reconnects.
 
-export type EventType = 'catalog.changed' | 'stock.changed' | 'rate.changed' | 'settings.changed' | 'register.updated' | 'sale.completed';
+export type EventType =
+  'catalog.changed' | 'stock.changed' | 'rate.changed' | 'settings.changed' | 'register.updated' | 'sale.completed' | 'sync.changed';
 
 export type PosEvent = { type: EventType; at: string };
 
