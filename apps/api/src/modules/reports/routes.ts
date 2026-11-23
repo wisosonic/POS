@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { localDay, shopDayStart } from '../../util/time';
+import { shopDayStart } from '../../util/time';
 import { parse } from '../../util/validate';
 import { lowStock } from '../inventory/routes';
-import { byCategory, groupBy, hourly, productSales, returnsIn, salesIn, topItems, totalsOf } from './queries';
+import { hourly, returnsIn, salesIn, topItems, totalsOf } from './queries';
 
 const iso = z
   .string()
@@ -70,25 +70,16 @@ export default async function reportRoutes(app: FastifyInstance) {
   });
 
   // Takings between two moments, by shop day, by cashier or by product category. Returns count on the day they were taken back.
+  // These two can read years of history, so they run in the reports worker (a read-only connection on its own thread): a long report
+  // never holds up a sale. See compute.ts for the figures themselves.
   app.get('/reports/sales', manager, async (req) => {
     const q = parse(salesQuery, req.query);
-    const r = resolve(q);
-    const sales = salesIn(db, r);
-    const returns = returnsIn(db, r);
-    const rows =
-      q.groupBy === 'day'
-        ? groupBy(sales, returns, (x) => ({ key: localDay(x.created_at), label: localDay(x.created_at) }))
-        : q.groupBy === 'cashier'
-          ? groupBy(sales, returns, (x) => ({ key: String(x.user_id ?? 0), label: x.user_name ?? 'Imported or unknown' }))
-          : byCategory(db, r);
-    // The grand total comes from the sales and returns themselves, so it is right even when a sale spans categories.
-    return { from: r.from, to: r.to, groupBy: q.groupBy, data: rows, totals: totalsOf(sales, returns) };
+    return app.reports.run({ kind: 'sales', params: { ...resolve(q), groupBy: q.groupBy } });
   });
 
   // Best and slowest sellers, with margin.
   app.get('/reports/products', manager, async (req) => {
     const q = parse(productsQuery, req.query);
-    const r = resolve(q);
-    return { from: r.from, to: r.to, data: productSales(db, r, q.sort, q.order, q.limit) };
+    return app.reports.run({ kind: 'products', params: { ...resolve(q), sort: q.sort, order: q.order, limit: q.limit } });
   });
 }

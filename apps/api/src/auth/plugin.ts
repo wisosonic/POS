@@ -5,6 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { BackupService } from '../backup/service';
 import type { Database } from '../db/adapter';
 import type { EventBus } from '../events/bus';
+import type { ReportRunner } from '../modules/reports/runner';
 import type { Db } from '../db/open';
 import type { ReceiptPrinter } from '../modules/printing/driver';
 import type { Terminal } from '../modules/terminals/service';
@@ -18,6 +19,8 @@ declare module 'fastify' {
     db: Db;
     /** Live updates for the tills (events/bus.ts). */
     events: EventBus;
+    /** Runs the heavy reports away from the thread that sells (modules/reports/runner.ts). */
+    reports: ReportRunner;
     /**
      * The database through the portable async adapter (docs/11-multi-branch.md §4). New and converted code uses this;
      * `db` stays until every module is converted. Both share one connection.

@@ -32,6 +32,7 @@ import rateRoutes from './modules/settings/rates';
 import terminalRoutes from './modules/terminals/routes';
 import agentRoutes from './modules/printing/agentRoutes';
 import { EventBus, eventsFor } from './events/bus';
+import { ReportRunner } from './modules/reports/runner';
 import eventRoutes from './events/routes';
 import { AGENT_HEADER, TERMINAL_HEADER, resolveAgent, resolveTerminal, type Terminal } from './modules/terminals/service';
 import settingsRoutes from './modules/settings/routes';
@@ -57,6 +58,11 @@ export type BuildOptions = {
   webDist?: string;
   /** Serve over HTTPS with this certificate and key (PEM text). Defaults to the files named by TLS_CERT and TLS_KEY. */
   tls?: { cert: string | Buffer; key: string | Buffer };
+  /**
+   * Where the heavy reports run. By default in a worker thread with its own read-only connection, so a report over years of sales
+   * cannot hold up a sale. `{ worker: false }` runs them on the server's own thread (tests, which cannot load TypeScript in a worker).
+   */
+  reports?: { worker?: boolean; execArgv?: string[]; timeoutMs?: number };
 };
 
 /**
@@ -154,6 +160,9 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   // This happens after the answer has gone, so it can never delay or fail a sale.
   const events = new EventBus();
   app.decorate('events', events);
+  const reports = new ReportRunner({ databasePath: options.databasePath, db, ...options.reports });
+  app.decorate('reports', reports);
+  app.addHook('onClose', async () => reports.close());
   app.addHook('onResponse', async (req, reply) => {
     const route = req.routeOptions?.url;
     if (!route?.startsWith('/api/v1/')) return;
