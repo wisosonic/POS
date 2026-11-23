@@ -7,6 +7,7 @@ import { HoldsDialog } from '../features/checkout/HoldsDialog';
 import { OpenRegisterDialog } from '../features/register/OpenRegisterDialog';
 import { isNotATill, useAlerts, useDeviceToken, useHolds, useRate, useRegister, useSettings, useTerminal } from '../hooks/useTillData';
 import { DeviceNotATill } from '../features/terminals/DeviceNotATill';
+import { useLiveUpdates } from '../hooks/useLiveUpdates';
 import { get } from '../lib/api';
 import type { BackupStatus } from '../lib/types';
 import { useConnection, startConnectionWatch } from '../store/connection';
@@ -38,6 +39,7 @@ export function TillLayout() {
   useRate(); // not shown in the header any more, but fetched now so the till is ready the moment it opens
   const register = useRegister();
   const terminal = useTerminal();
+  useLiveUpdates(); // prices, stock, rate and registers stay current without waiting for a reload
   const deviceToken = useDeviceToken();
   const holds = useHolds();
   const alerts = useAlerts();

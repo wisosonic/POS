@@ -41,6 +41,11 @@ export function wakeAgent(terminalId: number): void {
   for (const wake of waiters.get(terminalId) ?? []) wake();
 }
 
+/** Wake every waiting agent (the server is shutting down: they answer now instead of holding it up). */
+export function wakeAllAgents(): void {
+  for (const set of [...waiters.values()]) for (const wake of [...set]) wake();
+}
+
 /** Resolves when a job is queued for this terminal, after `ms`, or as soon as `signal` aborts (the agent hung up). */
 export function waitForWake(terminalId: number, ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {

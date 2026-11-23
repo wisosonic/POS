@@ -73,7 +73,7 @@ Receipt: POST /api/v1/sales/{id}/print (server sends ASCII ESC/POS to the USB pr
 
 ### 4.3 Real-time
 
-SSE endpoint `/api/v1/events` streams `sale.completed`, `stock.changed`, `stock.low`, `register.updated`, `rate.changed`. Low priority with one till: it mainly keeps a manager's second screen current.
+SSE endpoint `/api/v1/events` streams `sale.completed`, `stock.changed`, `catalog.changed`, `register.updated`, `rate.changed`, `settings.changed` (built; `docs/06-api-spec.md`). The events are only hints with no data in them: a till that hears one asks for the real thing through the normal authorised calls, and one that missed some refreshes everything on reconnect. With several tills in a branch (`docs/11-multi-branch.md` §3.4) it is what keeps every till's prices, low-stock list, rate and register current without a timer, and it is how a price changed at HQ will reach the tills later.
 The PWA invalidates the matching TanStack Query keys. Heartbeat every 20 s, and `Last-Event-ID` resume.
 
 ## 5. Data model (SQLite)

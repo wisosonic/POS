@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { E } from '../../errors';
 import { parse } from '../../util/validate';
 import { enrolAgent, markAgentSeen } from '../terminals/service';
-import { cancelJob, claimJobs, finishJob, getJob, waitForWake } from './jobs';
+import { cancelJob, claimJobs, finishJob, getJob, waitForWake, wakeAllAgents } from './jobs';
 
 const LIMIT = { max: 10, timeWindow: '1 minute' };
 /** The longest the server holds a request open waiting for work. Shorter than any proxy's idle timeout. */
@@ -18,6 +18,14 @@ export default async function agentRoutes(app: FastifyInstance) {
   const agent = { preHandler: app.agentOnly };
   const atTerminal = { preHandler: [app.authenticate, app.withTerminal] };
   const idOf = (req: { params: unknown }) => Number((req.params as { id: string }).id);
+
+  // A server that is closing (an update, a restart) must not wait out a long poll: answer the waiting agents now. They ask again and
+  // find the server back a moment later. (`preClose`: `onClose` would only run after the wait is over.)
+  let closing = false;
+  app.addHook('preClose', async () => {
+    closing = true;
+    wakeAllAgents();
+  });
 
   // The ONE open door of the agent: its one-time code is the credential (about 49 bits, single use, 30 minutes, rate limited), like a
   // sign-in. It answers with the agent's token, once.
@@ -40,7 +48,7 @@ export default async function agentRoutes(app: FastifyInstance) {
     try {
       await db.tx((tx) => markAgentSeen(tx, terminalId));
       for (;;) {
-        if (hungUp.signal.aborted) return { jobs: [] };
+        if (hungUp.signal.aborted || closing) return { jobs: [] };
         const jobs = await db.tx((tx) => claimJobs(tx, terminalId));
         const left = deadline - Date.now();
         if (jobs.length > 0 || left <= 0) {

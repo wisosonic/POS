@@ -1,4 +1,5 @@
 import request from 'supertest';
+import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,6 +22,8 @@ export type TestCtx = {
   login: (role: 'cashier' | 'manager' | 'admin') => Promise<string>;
   openRegister: (token: string) => Promise<{ id: number }>;
   newSaleBody: (over?: Record<string, unknown>) => Record<string, unknown>;
+  /** The running app, for a test that needs to look inside it (for instance how many screens are listening for live updates). */
+  app: FastifyInstance;
   close: () => Promise<void>;
 };
 
@@ -60,6 +63,7 @@ export async function startCtx(
     seed,
     databasePath,
     url,
+    app,
     routes: app.registeredRoutes,
     async login(role) {
       const u = seed.users[role];

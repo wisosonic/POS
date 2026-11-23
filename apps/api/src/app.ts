@@ -31,6 +31,8 @@ import saleRoutes from './modules/sales/routes';
 import rateRoutes from './modules/settings/rates';
 import terminalRoutes from './modules/terminals/routes';
 import agentRoutes from './modules/printing/agentRoutes';
+import { EventBus, eventsFor } from './events/bus';
+import eventRoutes from './events/routes';
 import { AGENT_HEADER, TERMINAL_HEADER, resolveAgent, resolveTerminal, type Terminal } from './modules/terminals/service';
 import settingsRoutes from './modules/settings/routes';
 import userRoutes from './modules/users/routes';
@@ -148,6 +150,15 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   await app.register(authPlugin, { db, jwtSecret: config.jwtSecret });
   app.decorate('dbPath', resolve(options.databasePath));
   app.decorate('database', createSqliteDatabase(db));
+  // Live updates (docs/06 `GET /events`): when a request that changed something succeeds, the tills that are listening are told.
+  // This happens after the answer has gone, so it can never delay or fail a sale.
+  const events = new EventBus();
+  app.decorate('events', events);
+  app.addHook('onResponse', async (req, reply) => {
+    const route = req.routeOptions?.url;
+    if (!route?.startsWith('/api/v1/')) return;
+    for (const type of eventsFor(req.method, route.slice('/api/v1'.length), reply.statusCode)) events.publish(type);
+  });
   // Which till sent this request (docs/11 §3.4). Routes that need a register session or a warehouse use it as a preHandler.
   app.decorateRequest('terminal', undefined as unknown as Terminal);
   // The print agent on a till PC signs in with its own token (never a user's): it may only fetch and report its terminal's print jobs.
@@ -204,6 +215,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(customerRoutes);
       await api.register(terminalRoutes);
       await api.register(agentRoutes);
+      await api.register(eventRoutes, { bus: events });
       await api.register(registerRoutes);
       await api.register(saleRoutes);
       await api.register(returnRoutes);

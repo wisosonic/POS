@@ -281,3 +281,18 @@ describe('a real agent against the server', () => {
     await expect(run({ print: async () => undefined }, new AbortController().signal)).rejects.toThrow(/does not accept this print agent/);
   });
 });
+
+describe('shutting the server down', () => {
+  it('does not wait out a print agent that is holding a long poll open', async () => {
+    const own = await startCtx();
+    const owner = await own.login('admin');
+    const code = (await own.http.post(`${api}/terminals/1/agent-code`).set(auth(owner))).body.agentCode as string;
+    const token = (await own.http.post(`${api}/agent/enrol`).send({ code })).body.token as string;
+    const waiting = fetch(`${own.url}${api}/agent/jobs?wait=25`, { headers: { 'X-Agent-Token': token } }).catch(() => null);
+    await new Promise((r) => setTimeout(r, 300)); // the agent is now waiting for work
+    const started = Date.now();
+    await own.close();
+    expect(Date.now() - started).toBeLessThan(3000); // not the 25 seconds the agent asked to wait
+    await waiting;
+  }, 15_000);
+});
