@@ -6,7 +6,10 @@ import type { Product } from './types';
 // The till keeps its own copy of the catalog, so a scan is a map lookup (instant) and still works if the server is briefly
 // unreachable. It is refreshed with the server's delta feed (/products/sync), which also delivers deactivated products.
 
-type Feed = { data: Product[]; serverTime: string };
+/** One page of the feed. `next` says where the following page starts; it is null (or missing, for an older server) on the last. */
+type Feed = { data: Product[]; serverTime: string; next?: { since: string; afterId: number } | null };
+/** How many products to ask for at a time. A first sync of 8,000+ products is then about 16 small answers, not one huge one. */
+const PAGE_SIZE = 500;
 /** Bump when the saved copy gains a field the till needs: an older copy is dropped and fetched whole again. */
 const CACHE_VERSION = 2;
 type Saved = { since: string; products: Product[]; v?: number };
@@ -20,7 +23,7 @@ export class Catalog {
 
   constructor(
     private readonly kv: KV,
-    private readonly fetchDelta: (since: string) => Promise<Feed>,
+    private readonly fetchDelta: (since: string, afterId?: number) => Promise<Feed>,
   ) {}
 
   get size() {
@@ -40,17 +43,37 @@ export class Catalog {
     return true;
   }
 
-  /** Fetch what changed since the last sync and merge it in. Returns how many products changed. */
+  /**
+   * Fetch what changed since the last sync, page by page, and merge it in. Returns how many products changed.
+   * The next sync starts from the moment the FIRST page was asked for, so a product edited while the pages were arriving is
+   * simply fetched again next time. The search index is rebuilt once at the end, and the saved copy is rewritten only if
+   * something changed (rewriting the whole catalog every few seconds for nothing is what a big catalog cannot afford).
+   */
   async sync(): Promise<number> {
-    const feed = await this.fetchDelta(this.since);
-    for (const p of feed.data) {
-      if (p.active) this.byId.set(p.id, p);
-      else this.byId.delete(p.id);
+    let since = this.since;
+    let afterId: number | undefined;
+    let startedAt = '';
+    let changed = 0;
+    for (;;) {
+      const feed = await this.fetchDelta(since, afterId);
+      startedAt ||= feed.serverTime;
+      for (const p of feed.data) {
+        if (p.active) this.byId.set(p.id, p);
+        else this.byId.delete(p.id);
+      }
+      changed += feed.data.length;
+      const next = feed.next;
+      if (!next) break;
+      // A server that keeps pointing at the same place would loop for ever: stop instead.
+      if (next.since === since && next.afterId === afterId) break;
+      since = next.since;
+      afterId = next.afterId;
     }
-    this.since = feed.serverTime;
+    this.since = startedAt;
     this.reindex();
-    await this.kv.set('catalog', { since: this.since, products: [...this.byId.values()], v: CACHE_VERSION } satisfies Saved);
-    return feed.data.length;
+    if (changed > 0)
+      await this.kv.set('catalog', { since: this.since, products: [...this.byId.values()], v: CACHE_VERSION } satisfies Saved);
+    return changed;
   }
 
   /** Forget everything (used when switching to a different server). */
@@ -106,4 +129,6 @@ export class Catalog {
 }
 
 /** The till's catalog, kept on this computer. */
-export const catalog = new Catalog(indexedDbKV('till'), (since) => get<Feed>(`/products/sync?since=${encodeURIComponent(since)}`));
+export const catalog = new Catalog(indexedDbKV('till'), (since, afterId) =>
+  get<Feed>(`/products/sync?since=${encodeURIComponent(since)}&limit=${PAGE_SIZE}${afterId === undefined ? '' : `&afterId=${afterId}`}`),
+);

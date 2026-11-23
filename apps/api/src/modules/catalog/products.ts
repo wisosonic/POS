@@ -179,11 +179,32 @@ export default async function productRoutes(app: FastifyInstance) {
   });
 
   // Delta feed for the till's local catalog cache: everything changed (or deactivated) since a timestamp.
+  // Without `limit` the whole delta comes at once (older tills). With `limit` it comes in pages in (updated_at, id) order: the answer
+  // says where the next page starts (`next: { since, afterId }`, or null when that was the last), and the caller sends those two values
+  // back. `afterId` makes the cursor inclusive of rows with the same `updated_at` but a higher id, so rows changed in the same
+  // millisecond are never skipped between pages. `serverTime` is the moment the first page was asked for: keep that one as the next
+  // `since`, and anything changed while the pages were being fetched is picked up by the next sync.
   app.get('/products/sync', read, async (req) => {
-    const { since } = parse(z.object({ since: z.string().max(40).optional() }), req.query);
+    const q = parse(
+      z.object({
+        since: z.string().max(40).optional(),
+        afterId: z.coerce.number().int().min(0).optional(),
+        limit: z.coerce.number().int().min(1).max(2000).optional(),
+      }),
+      req.query,
+    );
     const serverTime = nowIso();
-    const rows = db.prepare(`${SELECT_PRODUCT} WHERE p.updated_at > ? ORDER BY p.updated_at, p.id`).all(since ?? '') as Row[];
-    return { data: rows.map(productJson), serverTime };
+    const since = q.since ?? '';
+    // (updated_at, id) > (since, afterId) is the same as "later, or the same moment with a higher id", and uses the updated_at index.
+    const after = q.afterId === undefined ? 'p.updated_at > ?' : '(p.updated_at, p.id) > (?, ?)';
+    const params = q.afterId === undefined ? [since] : [since, q.afterId];
+    const rows = db
+      .prepare(`${SELECT_PRODUCT} WHERE ${after} ORDER BY p.updated_at, p.id ${q.limit ? 'LIMIT ?' : ''}`)
+      .all(...params, ...(q.limit ? [q.limit + 1] : [])) as Row[];
+    const page = q.limit ? rows.slice(0, q.limit) : rows;
+    const last = page[page.length - 1];
+    const next = q.limit && rows.length > q.limit && last ? { since: last.updated_at, afterId: last.id } : null;
+    return { data: page.map(productJson), serverTime, next };
   });
 
   app.get('/products/:id', read, async (req) => {

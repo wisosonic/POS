@@ -352,3 +352,80 @@ describe('outbox: sales waiting for the server (US-10)', () => {
     expect(sent[0]!.id).toBe('7c0f-uuid');
   });
 });
+
+describe('catalog sync in pages (8,000+ products)', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => product(i + 1, `Item ${i + 1}`, `20${String(i + 1).padStart(10, '0')}`));
+  /** A server that serves `all` in pages of `size`, like GET /products/sync?limit=. */
+  const pagedServer = (all: Product[], size: number, serverTime = 'T-first') => {
+    const asked: { since: string; afterId?: number }[] = [];
+    const fetchDelta = async (since: string, afterId?: number) => {
+      asked.push({ since, afterId });
+      const from = afterId === undefined ? 0 : all.findIndex((p) => p.id === afterId) + 1;
+      const data = all.slice(from, from + size);
+      const more = from + size < all.length;
+      return { data, serverTime, next: more ? { since: 'cursor', afterId: data[data.length - 1]!.id } : null };
+    };
+    return { asked, fetchDelta };
+  };
+
+  it('fetches every page, follows the cursor each time, and ends with the whole catalog', async () => {
+    const server = pagedServer(many(25), 10);
+    const c = new Catalog(memoryKV(), server.fetchDelta);
+    expect(await c.sync()).toBe(25);
+    expect(c.size).toBe(25);
+    expect(server.asked).toEqual([
+      { since: '', afterId: undefined },
+      { since: 'cursor', afterId: 10 },
+      { since: 'cursor', afterId: 20 },
+    ]);
+    expect(c.byCode('20' + String(25).padStart(10, '0'))).toHaveLength(1);
+  });
+
+  it('the next sync starts from the moment the FIRST page was asked for', async () => {
+    const server = pagedServer(many(25), 10, 'T-first');
+    const c = new Catalog(memoryKV(), server.fetchDelta);
+    await c.sync();
+    expect(c.lastSync).toBe('T-first');
+  });
+
+  it('a single answer without `next` (an older server) still works', async () => {
+    const c = new Catalog(memoryKV(), async () => ({ serverTime: 'T1', data: many(3) }));
+    expect(await c.sync()).toBe(3);
+    expect(c.size).toBe(3);
+  });
+
+  it('saves the catalog once per sync, and not at all when nothing changed', async () => {
+    const kv = memoryKV();
+    let saves = 0;
+    const counting = { ...kv, set: async (k: string, v: unknown) => (saves++, kv.set(k, v)) } as typeof kv;
+    const feeds = [pagedServer(many(25), 10), { fetchDelta: async () => ({ serverTime: 'T2', data: [] as Product[], next: null }) }];
+    const c = new Catalog(counting, (since, afterId) => feeds[0]!.fetchDelta(since, afterId));
+    await c.sync();
+    expect(saves).toBe(1); // three pages, one write
+    const idle = new Catalog(counting, (since, afterId) => feeds[1]!.fetchDelta(since, afterId));
+    await idle.sync();
+    expect(saves).toBe(1); // nothing changed: nothing rewritten
+  });
+
+  it('stops instead of looping for ever when the server keeps pointing at the same place', async () => {
+    let calls = 0;
+    const c = new Catalog(memoryKV(), async () => {
+      calls++;
+      return { serverTime: 'T1', data: many(2), next: { since: '', afterId: undefined as unknown as number } };
+    });
+    await c.sync();
+    expect(calls).toBeLessThanOrEqual(2);
+  });
+
+  it('a product deactivated on a later page is removed even if an earlier page had it', async () => {
+    const all = many(6);
+    const c = new Catalog(memoryKV(), async (_since, afterId) =>
+      afterId === undefined
+        ? { serverTime: 'T1', data: all.slice(0, 3), next: { since: 'c', afterId: 3 } }
+        : { serverTime: 'T1', data: [{ ...all[0]!, active: false }, ...all.slice(3)], next: null },
+    );
+    await c.sync();
+    expect(c.get(1)).toBeUndefined();
+    expect(c.size).toBe(5);
+  });
+});

@@ -81,3 +81,20 @@ describe('the busy queries use their indexes (US-27, US-28, US-32)', () => {
     }
   });
 });
+
+describe('the catalog feed pages through the updated_at index (8,000+ products)', () => {
+  it('every page after the first starts from the cursor, in index order, with no sort of its own', () => {
+    // Enough products that the planner has a reason to prefer the index.
+    db.exec('BEGIN');
+    const ins = db.prepare('INSERT INTO products (name, barcode, updated_at) VALUES (?, ?, ?)');
+    for (let i = 0; i < 4000; i++)
+      ins.run(`Bulk ${i}`, `9${String(i).padStart(12, '0')}`, `2026-02-${String(1 + (i % 28)).padStart(2, '0')}T08:00:00.000Z`);
+    db.exec('COMMIT');
+    db.exec('ANALYZE');
+
+    const paged = plan('SELECT p.id FROM products p WHERE (p.updated_at, p.id) > (?, ?) ORDER BY p.updated_at, p.id LIMIT 501', 'a', 1);
+    expect(paged).toMatch(/USING (COVERING )?INDEX ix_products_updated/);
+    expect(paged).not.toMatch(/USE TEMP B-TREE FOR ORDER BY/);
+    expect(paged).not.toMatch(/\bSCAN products\b(?! USING)/);
+  });
+});
