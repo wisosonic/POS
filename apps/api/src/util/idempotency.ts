@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import { E } from '../errors';
+import type { Queryable } from '../db/adapter';
 import type { Db } from '../db/open';
 
 /** JSON with sorted keys, so the same request always hashes the same however the client ordered its fields. */
@@ -36,22 +37,38 @@ export type StoredResponse = { statusCode: number; body: unknown };
  * otherwise create the record, so two parallel duplicates cannot both get past it.
  */
 export function findReplay(db: Db, scope: string, key: string, requestHash: string): StoredResponse | null {
-  const row = db
-    .prepare('SELECT request_hash, status_code, response_json FROM idempotency_keys WHERE scope = ? AND key = ?')
-    .get(scope, key) as { request_hash: string; status_code: number; response_json: string } | undefined;
+  const row = db.prepare(FIND_REPLAY).get(scope, key) as ReplayRow | undefined;
+  return replayOf(row, requestHash);
+}
+
+export function rememberResponse(db: Db, scope: string, key: string, requestHash: string, statusCode: number, body: unknown): void {
+  db.prepare(REMEMBER).run(key, scope, requestHash, statusCode, JSON.stringify(body));
+}
+
+/** `findReplay` for code on the database adapter (same rules; run it inside the transaction that would create the record). */
+export async function findReplayQ(q: Queryable, scope: string, key: string, requestHash: string): Promise<StoredResponse | null> {
+  return replayOf(await q.one<ReplayRow>(FIND_REPLAY, [scope, key]), requestHash);
+}
+
+export async function rememberResponseQ(
+  q: Queryable,
+  scope: string,
+  key: string,
+  requestHash: string,
+  statusCode: number,
+  body: unknown,
+): Promise<void> {
+  await q.run(REMEMBER, [key, scope, requestHash, statusCode, JSON.stringify(body)]);
+}
+
+type ReplayRow = { request_hash: string; status_code: number; response_json: string };
+const FIND_REPLAY = 'SELECT request_hash, status_code, response_json FROM idempotency_keys WHERE scope = ? AND key = ?';
+const REMEMBER = 'INSERT INTO idempotency_keys (key, scope, request_hash, status_code, response_json) VALUES (?, ?, ?, ?, ?)';
+
+function replayOf(row: ReplayRow | undefined, requestHash: string): StoredResponse | null {
   if (!row) return null;
   if (row.request_hash !== requestHash) {
     throw E.unprocessable('IDEMPOTENCY_CONFLICT', 'This Idempotency-Key was already used for a different request');
   }
   return { statusCode: row.status_code, body: JSON.parse(row.response_json) };
-}
-
-export function rememberResponse(db: Db, scope: string, key: string, requestHash: string, statusCode: number, body: unknown): void {
-  db.prepare('INSERT INTO idempotency_keys (key, scope, request_hash, status_code, response_json) VALUES (?, ?, ?, ?, ?)').run(
-    key,
-    scope,
-    requestHash,
-    statusCode,
-    JSON.stringify(body),
-  );
 }

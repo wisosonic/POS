@@ -75,7 +75,16 @@ export default tseslint.config(
   {
     // Modules already converted to the adapter must stay converted: no legacy synchronous handle, no raw SQLite helpers.
     // Add a module's folder here when it is converted.
-    files: ['apps/api/src/modules/holds/**/*.ts'],
+    files: [
+      'apps/api/src/modules/holds/**/*.ts',
+      'apps/api/src/modules/sales/**/*.ts',
+      'apps/api/src/modules/returns/**/*.ts',
+      'apps/api/src/modules/customers/**/*.ts',
+      'apps/api/src/modules/expenses/**/*.ts',
+      'apps/api/src/modules/services/**/*.ts',
+      'apps/api/src/modules/registers/**/*.ts',
+      'apps/api/src/auth/approvals.ts',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',

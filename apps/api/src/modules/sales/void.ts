@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { consumeVoidApproval } from '../../auth/approvals';
 import { hasRole } from '../../auth/permissions';
-import { inWriteTransaction, type Db } from '../../db/open';
+import type { Database } from '../../db/adapter';
 import { AppError, E } from '../../errors';
-import { findReplay, rememberResponse } from '../../util/idempotency';
-import { writeAudit } from '../audit/service';
+import { findReplayQ, rememberResponseQ } from '../../util/idempotency';
+import { writeAuditQ } from '../audit/service';
 import { bumpExpected, getSession } from '../registers/service';
 import type { Actor } from './service';
 
@@ -30,29 +30,31 @@ type SaleRow = {
   rest_lbp: number;
   change_lbp: number;
   status: string;
+  warehouse_id: number;
 };
 
-export function voidSale(db: Db, actor: Actor, saleId: number, body: VoidBody, idem: { key: string; hash: string }) {
-  return inWriteTransaction(db, () => {
-    const replay = findReplay(db, VOID_SCOPE, idem.key, idem.hash);
+export function voidSale(db: Database, actor: Actor, saleId: number, body: VoidBody, idem: { key: string; hash: string }) {
+  return db.tx(async (q) => {
+    const replay = await findReplayQ(q, VOID_SCOPE, idem.key, idem.hash);
     if (replay) return { ...replay, replay: true };
 
-    const sale = db
-      .prepare('SELECT id, ref, session_id, customer_id, total_lbp, rest_lbp, change_lbp, status FROM sales WHERE id = ?')
-      .get(saleId) as SaleRow | undefined;
+    const sale = await q.one<SaleRow>(
+      'SELECT id, ref, session_id, customer_id, total_lbp, rest_lbp, change_lbp, status, warehouse_id FROM sales WHERE id = ?',
+      [saleId],
+    );
     if (!sale) throw E.notFound('Sale');
     if (sale.status === 'void') throw E.unprocessable('SALE_ALREADY_VOID', `Sale ${sale.ref} is already cancelled`);
 
-    const session = sale.session_id === null ? undefined : getSession(db, sale.session_id);
+    const session = sale.session_id === null ? undefined : await getSession(q, sale.session_id);
     if (!session || session.status !== 'open') {
       throw E.unprocessable(
         'SALE_NOT_VOIDABLE',
         'A sale can only be cancelled while the register that took it is still open. Use a return to take the goods back.',
       );
     }
-    if (db.prepare('SELECT 1 FROM returns WHERE sale_id = ? LIMIT 1').get(sale.id))
+    if (await q.one('SELECT 1 FROM returns WHERE sale_id = ? LIMIT 1', [sale.id]))
       throw E.unprocessable('SALE_HAS_RETURNS', 'Part of this sale was already taken back, so it cannot be cancelled as a whole');
-    if (db.prepare('SELECT 1 FROM payment_allocations WHERE sale_id = ? LIMIT 1').get(sale.id))
+    if (await q.one('SELECT 1 FROM payment_allocations WHERE sale_id = ? LIMIT 1', [sale.id]))
       throw E.unprocessable(
         'SALE_HAS_ACCOUNT_PAYMENTS',
         'The customer has already paid part of this sale from their account, so it cannot be cancelled',
@@ -62,7 +64,7 @@ export function voidSale(db: Db, actor: Actor, saleId: number, body: VoidBody, i
     // rolls it back and the approval can be used again.
     let approvedBy: number | null = null;
     if (!hasRole(actor.role, 'manager')) {
-      const approval = body.approvalToken ? consumeVoidApproval(db, body.approvalToken, actor.id, sale.id) : null;
+      const approval = body.approvalToken ? await consumeVoidApproval(q, body.approvalToken, actor.id, sale.id) : null;
       if (!approval) {
         throw new AppError(403, 'VOID_NEEDS_APPROVAL', "Cancelling a sale needs a manager's approval", {
           saleId: sale.id,
@@ -74,42 +76,40 @@ export function voidSale(db: Db, actor: Actor, saleId: number, body: VoidBody, i
     }
 
     // ---- put everything back
-    const items = db.prepare('SELECT product_id, qty_milli FROM sale_items WHERE sale_id = ?').all(sale.id) as {
-      product_id: number | null;
-      qty_milli: number;
-    }[];
-    const warehouse = db.prepare('SELECT warehouse_id AS w FROM sales WHERE id = ?').get(sale.id) as { w: number };
-    const insertMovement = db.prepare(
-      `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id, note)
-       VALUES (?, ?, ?, 'adjustment', 'void', ?, ?, ?)`,
-    );
-    const upsertLevel = db.prepare(
-      `INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)
-       ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty_milli = qty_milli + excluded.qty_milli`,
+    const items = await q.all<{ product_id: number | null; qty_milli: number }>(
+      'SELECT product_id, qty_milli FROM sale_items WHERE sale_id = ?',
+      [sale.id],
     );
     for (const i of items) {
       if (i.product_id === null) continue;
-      insertMovement.run(i.product_id, warehouse.w, i.qty_milli, sale.id, actor.id, `Sale ${sale.ref} cancelled`);
-      upsertLevel.run(i.product_id, warehouse.w, i.qty_milli);
+      await q.run(
+        `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id, note)
+       VALUES (?, ?, ?, 'adjustment', 'void', ?, ?, ?)`,
+        [i.product_id, sale.warehouse_id, i.qty_milli, sale.id, actor.id, `Sale ${sale.ref} cancelled`],
+      );
+      await q.run(
+        `INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)
+       ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty_milli = qty_milli + excluded.qty_milli`,
+        [i.product_id, sale.warehouse_id, i.qty_milli],
+      );
     }
 
     // The money that came in goes back out of the same balances, and the change that went out comes back in.
-    const payments = db.prepare('SELECT method, currency, amount FROM payments WHERE sale_id = ?').all(sale.id) as {
-      method: string;
-      currency: 'USD' | 'LBP';
-      amount: number;
-    }[];
-    for (const p of payments) bumpExpected(db, session.id, p, -p.amount);
-    bumpExpected(db, session.id, { method: 'cash', currency: 'LBP' }, sale.change_lbp);
+    const payments = await q.all<{ method: string; currency: 'USD' | 'LBP'; amount: number }>(
+      'SELECT method, currency, amount FROM payments WHERE sale_id = ?',
+      [sale.id],
+    );
+    for (const p of payments) await bumpExpected(q, session.id, p, -p.amount);
+    await bumpExpected(q, session.id, { method: 'cash', currency: 'LBP' }, sale.change_lbp);
 
     if (sale.rest_lbp > 0)
-      db.prepare('UPDATE customers SET balance_lbp = balance_lbp - ? WHERE id = ?').run(sale.rest_lbp, sale.customer_id);
+      await q.run('UPDATE customers SET balance_lbp = balance_lbp - ? WHERE id = ?', [sale.rest_lbp, sale.customer_id]);
 
     // The sale keeps every line and payment it had; its status says it no longer counts (reports and the register ignore void
     // sales) and nothing is owed on it any more, so a later payment on the customer's account can never be applied to it.
-    db.prepare(`UPDATE sales SET status = 'void', rest_lbp = 0 WHERE id = ?`).run(sale.id);
+    await q.run(`UPDATE sales SET status = 'void', rest_lbp = 0 WHERE id = ?`, [sale.id]);
 
-    writeAudit(db, {
+    await writeAuditQ(q, {
       userId: actor.id,
       action: 'sale.void',
       entity: 'sale',
@@ -119,7 +119,7 @@ export function voidSale(db: Db, actor: Actor, saleId: number, body: VoidBody, i
     });
 
     const response = { id: sale.id, ref: sale.ref, status: 'void', totalLbp: sale.total_lbp, reason: body.reason };
-    rememberResponse(db, VOID_SCOPE, idem.key, idem.hash, 200, response);
+    await rememberResponseQ(q, VOID_SCOPE, idem.key, idem.hash, 200, response);
     return { statusCode: 200, body: response as unknown, replay: false };
   });
 }

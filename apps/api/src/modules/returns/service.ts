@@ -2,14 +2,14 @@ import { parseQtyMilli, roundDiv, usdToLbp } from '@pos/shared';
 import { z } from 'zod';
 import { consumeReturnApproval } from '../../auth/approvals';
 import { hasRole } from '../../auth/permissions';
-import { nextRef } from '../../db/counters';
-import { inWriteTransaction, type Db } from '../../db/open';
+import type { Database } from '../../db/adapter';
+import { nextRefQ } from '../../db/counters';
 import { AppError, E } from '../../errors';
-import { findReplay, rememberResponse } from '../../util/idempotency';
+import { findReplayQ, rememberResponseQ } from '../../util/idempotency';
 import { milliToQty } from '../../util/qty';
-import { writeAudit } from '../audit/service';
+import { writeAuditQ } from '../audit/service';
 import { bumpExpected, requireOpenSession } from '../registers/service';
-import { currentRate, defaultWarehouseId } from '../settings/context';
+import { currentRateQ, defaultWarehouseIdQ } from '../settings/context';
 import type { Actor } from '../sales/service';
 
 export const RETURN_SCOPE = 'POST /returns';
@@ -42,28 +42,26 @@ type SaleItemRow = { id: number; sale_id: number; product_id: number | null; qty
  * refund out of a register bucket, and, if the sale was not fully paid, the value first reduces what the customer owes.
  * The original sale is never edited except for how much of it is settled. Stock is informational (R2), so returns add to it.
  */
-export function createReturn(db: Db, actor: Actor, body: ReturnBody, idem: { key: string; hash: string }) {
-  return inWriteTransaction(db, () => {
-    const replay = findReplay(db, RETURN_SCOPE, idem.key, idem.hash);
+export function createReturn(db: Database, actor: Actor, body: ReturnBody, idem: { key: string; hash: string }) {
+  return db.tx(async (q) => {
+    const replay = await findReplayQ(q, RETURN_SCOPE, idem.key, idem.hash);
     if (replay) return { ...replay, replay: true };
 
-    const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(body.saleId) as
-      | {
-          id: number;
-          ref: number;
-          customer_id: number;
-          subtotal_lbp: number;
-          discount_lbp: number;
-          rest_lbp: number;
-          status: string;
-          rate_lbp_per_usd: number;
-        }
-      | undefined;
+    const sale = await q.one<{
+      id: number;
+      ref: number;
+      customer_id: number;
+      subtotal_lbp: number;
+      discount_lbp: number;
+      rest_lbp: number;
+      status: string;
+      rate_lbp_per_usd: number;
+    }>('SELECT * FROM sales WHERE id = ?', [body.saleId]);
     if (!sale) throw E.notFound('Sale');
     if (sale.status === 'void') throw E.unprocessable('SALE_VOID', 'A voided sale cannot be returned');
 
-    const session = requireOpenSession(db);
-    const warehouseId = defaultWarehouseId(db);
+    const session = await requireOpenSession(q);
+    const warehouseId = await defaultWarehouseIdQ(q);
 
     // ---- what is being returned, and how much of it can still be returned
     const seen = new Set<number>();
@@ -72,15 +70,15 @@ export function createReturn(db: Db, actor: Actor, body: ReturnBody, idem: { key
       if (seen.has(l.saleItemId)) throw E.validation('Each sale item may appear only once; combine the quantities');
       seen.add(l.saleItemId);
 
-      const item = db
-        .prepare('SELECT id, sale_id, product_id, qty_milli, line_total_lbp FROM sale_items WHERE id = ?')
-        .get(l.saleItemId) as SaleItemRow | undefined;
+      const item = await q.one<SaleItemRow>('SELECT id, sale_id, product_id, qty_milli, line_total_lbp FROM sale_items WHERE id = ?', [
+        l.saleItemId,
+      ]);
       if (!item || item.sale_id !== sale.id)
         throw E.unprocessable('INVALID_REFERENCE', `Item ${l.saleItemId} is not part of sale ${sale.ref}`);
 
-      const returned = (
-        db.prepare('SELECT COALESCE(SUM(qty_milli), 0) AS n FROM return_items WHERE sale_item_id = ?').get(item.id) as { n: number }
-      ).n;
+      const returned = (await q.one<{ n: number }>('SELECT COALESCE(SUM(qty_milli), 0) AS n FROM return_items WHERE sale_item_id = ?', [
+        item.id,
+      ]))!.n;
       const qtyMilli = parseQtyMilli(l.qty);
       if (qtyMilli > item.qty_milli - returned) {
         throw new AppError(422, 'RETURN_EXCEEDS_SOLD', `Only ${milliToQty(item.qty_milli - returned)} of this item can still be returned`, {
@@ -101,7 +99,7 @@ export function createReturn(db: Db, actor: Actor, body: ReturnBody, idem: { key
     // afterwards (say, the refund method is still to be chosen) rolls it back and the approval can be used again.
     let approvedBy: number | null = null;
     if (!hasRole(actor.role, 'manager')) {
-      const approval = body.approvalToken ? consumeReturnApproval(db, body.approvalToken, actor.id, sale.id, valueLbp) : null;
+      const approval = body.approvalToken ? await consumeReturnApproval(q, body.approvalToken, actor.id, sale.id, valueLbp) : null;
       if (!approval) {
         throw new AppError(403, 'RETURN_NEEDS_APPROVAL', "Taking goods back needs a manager's approval", {
           saleId: sale.id,
@@ -124,7 +122,7 @@ export function createReturn(db: Db, actor: Actor, body: ReturnBody, idem: { key
           refundLbp,
           balanceReducedLbp,
         });
-      const rate = currentRate(db);
+      const rate = await currentRateQ(q);
       refundAmountLbp = body.refund.currency === 'LBP' ? body.refund.amount : usdToLbp(body.refund.amount, rate);
       // A USD refund cannot match to the lira, so allow up to one cent's worth either way.
       const tolerance = body.refund.currency === 'USD' ? Math.ceil(rate / 100) : 0;
@@ -141,57 +139,60 @@ export function createReturn(db: Db, actor: Actor, body: ReturnBody, idem: { key
     }
 
     // ---- write
-    const ref = nextRef(db, 'return_ref');
-    const returnId = Number(
-      db
-        .prepare(
-          `INSERT INTO returns (ref, sale_id, session_id, user_id, reason, refund_lbp, balance_reduced_lbp, refund_method, refund_currency, refund_amount, idempotency_key)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          ref,
-          sale.id,
-          session.id,
-          actor.id,
-          body.reason,
-          refundLbp,
-          balanceReducedLbp,
-          body.refund?.method ?? null,
-          body.refund?.currency ?? null,
-          body.refund?.amount ?? null,
-          idem.key,
-        ).lastInsertRowid,
+    const ref = await nextRefQ(q, 'return_ref');
+    const created = await q.one<{ id: number }>(
+      `INSERT INTO returns (ref, sale_id, session_id, user_id, reason, refund_lbp, balance_reduced_lbp, refund_method, refund_currency, refund_amount, idempotency_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      [
+        ref,
+        sale.id,
+        session.id,
+        actor.id,
+        body.reason,
+        refundLbp,
+        balanceReducedLbp,
+        body.refund?.method ?? null,
+        body.refund?.currency ?? null,
+        body.refund?.amount ?? null,
+        idem.key,
+      ],
     );
+    const returnId = created!.id;
 
-    const insertItem = db.prepare('INSERT INTO return_items (return_id, sale_item_id, qty_milli, amount_lbp) VALUES (?, ?, ?, ?)');
-    const insertMovement = db.prepare(
-      `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id) VALUES (?, ?, ?, 'return', 'return', ?, ?)`,
-    );
-    const upsertLevel = db.prepare(
-      `INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)
-       ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty_milli = qty_milli + excluded.qty_milli`,
-    );
     for (const l of lines) {
-      insertItem.run(returnId, l.item.id, l.qtyMilli, l.valueLbp);
+      await q.run('INSERT INTO return_items (return_id, sale_item_id, qty_milli, amount_lbp) VALUES (?, ?, ?, ?)', [
+        returnId,
+        l.item.id,
+        l.qtyMilli,
+        l.valueLbp,
+      ]);
       if (l.item.product_id !== null) {
-        insertMovement.run(l.item.product_id, warehouseId, l.qtyMilli, returnId, actor.id);
-        upsertLevel.run(l.item.product_id, warehouseId, l.qtyMilli);
+        await q.run(
+          `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id) VALUES (?, ?, ?, 'return', 'return', ?, ?)`,
+          [l.item.product_id, warehouseId, l.qtyMilli, returnId, actor.id],
+        );
+        await q.run(
+          `INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)
+       ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty_milli = qty_milli + excluded.qty_milli`,
+          [l.item.product_id, warehouseId, l.qtyMilli],
+        );
       }
     }
 
-    if (body.refund) bumpExpected(db, session.id, { method: body.refund.method, currency: body.refund.currency }, -body.refund.amount);
+    if (body.refund) await bumpExpected(q, session.id, { method: body.refund.method, currency: body.refund.currency }, -body.refund.amount);
 
     if (balanceReducedLbp > 0) {
       // The sale counts the credited value as settled, so paid + rest still equals its total and the customer's
       // balance still equals the sum of their open sales.
-      db.prepare(
+      await q.run(
         `UPDATE sales SET paid_lbp = paid_lbp + ?, rest_lbp = rest_lbp - ?,
                 status = CASE WHEN rest_lbp - ? = 0 THEN 'paid' ELSE 'partial' END WHERE id = ?`,
-      ).run(balanceReducedLbp, balanceReducedLbp, balanceReducedLbp, sale.id);
-      db.prepare('UPDATE customers SET balance_lbp = balance_lbp - ? WHERE id = ?').run(balanceReducedLbp, sale.customer_id);
+        [balanceReducedLbp, balanceReducedLbp, balanceReducedLbp, sale.id],
+      );
+      await q.run('UPDATE customers SET balance_lbp = balance_lbp - ? WHERE id = ?', [balanceReducedLbp, sale.customer_id]);
     }
 
-    writeAudit(db, {
+    await writeAuditQ(q, {
       userId: actor.id,
       action: 'sale.return',
       entity: 'sale',
@@ -213,7 +214,7 @@ export function createReturn(db: Db, actor: Actor, body: ReturnBody, idem: { key
       sessionId: session.id,
       createdAt: new Date().toISOString(),
     };
-    rememberResponse(db, RETURN_SCOPE, idem.key, idem.hash, 201, response);
+    await rememberResponseQ(q, RETURN_SCOPE, idem.key, idem.hash, 201, response);
     return { statusCode: 201, body: response as unknown, replay: false };
   });
 }

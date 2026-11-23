@@ -164,7 +164,7 @@ export default async function authRoutes(app: FastifyInstance) {
             : body.scope === 'delete'
               ? ({ scope: 'delete', saleId: body.saleId } as const)
               : ({ scope: 'price', productId: body.productId, priceLbp: body.priceLbp } as const);
-    const { token, expiresAt } = issueApproval(db, { requestedBy: req.auth.id, approvedBy: manager.id, ...grant });
+    const { token, expiresAt } = await issueApproval(app.database, { requestedBy: req.auth.id, approvedBy: manager.id, ...grant });
     writeAudit(db, {
       userId: req.auth.id,
       action: 'approval.grant',

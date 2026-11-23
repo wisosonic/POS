@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { Param } from '../../db/adapter';
 import { milliToQty } from '../../util/qty';
 import { hashRequest, requireIdempotencyKey } from '../../util/idempotency';
 import { parse } from '../../util/validate';
@@ -14,14 +15,14 @@ const listQuery = z.object({
 });
 
 export default async function returnRoutes(app: FastifyInstance) {
-  const db = app.db;
+  const db = app.database;
   const manager = { preHandler: app.requireRole('manager') };
 
   // A cashier may start a return, but the server refuses it without a manager's approval (RETURN_NEEDS_APPROVAL).
   app.post('/returns', { preHandler: app.authenticate }, async (req, reply) => {
     const key = requireIdempotencyKey(req);
     const body = parse(returnBody, req.body);
-    const result = createReturn(db, req.auth, body, { key, hash: hashRequest(req.body) });
+    const result = await createReturn(db, req.auth, body, { key, hash: hashRequest(req.body) });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
     return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
   });
@@ -29,8 +30,8 @@ export default async function returnRoutes(app: FastifyInstance) {
   app.get('/returns', manager, async (req) => {
     const q = parse(listQuery, req.query);
     const where: string[] = [];
-    const params: unknown[] = [];
-    const add = (sql: string, v: unknown) => {
+    const params: Param[] = [];
+    const add = (sql: string, v: Param | undefined) => {
       if (v === undefined) return;
       where.push(sql);
       params.push(v);
@@ -40,9 +41,7 @@ export default async function returnRoutes(app: FastifyInstance) {
     add('sale_id = ?', q.saleId);
     add('id < ?', q.cursor);
 
-    const rows = db
-      .prepare(`SELECT * FROM returns ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`)
-      .all(...params, q.limit + 1) as {
+    const rows = await db.all<{
       id: number;
       ref: number;
       sale_id: number;
@@ -51,11 +50,15 @@ export default async function returnRoutes(app: FastifyInstance) {
       refund_lbp: number;
       balance_reduced_lbp: number;
       created_at: string;
-    }[];
+    }>(`SELECT * FROM returns ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`, [...params, q.limit + 1]);
     const page = rows.slice(0, q.limit);
-    const itemsOf = db.prepare('SELECT sale_item_id, qty_milli, amount_lbp FROM return_items WHERE return_id = ? ORDER BY id');
-    return {
-      data: page.map((r) => ({
+    const data = [];
+    for (const r of page) {
+      const items = await db.all<{ sale_item_id: number; qty_milli: number; amount_lbp: number }>(
+        'SELECT sale_item_id, qty_milli, amount_lbp FROM return_items WHERE return_id = ? ORDER BY id',
+        [r.id],
+      );
+      data.push({
         id: r.id,
         ref: r.ref,
         saleId: r.sale_id,
@@ -64,13 +67,9 @@ export default async function returnRoutes(app: FastifyInstance) {
         refundLbp: r.refund_lbp,
         balanceReducedLbp: r.balance_reduced_lbp,
         createdAt: r.created_at,
-        items: (itemsOf.all(r.id) as { sale_item_id: number; qty_milli: number; amount_lbp: number }[]).map((i) => ({
-          saleItemId: i.sale_item_id,
-          qty: milliToQty(i.qty_milli),
-          amountLbp: i.amount_lbp,
-        })),
-      })),
-      nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null,
-    };
+        items: items.map((i) => ({ saleItemId: i.sale_item_id, qty: milliToQty(i.qty_milli), amountLbp: i.amount_lbp })),
+      });
+    }
+    return { data, nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
   });
 }

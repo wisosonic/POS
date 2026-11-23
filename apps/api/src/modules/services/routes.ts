@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { nextRef } from '../../db/counters';
-import { inWriteTransaction } from '../../db/open';
+import type { Param } from '../../db/adapter';
+import { nextRefQ } from '../../db/counters';
 import { E } from '../../errors';
-import { findReplay, hashRequest, rememberResponse, requireIdempotencyKey } from '../../util/idempotency';
+import { findReplayQ, hashRequest, rememberResponseQ, requireIdempotencyKey } from '../../util/idempotency';
 import { parse } from '../../util/validate';
-import { writeAudit } from '../audit/service';
+import { writeAuditQ } from '../audit/service';
 import { activeMethods, recordCashIn, requireOpenSession } from '../registers/service';
 
 // Service income (US-36): what the shop earns that is not a product (IT support, a repair, an installation). It records what the
@@ -71,47 +71,45 @@ const serviceJson = (r: Row) => ({
 });
 
 export default async function serviceRoutes(app: FastifyInstance) {
-  const db = app.db;
+  const db = app.database;
   const manager = { preHandler: app.requireRole('manager') };
 
   app.post('/services', manager, async (req, reply) => {
     const key = requireIdempotencyKey(req);
     const b = parse(createBody, req.body);
-    if (b.categoryId && !db.prepare('SELECT 1 FROM service_categories WHERE id = ?').get(b.categoryId))
+    if (b.categoryId && !(await db.one('SELECT 1 FROM service_categories WHERE id = ?', [b.categoryId])))
       throw E.unprocessable('INVALID_REFERENCE', 'That service type does not exist');
-    if (b.customerId && !db.prepare('SELECT 1 FROM customers WHERE id = ? AND deleted_at IS NULL').get(b.customerId))
+    if (b.customerId && !(await db.one('SELECT 1 FROM customers WHERE id = ? AND deleted_at IS NULL', [b.customerId])))
       throw E.unprocessable('INVALID_REFERENCE', 'That customer does not exist');
-    if (b.receivedInto && !activeMethods(db).includes(b.receivedInto.method)) throw E.validation('Unknown payment method');
+    if (b.receivedInto && !(await activeMethods(db)).includes(b.receivedInto.method)) throw E.validation('Unknown payment method');
 
     const hash = hashRequest(req.body);
-    const result = inWriteTransaction(db, () => {
-      const replay = findReplay(db, SCOPE, key, hash);
+    const result = await db.tx(async (tx) => {
+      const replay = await findReplayQ(tx, SCOPE, key, hash);
       if (replay) return { ...replay, replay: true };
       // Money received at the till needs an open register; it goes in, in the same transaction as the service is recorded.
-      const session = b.receivedInto ? requireOpenSession(db) : null;
-      const reference = String(nextRef(db, 'service_ref'));
-      const id = Number(
-        db
-          .prepare(
-            `INSERT INTO service_sales (category_id, customer_id, user_id, session_id, reference, note, cost_minor, fee_minor, profit_minor, currency)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(
-            b.categoryId ?? null,
-            b.customerId ?? null,
-            req.auth.id,
-            session?.id ?? null,
-            reference,
-            b.note ?? null,
-            b.costMinor,
-            b.feeMinor,
-            b.feeMinor - b.costMinor,
-            b.currency,
-          ).lastInsertRowid,
+      const session = b.receivedInto ? await requireOpenSession(tx) : null;
+      const reference = String(await nextRefQ(tx, 'service_ref'));
+      const created = await tx.one<{ id: number }>(
+        `INSERT INTO service_sales (category_id, customer_id, user_id, session_id, reference, note, cost_minor, fee_minor, profit_minor, currency)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        [
+          b.categoryId ?? null,
+          b.customerId ?? null,
+          req.auth.id,
+          session?.id ?? null,
+          reference,
+          b.note ?? null,
+          b.costMinor,
+          b.feeMinor,
+          b.feeMinor - b.costMinor,
+          b.currency,
+        ],
       );
+      const id = created!.id;
       if (session && b.receivedInto) {
-        recordCashIn(
-          db,
+        await recordCashIn(
+          tx,
           session.id,
           { method: b.receivedInto.method, currency: b.currency },
           b.feeMinor,
@@ -119,7 +117,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
           req.auth.id,
         );
       }
-      writeAudit(db, {
+      await writeAuditQ(tx, {
         userId: req.auth.id,
         action: 'service.create',
         entity: 'service',
@@ -132,8 +130,8 @@ export default async function serviceRoutes(app: FastifyInstance) {
           receivedInto: b.receivedInto?.method ?? null,
         },
       });
-      const body = serviceJson(db.prepare(`${SELECT} WHERE s.id = ?`).get(id) as Row);
-      rememberResponse(db, SCOPE, key, hash, 201, body);
+      const body = serviceJson((await tx.one<Row>(`${SELECT} WHERE s.id = ?`, [id]))!);
+      await rememberResponseQ(tx, SCOPE, key, hash, 201, body);
       return { statusCode: 201, body: body as unknown, replay: false };
     });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
@@ -143,8 +141,8 @@ export default async function serviceRoutes(app: FastifyInstance) {
   app.get('/services', manager, async (req) => {
     const q = parse(listQuery, req.query);
     const where: string[] = [];
-    const params: unknown[] = [];
-    const add = (sql: string, v: unknown) => {
+    const params: Param[] = [];
+    const add = (sql: string, v: Param | undefined) => {
       if (v === undefined) return;
       where.push(sql);
       params.push(v);
@@ -155,18 +153,18 @@ export default async function serviceRoutes(app: FastifyInstance) {
     const filter = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     // The totals cover everything the filters match, not only this page.
-    const sums = db
-      .prepare(
-        `SELECT s.currency AS currency, SUM(s.fee_minor) AS fee, SUM(s.cost_minor) AS cost, SUM(s.profit_minor) AS profit FROM service_sales s ${filter} GROUP BY s.currency`,
-      )
-      .all(...params) as { currency: 'USD' | 'LBP'; fee: number; cost: number; profit: number }[];
+    const sums = await db.all<{ currency: 'USD' | 'LBP'; fee: number; cost: number; profit: number }>(
+      `SELECT s.currency AS currency, SUM(s.fee_minor) AS fee, SUM(s.cost_minor) AS cost, SUM(s.profit_minor) AS profit FROM service_sales s ${filter} GROUP BY s.currency`,
+      params,
+    );
     const totals = { USD: { fee: 0, cost: 0, profit: 0 }, LBP: { fee: 0, cost: 0, profit: 0 } };
     for (const s of sums) totals[s.currency] = { fee: s.fee, cost: s.cost, profit: s.profit };
 
     add('s.id < ?', q.cursor);
-    const rows = db
-      .prepare(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.id DESC LIMIT ?`)
-      .all(...params, q.limit + 1) as Row[];
+    const rows = await db.all<Row>(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.id DESC LIMIT ?`, [
+      ...params,
+      q.limit + 1,
+    ]);
     const page = rows.slice(0, q.limit);
     return { data: page.map(serviceJson), totals, nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
   });

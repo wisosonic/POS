@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { AppError, E } from '../../errors';
-import { inWriteTransaction } from '../../db/open';
+import type { Param } from '../../db/adapter';
 import { parse } from '../../util/validate';
-import { writeAudit } from '../audit/service';
+import { writeAuditQ } from '../audit/service';
 import {
   activeMethods,
   allBuckets,
@@ -15,6 +15,7 @@ import {
   sessionJson,
   zReport,
   type Bucket,
+  type SessionRow,
 } from './service';
 
 const currency = z.enum(['USD', 'LBP']);
@@ -60,29 +61,40 @@ function completeBalances(entries: { method: string; currency: 'USD' | 'LBP'; am
 }
 
 export default async function registerRoutes(app: FastifyInstance) {
-  const db = app.db;
+  const db = app.database;
   const user = { preHandler: app.authenticate };
   const manager = { preHandler: app.requireRole('manager') };
 
   // ---------------------------------------------------------------- open (US-11)
   app.post('/registers/open', user, async (req, reply) => {
     // One till: a second session is refused whoever asks, and before the body is even looked at.
-    const existing = getOpenSession(db);
+    const existing = await getOpenSession(db);
     if (existing) throw E.conflict('REGISTER_ALREADY_OPEN', `The register is already open (session ${existing.id})`);
 
     const b = parse(openBody, req.body);
-    const opening = completeBalances(b.openingBalances, allBuckets(db), 'openingBalances');
+    const buckets = await allBuckets(db);
+    const opening = completeBalances(b.openingBalances, buckets, 'openingBalances');
 
-    const id = inWriteTransaction(db, () => {
-      const sessionId = Number(
-        db.prepare('INSERT INTO register_sessions (terminal_id, opened_by) VALUES (?, ?)').run(b.terminalId, req.auth.id).lastInsertRowid,
-      );
-      const insert = db.prepare('INSERT INTO register_balances (session_id, method, currency, opening, expected) VALUES (?, ?, ?, ?, ?)');
-      for (const bucket of allBuckets(db)) {
+    const id = await db.tx(async (tx) => {
+      // Checked again inside the transaction: two tills opening at the same moment cannot both get through.
+      const again = await getOpenSession(tx);
+      if (again) throw E.conflict('REGISTER_ALREADY_OPEN', `The register is already open (session ${again.id})`);
+      const created = await tx.one<{ id: number }>('INSERT INTO register_sessions (terminal_id, opened_by) VALUES (?, ?) RETURNING id', [
+        b.terminalId,
+        req.auth.id,
+      ]);
+      const sessionId = created!.id;
+      for (const bucket of buckets) {
         const amt = opening.get(bucketKey(bucket)) ?? 0;
-        insert.run(sessionId, bucket.method, bucket.currency, amt, amt);
+        await tx.run('INSERT INTO register_balances (session_id, method, currency, opening, expected) VALUES (?, ?, ?, ?, ?)', [
+          sessionId,
+          bucket.method,
+          bucket.currency,
+          amt,
+          amt,
+        ]);
       }
-      writeAudit(db, {
+      await writeAuditQ(tx, {
         userId: req.auth.id,
         action: 'register.open',
         entity: 'register',
@@ -91,43 +103,43 @@ export default async function registerRoutes(app: FastifyInstance) {
       });
       return sessionId;
     });
-    return reply.status(201).send(sessionJson(db, getSession(db, id)!));
+    return reply.status(201).send(await sessionJson(db, (await getSession(db, id))!));
   });
 
   app.get('/registers/current', user, async () => {
-    const s = getOpenSession(db);
+    const s = await getOpenSession(db);
     if (!s) throw new AppError(404, 'NO_OPEN_REGISTER', 'The register is not open');
     return sessionJson(db, s);
   });
 
   // Pre-fills the opening dialog with what was counted at the last close.
   app.get('/registers/suggested-opening', user, async () => {
-    const last = db.prepare(`SELECT id FROM register_sessions WHERE status = 'closed' ORDER BY id DESC LIMIT 1`).get() as
-      { id: number } | undefined;
+    const last = await db.one<{ id: number }>(`SELECT id FROM register_sessions WHERE status = 'closed' ORDER BY id DESC LIMIT 1`);
     const counted = new Map<string, number>();
     if (last) {
-      for (const r of db.prepare('SELECT method, currency, counted FROM register_balances WHERE session_id = ?').all(last.id) as (Bucket & {
-        counted: number | null;
-      })[]) {
+      for (const r of await db.all<Bucket & { counted: number | null }>(
+        'SELECT method, currency, counted FROM register_balances WHERE session_id = ?',
+        [last.id],
+      )) {
         counted.set(bucketKey(r), r.counted ?? 0);
       }
     }
     return {
       source: last ? 'last-close' : 'default',
       sessionId: last?.id ?? null,
-      balances: allBuckets(db).map((b) => ({ ...b, amount: counted.get(bucketKey(b)) ?? 0 })),
+      balances: (await allBuckets(db)).map((b) => ({ ...b, amount: counted.get(bucketKey(b)) ?? 0 })),
     };
   });
 
   // ---------------------------------------------------------------- cash in / out / transfer (US-13)
   app.post('/registers/:id/cash-movements', manager, async (req, reply) => {
     const id = Number((req.params as { id: string }).id);
-    const session = getSession(db, id);
+    const session = await getSession(db, id);
     if (!session) throw E.notFound('Register session');
     if (session.status !== 'open') throw E.conflict('REGISTER_ALREADY_CLOSED', 'This register session is closed');
 
     const b = parse(movementBody, req.body);
-    const methods = activeMethods(db);
+    const methods = await activeMethods(db);
     const known = (x?: Bucket) => !x || methods.includes(x.method);
     if (b.type === 'in' && (!b.to || b.from)) throw E.validation('An "in" movement needs a destination ("to") and no source');
     if (b.type === 'out' && (!b.from || b.to)) throw E.validation('An "out" movement needs a source ("from") and no destination');
@@ -138,43 +150,37 @@ export default async function registerRoutes(app: FastifyInstance) {
       if (b.from!.currency !== b.to!.currency) throw E.unprocessable('CURRENCY_MISMATCH', 'A transfer must stay in one currency');
     }
 
-    const movementId = inWriteTransaction(db, () => {
-      const newId = Number(
-        db
-          .prepare(
-            `INSERT INTO register_movements (session_id, type, from_method, from_currency, to_method, to_currency, amount, reason, user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(
-            id,
-            b.type,
-            b.from?.method ?? null,
-            b.from?.currency ?? null,
-            b.to?.method ?? null,
-            b.to?.currency ?? null,
-            b.amount,
-            b.reason,
-            req.auth.id,
-          ).lastInsertRowid,
+    const movementId = await db.tx(async (tx) => {
+      const created = await tx.one<{ id: number }>(
+        `INSERT INTO register_movements (session_id, type, from_method, from_currency, to_method, to_currency, amount, reason, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        [
+          id,
+          b.type,
+          b.from?.method ?? null,
+          b.from?.currency ?? null,
+          b.to?.method ?? null,
+          b.to?.currency ?? null,
+          b.amount,
+          b.reason,
+          req.auth.id,
+        ],
       );
-      if (b.from) bumpExpected(db, id, b.from, -b.amount);
-      if (b.to) bumpExpected(db, id, b.to, b.amount);
-      writeAudit(db, { userId: req.auth.id, action: 'register.cash-movement', entity: 'register', entityId: id, after: b });
-      return newId;
+      if (b.from) await bumpExpected(tx, id, b.from, -b.amount);
+      if (b.to) await bumpExpected(tx, id, b.to, b.amount);
+      await writeAuditQ(tx, { userId: req.auth.id, action: 'register.cash-movement', entity: 'register', entityId: id, after: b });
+      return created!.id;
     });
-    return reply.status(201).send({ id: movementId, sessionId: id, ...b, balances: sessionJson(db, getSession(db, id)!).balances });
+    return reply
+      .status(201)
+      .send({ id: movementId, sessionId: id, ...b, balances: (await sessionJson(db, (await getSession(db, id))!)).balances });
   });
 
   // What moved in and out of the drawer and wallets during a session, newest first (expenses paid from the till show here too).
   app.get('/registers/:id/cash-movements', manager, async (req) => {
     const id = Number((req.params as { id: string }).id);
-    if (!getSession(db, id)) throw E.notFound('Register session');
-    const rows = db
-      .prepare(
-        `SELECT m.id, m.type, m.from_method, m.from_currency, m.to_method, m.to_currency, m.amount, m.reason, m.created_at, u.name AS user_name
-         FROM register_movements m LEFT JOIN users u ON u.id = m.user_id WHERE m.session_id = ? ORDER BY m.id DESC`,
-      )
-      .all(id) as {
+    if (!(await getSession(db, id))) throw E.notFound('Register session');
+    const rows = await db.all<{
       id: number;
       type: 'in' | 'out' | 'transfer';
       from_method: string | null;
@@ -185,7 +191,11 @@ export default async function registerRoutes(app: FastifyInstance) {
       reason: string;
       created_at: string;
       user_name: string | null;
-    }[];
+    }>(
+      `SELECT m.id, m.type, m.from_method, m.from_currency, m.to_method, m.to_currency, m.amount, m.reason, m.created_at, u.name AS user_name
+         FROM register_movements m LEFT JOIN users u ON u.id = m.user_id WHERE m.session_id = ? ORDER BY m.id DESC`,
+      [id],
+    );
     return {
       data: rows.map((m) => ({
         id: m.id,
@@ -203,40 +213,43 @@ export default async function registerRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- close (US-12)
   app.post('/registers/:id/close', user, async (req) => {
     const id = Number((req.params as { id: string }).id);
-    const session = getSession(db, id);
+    const session = await getSession(db, id);
     if (!session) throw E.notFound('Register session');
     if (session.status === 'closed') throw E.conflict('REGISTER_ALREADY_CLOSED', 'This register session is already closed');
 
     const b = parse(closeBody, req.body);
-    const counted = completeBalances(b.countedBalances, allBuckets(db), 'countedBalances');
+    const counted = completeBalances(b.countedBalances, await allBuckets(db), 'countedBalances');
+    const closedAt = new Date().toISOString();
 
-    inWriteTransaction(db, () => {
+    await db.tx(async (tx) => {
       // The stored expected figure is recomputed from the rows, so the Z-report never inherits a drifted running total.
-      const breakdown = computeBreakdown(db, id);
-      const update = db.prepare(
-        'UPDATE register_balances SET expected = ?, counted = ?, variance = ? WHERE session_id = ? AND method = ? AND currency = ?',
-      );
+      const breakdown = await computeBreakdown(tx, id);
       const variances: Record<string, number> = {};
       for (const bucket of breakdown) {
         const c = counted.get(bucketKey(bucket)) ?? 0;
         const variance = c - bucket.expected;
-        update.run(bucket.expected, c, variance, id, bucket.method, bucket.currency);
+        await tx.run(
+          'UPDATE register_balances SET expected = ?, counted = ?, variance = ? WHERE session_id = ? AND method = ? AND currency = ?',
+          [bucket.expected, c, variance, id, bucket.method, bucket.currency],
+        );
         if (variance !== 0) variances[bucketKey(bucket)] = variance;
       }
       // Balances first: once the session is closed the database refuses further changes to them.
-      db.prepare(
-        `UPDATE register_sessions SET status = 'closed', closed_by = ?, closed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`,
-      ).run(req.auth.id, id);
-      writeAudit(db, { userId: req.auth.id, action: 'register.close', entity: 'register', entityId: id, after: { variances } });
+      await tx.run(`UPDATE register_sessions SET status = 'closed', closed_by = ?, closed_at = ? WHERE id = ?`, [
+        req.auth.id,
+        closedAt,
+        id,
+      ]);
+      await writeAuditQ(tx, { userId: req.auth.id, action: 'register.close', entity: 'register', entityId: id, after: { variances } });
     });
-    return zReport(db, getSession(db, id)!);
+    return zReport(db, (await getSession(db, id))!);
   });
 
   // ---------------------------------------------------------------- history and the Z-report
   app.get('/registers', manager, async (req) => {
     const q = parse(listQuery, req.query);
     const where: string[] = [];
-    const params: unknown[] = [];
+    const params: Param[] = [];
     if (q.from) {
       where.push('opened_at >= ?');
       params.push(q.from);
@@ -249,15 +262,18 @@ export default async function registerRoutes(app: FastifyInstance) {
       where.push('id < ?');
       params.push(q.cursor);
     }
-    const rows = db
-      .prepare(`SELECT * FROM register_sessions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`)
-      .all(...params, q.limit + 1) as NonNullable<ReturnType<typeof getSession>>[];
+    const rows = await db.all<SessionRow>(
+      `SELECT * FROM register_sessions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`,
+      [...params, q.limit + 1],
+    );
     const page = rows.slice(0, q.limit);
-    return { data: page.map((s) => sessionJson(db, s)), nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
+    const data = [];
+    for (const s of page) data.push(await sessionJson(db, s));
+    return { data, nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
   });
 
   app.get('/reports/register/:id', manager, async (req) => {
-    const s = getSession(db, Number((req.params as { id: string }).id));
+    const s = await getSession(db, Number((req.params as { id: string }).id));
     if (!s) throw E.notFound('Register session');
     return zReport(db, s);
   });

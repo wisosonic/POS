@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { inWriteTransaction } from '../../db/open';
+import type { Param } from '../../db/adapter';
 import { E } from '../../errors';
 import { parse } from '../../util/validate';
-import { writeAudit } from '../audit/service';
+import { writeAuditQ } from '../audit/service';
 import { activeMethods, recordCashOut, requireOpenSession } from '../registers/service';
 
 // Money the shop spends that is not stock: rent, electricity, a delivery. An expense can be paid out of the till
@@ -58,28 +58,26 @@ const expenseJson = (r: Row) => ({
 });
 
 export default async function expenseRoutes(app: FastifyInstance) {
-  const db = app.db;
+  const db = app.database;
   const manager = { preHandler: app.requireRole('manager') };
 
   app.post('/expenses', manager, async (req, reply) => {
     const b = parse(createBody, req.body);
-    if (b.categoryId && !db.prepare('SELECT 1 FROM expense_categories WHERE id = ?').get(b.categoryId))
+    if (b.categoryId && !(await db.one('SELECT 1 FROM expense_categories WHERE id = ?', [b.categoryId])))
       throw E.unprocessable('INVALID_REFERENCE', 'That expense category does not exist');
-    if (b.payFrom && !activeMethods(db).includes(b.payFrom.method)) throw E.validation('Unknown payment method');
+    if (b.payFrom && !(await activeMethods(db)).includes(b.payFrom.method)) throw E.validation('Unknown payment method');
 
-    const id = inWriteTransaction(db, () => {
+    const id = await db.tx(async (tx) => {
       // Paying from the drawer needs an open register; the money leaves it in the same transaction as the expense is recorded.
-      const session = b.payFrom ? requireOpenSession(db) : null;
-      const newId = Number(
-        db
-          .prepare(
-            `INSERT INTO expenses (category_id, session_id, title, reference, note, amount_minor, currency) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(b.categoryId ?? null, session?.id ?? null, b.title, b.reference, b.note ?? null, b.amountMinor, b.currency).lastInsertRowid,
+      const session = b.payFrom ? await requireOpenSession(tx) : null;
+      const created = await tx.one<{ id: number }>(
+        `INSERT INTO expenses (category_id, session_id, title, reference, note, amount_minor, currency) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        [b.categoryId ?? null, session?.id ?? null, b.title, b.reference, b.note ?? null, b.amountMinor, b.currency],
       );
+      const newId = created!.id;
       if (session && b.payFrom) {
-        recordCashOut(
-          db,
+        await recordCashOut(
+          tx,
           session.id,
           { method: b.payFrom.method, currency: b.currency },
           b.amountMinor,
@@ -87,7 +85,7 @@ export default async function expenseRoutes(app: FastifyInstance) {
           req.auth.id,
         );
       }
-      writeAudit(db, {
+      await writeAuditQ(tx, {
         userId: req.auth.id,
         action: 'expense.create',
         entity: 'expense',
@@ -96,14 +94,14 @@ export default async function expenseRoutes(app: FastifyInstance) {
       });
       return newId;
     });
-    return reply.status(201).send(expenseJson(db.prepare(`${SELECT} WHERE e.id = ?`).get(id) as Row));
+    return reply.status(201).send(expenseJson((await db.one<Row>(`${SELECT} WHERE e.id = ?`, [id]))!));
   });
 
   app.get('/expenses', manager, async (req) => {
     const q = parse(listQuery, req.query);
     const where: string[] = [];
-    const params: unknown[] = [];
-    const add = (sql: string, v: unknown) => {
+    const params: Param[] = [];
+    const add = (sql: string, v: Param | undefined) => {
       if (v === undefined) return;
       where.push(sql);
       params.push(v);
@@ -114,16 +112,18 @@ export default async function expenseRoutes(app: FastifyInstance) {
     const filter = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     // The totals cover everything the filters match, not only this page.
-    const sums = db
-      .prepare(`SELECT e.currency AS currency, SUM(e.amount_minor) AS total FROM expenses e ${filter} GROUP BY e.currency`)
-      .all(...params) as { currency: 'USD' | 'LBP'; total: number }[];
+    const sums = await db.all<{ currency: 'USD' | 'LBP'; total: number }>(
+      `SELECT e.currency AS currency, SUM(e.amount_minor) AS total FROM expenses e ${filter} GROUP BY e.currency`,
+      params,
+    );
     const totals = { USD: 0, LBP: 0 };
     for (const s of sums) totals[s.currency] = s.total;
 
     add('e.id < ?', q.cursor);
-    const rows = db
-      .prepare(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY e.id DESC LIMIT ?`)
-      .all(...params, q.limit + 1) as Row[];
+    const rows = await db.all<Row>(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY e.id DESC LIMIT ?`, [
+      ...params,
+      q.limit + 1,
+    ]);
     const page = rows.slice(0, q.limit);
     return { data: page.map(expenseJson), totals, nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
   });

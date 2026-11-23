@@ -4,12 +4,12 @@
 
 ## Progress
 
-Last updated: 2026-11-23 (end of first P1 session)
+Last updated: 2026-11-23 (end of second P1 session)
 
 | Phase | Status | Notes |
 |---|---|---|
 | P0 Design docs | **partly done** | Done: `docs/11-multi-branch.md`, questions #10-14, `CLAUDE.md` pointer + adapter/Windows pitfalls. **Still to do:** replace rule 16 and the "one till" statements (when P1 terminals land), new ownership/sync/branch rules, `docs/04`, `docs/06`, `docs/07` |
-| P1 Portability foundation + multi-terminal branch server | **in progress** | **Done:** `Db` adapter + SQLite driver (async mutex, event-loop guard), lint guard, `holds` converted (pilot). **Next:** convert counters + `createSale` + registers + inventory + users, then the multi-terminal work (see log) |
+| P1 Portability foundation + multi-terminal branch server | **in progress** | **Done:** `Database` adapter + SQLite driver (mutex, event-loop guard, statement cache), lint guard, and the **whole money core on the adapter**: holds, sales (create/void/delete/list/print), returns, customers (+ payments), expenses, services, registers, approvals. **Next:** convert `purchases`, `inventory`, then `users`/`auth`/`catalog`/`settings` (or leave those to P8's mechanical pass), then the multi-terminal work (migration 0015 etc., see log) |
 | P2 Sync foundation (`apps/central`, automatic reconnect) | not started | |
 | P3 HQ-owned data down (catalog, price overrides, users, rates) | not started | |
 | P4 Branch facts up + HQ reports + reconciliation | not started | |
@@ -31,6 +31,14 @@ Last updated: 2026-11-23 (end of first P1 session)
   - **Surprise to remember:** `queueMicrotask` and promises inherit the AsyncLocalStorage context, so code spawned *inside* a `tx()` joins it; only genuinely separate requests are outside. Tests that simulate "another request" must start it from outside the transaction.
   - **Not yet done in P1:** convert `counters`/`nextRef`, `createSale` and what it calls (`registers`, stock, customers balance), `returns`, `purchases`, `inventory`, `users`, `auth`; the rest of the ~45 files can follow in P8's mechanical pass. Then: migration 0015 (`branches`, `terminals`, `branch_id`, per-branch counters, `branch_users`), terminal enrolment, per-terminal register sessions (remove "one till" in `registers/service.ts` + `routes.ts`), `defaultWarehouseId` by terminal, per-branch receipt numbers, SSE, print agent, paginated catalog sync, reports on a read-only worker, multi-terminal load test.
   - **Open for the owner:** `QUESTIONS.md` #10-14. Whether to commit (nothing is committed yet; `darwish` branch only).
+  - *(Session 1 was later committed to `main`: `671e63f` docs, `20ff078` adapter + holds, pushed.)*
+- 2026-11-23 (P1, session 2, on `main`, **not committed**): **money core converted to the adapter.**
+  - **Converted (async, `Queryable`):** `auth/approvals.ts` (all five scopes through one `consume()`), `modules/registers/service.ts` + `routes.ts` (open now re-checks "already open" inside the transaction; `closed_at` is app-supplied ISO text, no `strftime`), `modules/sales/{service,void,delete,routes}.ts`, `returns/{service,routes}.ts`, `customers/{service,routes}.ts`, `expenses/routes.ts`, `services/routes.ts`; `auth/routes.ts` issues approvals through `app.database`.
+  - **Twins kept for unconverted modules** (delete them when the last legacy caller goes): `nextRefQ`/`nextRef`, `writeAuditQ`/`writeAudit`, `findReplayQ`/`findReplay` (+ `rememberResponseQ`), `currentRateQ`/`shopSettingsQ`/`defaultWarehouseIdQ`/`walkInCustomerIdQ` next to the sync versions in `settings/context.ts`. SQL text is shared where it was easy.
+  - **Portability fixes made on the way:** `RETURNING id` instead of `lastInsertRowid` everywhere in converted code; delete's named parameters (`@sale`) became `?`; customer search uses `LOWER(x) LIKE LOWER(?)` (PostgreSQL's `LIKE` is case-sensitive); `receipt_width w` alias got `AS`. Statement cache in the SQLite driver (500 cap) so per-line inserts do not re-prepare.
+  - **Tests:** nothing changed in existing tests: unit+db+web 443 and integration 802 pass untouched. New `tests/integration/concurrent-sales.test.ts`: 40 parallel sales + 20 copies of one Idempotency-Key + 10 partly-paid credit sales + 10 customer payments mixed with 20 more sales; asserts one sale per key, gap-free unique receipt numbers, stock, register expected = Z-report recount, and `customer.balance = Σ open rest`. **Total now 1247 passed, 4 skipped.** ESLint, Prettier, both typechecks clean. Lint guard list extended to all converted folders.
+  - **Not verified:** `npm run test:load` (needs `POSDB.sql`, not in this checkout). Expect the adapter to cost a few microtasks per statement; re-measure on the dump before the real till PC run. Remember PostgreSQL returns `count(*)`/`SUM` as strings (bigint): the future driver must parse int8 to number.
+  - **Still legacy (sync `inWriteTransaction`):** `purchases`, `inventory` (+ stocktake), `catalog` (products, import, lookups, barcodes), `users`, `auth` (login, sessions), `settings`, `audit/routes`, `reports`, `backup`, ETL and CLI tools. Next in order: `purchases` and `inventory` (they share the twins above), then the multi-terminal work.
 
 ---
 

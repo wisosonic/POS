@@ -1,4 +1,23 @@
+import type { Param, Queryable } from '../../db/adapter';
 import type { Db } from '../../db/open';
+
+const INSERT_AUDIT = 'INSERT INTO audit_log (user_id, action, entity, entity_id, before_json, after_json) VALUES (?, ?, ?, ?, ?, ?)';
+
+function auditParams(e: AuditEntry): Param[] {
+  return [
+    e.userId,
+    e.action,
+    e.entity,
+    e.entityId === undefined || e.entityId === null ? null : String(e.entityId),
+    e.before === undefined ? null : JSON.stringify(e.before),
+    e.after === undefined ? null : JSON.stringify(e.after),
+  ];
+}
+
+/** `writeAudit` for code on the database adapter. Call it inside the same transaction as the change it describes. */
+export async function writeAuditQ(q: Queryable, e: AuditEntry): Promise<void> {
+  await q.run(INSERT_AUDIT, auditParams(e));
+}
 
 export type AuditEntry = {
   userId: number | null;
@@ -14,12 +33,5 @@ export type AuditEntry = {
  * so the change and its audit row commit together. Never pass secrets (passwords, PINs, tokens).
  */
 export function writeAudit(db: Db, e: AuditEntry): void {
-  db.prepare('INSERT INTO audit_log (user_id, action, entity, entity_id, before_json, after_json) VALUES (?, ?, ?, ?, ?, ?)').run(
-    e.userId,
-    e.action,
-    e.entity,
-    e.entityId === undefined || e.entityId === null ? null : String(e.entityId),
-    e.before === undefined ? null : JSON.stringify(e.before),
-    e.after === undefined ? null : JSON.stringify(e.after),
-  );
+  db.prepare(INSERT_AUDIT).run(...auditParams(e));
 }

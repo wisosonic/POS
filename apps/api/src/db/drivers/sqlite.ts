@@ -5,15 +5,33 @@ import { adapterTxState, txStore } from '../txstate';
 
 /** The statements, run directly on one better-sqlite3 connection. Each call is synchronous underneath. */
 function statements(handle: Db): Queryable {
+  // Preparing a statement costs far more than running it, and a sale runs the same few statements per line. The SQL text is
+  // always a fixed string (values go in parameters), so the cache stays small; the cap only guards against a runaway
+  // generator of many different `IN (?,?,...)` lists.
+  type Statement = {
+    get(...params: unknown[]): unknown;
+    all(...params: unknown[]): unknown[];
+    run(...params: unknown[]): { changes: number };
+  };
+  const cache = new Map<string, Statement>();
+  const prepare = (sql: string): Statement => {
+    let st = cache.get(sql);
+    if (!st) {
+      if (cache.size >= 500) cache.clear();
+      st = handle.prepare(sql) as unknown as Statement; // the one place the library's generic statement type is narrowed
+      cache.set(sql, st);
+    }
+    return st;
+  };
   return {
     async one<T>(sql: string, params: Param[] = []) {
-      return handle.prepare(sql).get(...params) as T | undefined;
+      return prepare(sql).get(...params) as T | undefined;
     },
     async all<T>(sql: string, params: Param[] = []) {
-      return handle.prepare(sql).all(...params) as T[];
+      return prepare(sql).all(...params) as T[];
     },
     async run(sql: string, params: Param[] = []): Promise<RunResult> {
-      return { changes: handle.prepare(sql).run(...params).changes };
+      return { changes: prepare(sql).run(...params).changes };
     },
   };
 }
