@@ -64,7 +64,7 @@ export default async function reportRoutes(app: FastifyInstance) {
       topItems: topItems(db, since),
       owedByCustomersLbp: (db.prepare('SELECT COALESCE(SUM(balance_lbp), 0) AS owed FROM customers').get() as { owed: number }).owed,
       owedToSuppliers,
-      lowStockCount: lowStock(db).length,
+      lowStockCount: (await lowStock(app.database)).length,
       openRegisters: open.n,
     };
   });

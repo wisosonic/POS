@@ -38,21 +38,3 @@ export async function defaultWarehouseIdQ(q: Queryable): Promise<number> {
 export async function walkInCustomerIdQ(q: Queryable): Promise<number> {
   return (await q.one<{ id: number }>('SELECT id FROM customers WHERE is_walk_in = 1'))!.id;
 }
-
-export function shopSettings(db: Db): ShopSettings {
-  const row = db.prepare('SELECT lbp_rounding, cashier_discount_limit_pct FROM store_settings WHERE id = 1').get() as {
-    lbp_rounding: number;
-    cashier_discount_limit_pct: number;
-  };
-  return { lbpRounding: row.lbp_rounding, cashierDiscountLimitPct: row.cashier_discount_limit_pct };
-}
-
-export function defaultWarehouseId(db: Db): number {
-  const row = db.prepare('SELECT id FROM warehouses ORDER BY id LIMIT 1').get() as { id: number } | undefined;
-  if (!row) throw new Error('No warehouse exists. Was the reference data seeded?');
-  return row.id;
-}
-
-export function walkInCustomerId(db: Db): number {
-  return (db.prepare('SELECT id FROM customers WHERE is_walk_in = 1').get() as { id: number }).id;
-}

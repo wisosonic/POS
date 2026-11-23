@@ -1,13 +1,13 @@
 import { lbpToUsdCents, parseQtyMilli, roundDiv, usdToLbp } from '@pos/shared';
 import { z } from 'zod';
-import { nextRef } from '../../db/counters';
-import { inWriteTransaction, type Db } from '../../db/open';
+import type { Database, Param, Queryable } from '../../db/adapter';
+import { nextRefQ } from '../../db/counters';
 import { AppError, E } from '../../errors';
-import { findReplay, rememberResponse } from '../../util/idempotency';
+import { findReplayQ, rememberResponseQ } from '../../util/idempotency';
 import { milliToQty } from '../../util/qty';
 import { nowIso } from '../../util/time';
-import { writeAudit } from '../audit/service';
-import { currentRate, defaultWarehouseId } from '../settings/context';
+import { writeAuditQ } from '../audit/service';
+import { currentRateQ, defaultWarehouseIdQ } from '../settings/context';
 import type { Actor } from '../sales/service';
 
 export const RECEIVE_SCOPE = 'POST /purchases/receive';
@@ -51,7 +51,7 @@ export const receiveBody = z.object({
 });
 export const supplierPaymentBody = z.object({ amountMinor: z.number().int().positive(), note: z.string().trim().max(200).optional() });
 
-type PurchaseRow = {
+export type PurchaseRow = {
   id: number;
   ref: number;
   supplier_id: number | null;
@@ -65,19 +65,16 @@ type PurchaseRow = {
 };
 type ItemRow = { id: number; product_id: number | null; name_snap: string; qty_milli: number; cost_minor: number; received_milli: number };
 
-export const getPurchase = (db: Db, id: number) => db.prepare('SELECT * FROM purchases WHERE id = ?').get(id) as PurchaseRow | undefined;
+export const getPurchase = (q: Queryable, id: number) => q.one<PurchaseRow>('SELECT * FROM purchases WHERE id = ?', [id]);
 
 const lineTotal = (costMinor: number, qtyMilli: number) => roundDiv(costMinor * qtyMilli, 1000);
 
-export function purchaseJson(db: Db, p: PurchaseRow) {
-  const supplier = p.supplier_id
-    ? (db.prepare('SELECT name FROM suppliers WHERE id = ?').get(p.supplier_id) as { name: string } | undefined)
-    : undefined;
-  const items = db
-    .prepare(
-      'SELECT id, product_id, name_snap, qty_milli, cost_minor, received_milli FROM purchase_items WHERE purchase_id = ? ORDER BY id',
-    )
-    .all(p.id) as ItemRow[];
+export async function purchaseJson(q: Queryable, p: PurchaseRow) {
+  const supplier = p.supplier_id ? await q.one<{ name: string }>('SELECT name FROM suppliers WHERE id = ?', [p.supplier_id]) : undefined;
+  const items = await q.all<ItemRow>(
+    'SELECT id, product_id, name_snap, qty_milli, cost_minor, received_milli FROM purchase_items WHERE purchase_id = ? ORDER BY id',
+    [p.id],
+  );
   return {
     id: p.id,
     ref: p.ref,
@@ -104,39 +101,45 @@ export function purchaseJson(db: Db, p: PurchaseRow) {
 }
 
 /** Validate the lines against the catalog and price them. Stock on hand plays no part: any product can be ordered. */
-function priceLines(db: Db, items: z.infer<typeof purchaseBody>['items']) {
-  const find = db.prepare('SELECT id, name FROM products WHERE id = ?');
-  const lines = items.map((i) => {
-    const p = find.get(i.productId) as { id: number; name: string } | undefined;
+async function priceLines(q: Queryable, items: z.infer<typeof purchaseBody>['items']) {
+  const lines: { productId: number; name: string; qtyMilli: number; costMinor: number; total: number }[] = [];
+  for (const i of items) {
+    const p = await q.one<{ id: number; name: string }>('SELECT id, name FROM products WHERE id = ?', [i.productId]);
     if (!p) throw E.unprocessable('INVALID_REFERENCE', `Product ${i.productId} does not exist`);
     const qtyMilli = parseQtyMilli(i.qty);
-    return { productId: p.id, name: p.name, qtyMilli, costMinor: i.costMinor, total: lineTotal(i.costMinor, qtyMilli) };
-  });
+    lines.push({ productId: p.id, name: p.name, qtyMilli, costMinor: i.costMinor, total: lineTotal(i.costMinor, qtyMilli) });
+  }
   return { lines, total: lines.reduce((sum, l) => sum + l.total, 0) };
 }
 
-function checkSupplier(db: Db, supplierId: number | null | undefined) {
-  if (supplierId && !db.prepare('SELECT 1 FROM suppliers WHERE id = ?').get(supplierId))
+async function checkSupplier(q: Queryable, supplierId: number | null | undefined) {
+  if (supplierId && !(await q.one('SELECT 1 FROM suppliers WHERE id = ?', [supplierId])))
     throw E.unprocessable('INVALID_REFERENCE', 'That supplier does not exist');
 }
 
-function insertLines(db: Db, purchaseId: number, lines: ReturnType<typeof priceLines>['lines']) {
-  const ins = db.prepare('INSERT INTO purchase_items (purchase_id, product_id, name_snap, qty_milli, cost_minor) VALUES (?, ?, ?, ?, ?)');
-  for (const l of lines) ins.run(purchaseId, l.productId, l.name, l.qtyMilli, l.costMinor);
+async function insertLines(q: Queryable, purchaseId: number, lines: Awaited<ReturnType<typeof priceLines>>['lines']) {
+  for (const l of lines)
+    await q.run('INSERT INTO purchase_items (purchase_id, product_id, name_snap, qty_milli, cost_minor) VALUES (?, ?, ?, ?, ?)', [
+      purchaseId,
+      l.productId,
+      l.name,
+      l.qtyMilli,
+      l.costMinor,
+    ]);
 }
 
-export function createPurchase(db: Db, actor: Actor, body: z.infer<typeof purchaseBody>) {
-  checkSupplier(db, body.supplierId);
-  return inWriteTransaction(db, () => {
-    const { lines, total } = priceLines(db, body.items);
-    const ref = nextRef(db, 'purchase_ref');
-    const id = Number(
-      db
-        .prepare('INSERT INTO purchases (ref, supplier_id, warehouse_id, status, currency, total_minor) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(ref, body.supplierId ?? null, defaultWarehouseId(db), body.status, body.currency, total).lastInsertRowid,
+export function createPurchase(db: Database, actor: Actor, body: z.infer<typeof purchaseBody>): Promise<number> {
+  return db.tx(async (q) => {
+    await checkSupplier(q, body.supplierId);
+    const { lines, total } = await priceLines(q, body.items);
+    const ref = await nextRefQ(q, 'purchase_ref');
+    const created = await q.one<{ id: number }>(
+      'INSERT INTO purchases (ref, supplier_id, warehouse_id, status, currency, total_minor) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
+      [ref, body.supplierId ?? null, await defaultWarehouseIdQ(q), body.status, body.currency, total],
     );
-    insertLines(db, id, lines);
-    writeAudit(db, {
+    const id = created!.id;
+    await insertLines(q, id, lines);
+    await writeAuditQ(q, {
       userId: actor.id,
       action: 'purchase.create',
       entity: 'purchase',
@@ -148,18 +151,18 @@ export function createPurchase(db: Db, actor: Actor, body: z.infer<typeof purcha
 }
 
 /** Editing is only for orders nothing has arrived on yet. */
-export function updatePurchase(db: Db, actor: Actor, id: number, body: z.infer<typeof purchasePatchBody>) {
-  const before = getPurchase(db, id);
-  if (!before) throw E.notFound('Purchase');
-  if (before.status === 'received') throw E.conflict('PURCHASE_RECEIVED', 'A received purchase cannot be changed');
-  const arrived = db.prepare('SELECT 1 FROM purchase_items WHERE purchase_id = ? AND received_milli > 0 LIMIT 1').get(id);
-  if (arrived) throw E.conflict('PURCHASE_PARTLY_RECEIVED', 'Goods have already arrived on this purchase, so it can no longer be edited');
-  if (body.supplierId !== undefined) checkSupplier(db, body.supplierId);
+export function updatePurchase(db: Database, actor: Actor, id: number, body: z.infer<typeof purchasePatchBody>): Promise<void> {
+  return db.tx(async (q) => {
+    const before = await getPurchase(q, id);
+    if (!before) throw E.notFound('Purchase');
+    if (before.status === 'received') throw E.conflict('PURCHASE_RECEIVED', 'A received purchase cannot be changed');
+    const arrived = await q.one('SELECT 1 FROM purchase_items WHERE purchase_id = ? AND received_milli > 0 LIMIT 1', [id]);
+    if (arrived) throw E.conflict('PURCHASE_PARTLY_RECEIVED', 'Goods have already arrived on this purchase, so it can no longer be edited');
+    if (body.supplierId !== undefined) await checkSupplier(q, body.supplierId);
 
-  inWriteTransaction(db, () => {
     const sets: string[] = [];
-    const vals: unknown[] = [];
-    const set = (col: string, v: unknown) => {
+    const vals: Param[] = [];
+    const set = (col: string, v: Param) => {
       sets.push(`${col} = ?`);
       vals.push(v);
     };
@@ -167,13 +170,13 @@ export function updatePurchase(db: Db, actor: Actor, id: number, body: z.infer<t
     if (body.currency !== undefined) set('currency', body.currency);
     if (body.status !== undefined) set('status', body.status);
     if (body.items) {
-      const { lines, total } = priceLines(db, body.items);
-      db.prepare('DELETE FROM purchase_items WHERE purchase_id = ?').run(id);
-      insertLines(db, id, lines);
+      const { lines, total } = await priceLines(q, body.items);
+      await q.run('DELETE FROM purchase_items WHERE purchase_id = ?', [id]);
+      await insertLines(q, id, lines);
       set('total_minor', total);
     }
-    if (sets.length) db.prepare(`UPDATE purchases SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
-    writeAudit(db, {
+    if (sets.length) await q.run(`UPDATE purchases SET ${sets.join(', ')} WHERE id = ?`, [...vals, id]);
+    await writeAuditQ(q, {
       userId: actor.id,
       action: 'purchase.update',
       entity: 'purchase',
@@ -185,9 +188,9 @@ export function updatePurchase(db: Db, actor: Actor, id: number, body: z.infer<t
 }
 
 /** Convert a cost between currencies for a product that is priced in the other one. */
-function costInProductCurrency(db: Db, costMinor: number, from: 'USD' | 'LBP', to: 'USD' | 'LBP'): number {
+async function costInProductCurrency(q: Queryable, costMinor: number, from: 'USD' | 'LBP', to: 'USD' | 'LBP'): Promise<number> {
   if (from === to) return costMinor;
-  const rate = currentRate(db);
+  const rate = await currentRateQ(q);
   return from === 'USD' ? usdToLbp(costMinor, rate) : lbpToUsdCents(costMinor, rate);
 }
 
@@ -196,20 +199,25 @@ function costInProductCurrency(db: Db, costMinor: number, from: 'USD' | 'LBP', t
  * becomes `received` when everything has, and (by default) each product's cost follows what was paid. Receiving is
  * never blocked by the quantity on hand, including zero or negative. Idempotent, and it can be done in parts.
  */
-export function receivePurchase(db: Db, actor: Actor, id: number, body: z.infer<typeof receiveBody>, idem: { key: string; hash: string }) {
-  return inWriteTransaction(db, () => {
-    const replay = findReplay(db, RECEIVE_SCOPE, idem.key, idem.hash);
+export function receivePurchase(
+  db: Database,
+  actor: Actor,
+  id: number,
+  body: z.infer<typeof receiveBody>,
+  idem: { key: string; hash: string },
+) {
+  return db.tx(async (q) => {
+    const replay = await findReplayQ(q, RECEIVE_SCOPE, idem.key, idem.hash);
     if (replay) return { ...replay, replay: true };
 
-    const purchase = getPurchase(db, id);
+    const purchase = await getPurchase(q, id);
     if (!purchase) throw E.notFound('Purchase');
     if (purchase.status === 'received') throw E.conflict('PURCHASE_RECEIVED', 'Everything on this purchase has already been received');
 
-    const all = db
-      .prepare(
-        'SELECT id, product_id, name_snap, qty_milli, cost_minor, received_milli FROM purchase_items WHERE purchase_id = ? ORDER BY id',
-      )
-      .all(id) as ItemRow[];
+    const all = await q.all<ItemRow>(
+      'SELECT id, product_id, name_snap, qty_milli, cost_minor, received_milli FROM purchase_items WHERE purchase_id = ? ORDER BY id',
+      [id],
+    );
     const byId = new Map(all.map((i) => [i.id, i]));
 
     let toReceive: { item: ItemRow; qtyMilli: number }[];
@@ -236,30 +244,31 @@ export function receivePurchase(db: Db, actor: Actor, id: number, body: z.infer<
         .map((item) => ({ item, qtyMilli: item.qty_milli - item.received_milli }));
     }
 
-    const insertMovement = db.prepare(
-      `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id) VALUES (?, ?, ?, 'purchase', 'purchase', ?, ?)`,
-    );
-    const upsertLevel = db.prepare(
-      `INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)
-       ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty_milli = qty_milli + excluded.qty_milli`,
-    );
-    const markReceived = db.prepare('UPDATE purchase_items SET received_milli = received_milli + ? WHERE id = ?');
     const costUpdates: { productId: number; before: number; after: number; currency: string }[] = [];
 
     for (const { item, qtyMilli } of toReceive) {
-      markReceived.run(qtyMilli, item.id);
+      await q.run('UPDATE purchase_items SET received_milli = received_milli + ? WHERE id = ?', [qtyMilli, item.id]);
       if (item.product_id === null) continue;
-      insertMovement.run(item.product_id, purchase.warehouse_id, qtyMilli, purchase.id, actor.id);
-      upsertLevel.run(item.product_id, purchase.warehouse_id, qtyMilli);
+      await q.run(
+        `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id) VALUES (?, ?, ?, 'purchase', 'purchase', ?, ?)`,
+        [item.product_id, purchase.warehouse_id, qtyMilli, purchase.id, actor.id],
+      );
+      await q.run(
+        `INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)
+       ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty_milli = qty_milli + excluded.qty_milli`,
+        [item.product_id, purchase.warehouse_id, qtyMilli],
+      );
 
       if (body.updateCost) {
-        const product = db.prepare('SELECT cost_minor, price_minor, currency FROM products WHERE id = ?').get(item.product_id) as
-          { cost_minor: number; price_minor: number; currency: 'USD' | 'LBP' } | undefined;
+        const product = await q.one<{ cost_minor: number; price_minor: number; currency: 'USD' | 'LBP' }>(
+          'SELECT cost_minor, price_minor, currency FROM products WHERE id = ?',
+          [item.product_id],
+        );
         if (product) {
-          const newCost = costInProductCurrency(db, item.cost_minor, purchase.currency, product.currency);
+          const newCost = await costInProductCurrency(q, item.cost_minor, purchase.currency, product.currency);
           if (newCost !== product.cost_minor) {
-            db.prepare('UPDATE products SET cost_minor = ?, updated_at = ? WHERE id = ?').run(newCost, nowIso(), item.product_id);
-            writeAudit(db, {
+            await q.run('UPDATE products SET cost_minor = ?, updated_at = ? WHERE id = ?', [newCost, nowIso(), item.product_id]);
+            await writeAuditQ(q, {
               userId: actor.id,
               action: 'product.price.update',
               entity: 'product',
@@ -273,13 +282,14 @@ export function receivePurchase(db: Db, actor: Actor, id: number, body: z.infer<
       }
     }
 
-    const remaining = db
-      .prepare('SELECT count(*) AS n FROM purchase_items WHERE purchase_id = ? AND received_milli < qty_milli')
-      .get(id) as { n: number };
-    if (remaining.n === 0) db.prepare(`UPDATE purchases SET status = 'received', received_at = ? WHERE id = ?`).run(nowIso(), id);
-    else if (purchase.status === 'draft') db.prepare(`UPDATE purchases SET status = 'ordered' WHERE id = ?`).run(id);
+    const remaining = (await q.one<{ n: number }>(
+      'SELECT count(*) AS n FROM purchase_items WHERE purchase_id = ? AND received_milli < qty_milli',
+      [id],
+    ))!;
+    if (remaining.n === 0) await q.run(`UPDATE purchases SET status = 'received', received_at = ? WHERE id = ?`, [nowIso(), id]);
+    else if (purchase.status === 'draft') await q.run(`UPDATE purchases SET status = 'ordered' WHERE id = ?`, [id]);
 
-    writeAudit(db, {
+    await writeAuditQ(q, {
       userId: actor.id,
       action: 'purchase.receive',
       entity: 'purchase',
@@ -288,40 +298,39 @@ export function receivePurchase(db: Db, actor: Actor, id: number, body: z.infer<
     });
 
     const response = {
-      ...purchaseJson(db, getPurchase(db, id)!),
+      ...(await purchaseJson(q, (await getPurchase(q, id))!)),
       receivedNow: toReceive.map((r) => ({ purchaseItemId: r.item.id, productId: r.item.product_id, qty: milliToQty(r.qtyMilli) })),
       costUpdates,
     };
-    rememberResponse(db, RECEIVE_SCOPE, idem.key, idem.hash, 200, response);
+    await rememberResponseQ(q, RECEIVE_SCOPE, idem.key, idem.hash, 200, response);
     return { statusCode: 200, body: response as unknown, replay: false };
   });
 }
 
 /** Pay a supplier, in part or in full. Bookkeeping on the purchase: a payment from the till is a cash movement as well. */
 export function paySupplier(
-  db: Db,
+  db: Database,
   actor: Actor,
   id: number,
   body: z.infer<typeof supplierPaymentBody>,
   idem: { key: string; hash: string },
 ) {
-  return inWriteTransaction(db, () => {
-    const replay = findReplay(db, SUPPLIER_PAYMENT_SCOPE, idem.key, idem.hash);
+  return db.tx(async (q) => {
+    const replay = await findReplayQ(q, SUPPLIER_PAYMENT_SCOPE, idem.key, idem.hash);
     if (replay) return { ...replay, replay: true };
 
-    const purchase = getPurchase(db, id);
+    const purchase = await getPurchase(q, id);
     if (!purchase) throw E.notFound('Purchase');
     if (purchase.status === 'draft') throw E.unprocessable('PURCHASE_NOT_ORDERED', 'Order the purchase before paying for it');
     const owed = purchase.total_minor - purchase.paid_minor;
     if (body.amountMinor > owed) throw E.unprocessable('PAYMENT_EXCEEDS_TOTAL', `Only ${owed} is still owed on this purchase`);
 
-    const paymentId = Number(
-      db
-        .prepare('INSERT INTO purchase_payments (purchase_id, amount_minor, note, user_id, idempotency_key) VALUES (?, ?, ?, ?, ?)')
-        .run(id, body.amountMinor, body.note ?? null, actor.id, idem.key).lastInsertRowid,
+    const created = await q.one<{ id: number }>(
+      'INSERT INTO purchase_payments (purchase_id, amount_minor, note, user_id, idempotency_key) VALUES (?, ?, ?, ?, ?) RETURNING id',
+      [id, body.amountMinor, body.note ?? null, actor.id, idem.key],
     );
-    db.prepare('UPDATE purchases SET paid_minor = paid_minor + ? WHERE id = ?').run(body.amountMinor, id);
-    writeAudit(db, {
+    await q.run('UPDATE purchases SET paid_minor = paid_minor + ? WHERE id = ?', [body.amountMinor, id]);
+    await writeAuditQ(q, {
       userId: actor.id,
       action: 'purchase.payment',
       entity: 'purchase',
@@ -329,8 +338,8 @@ export function paySupplier(
       after: { amountMinor: body.amountMinor, note: body.note ?? null },
     });
 
-    const response = { paymentId, ...purchaseJson(db, getPurchase(db, id)!) };
-    rememberResponse(db, SUPPLIER_PAYMENT_SCOPE, idem.key, idem.hash, 201, response);
+    const response = { paymentId: created!.id, ...(await purchaseJson(q, (await getPurchase(q, id))!)) };
+    await rememberResponseQ(q, SUPPLIER_PAYMENT_SCOPE, idem.key, idem.hash, 201, response);
     return { statusCode: 201, body: response as unknown, replay: false };
   });
 }

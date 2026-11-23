@@ -83,6 +83,8 @@ export default tseslint.config(
       'apps/api/src/modules/expenses/**/*.ts',
       'apps/api/src/modules/services/**/*.ts',
       'apps/api/src/modules/registers/**/*.ts',
+      'apps/api/src/modules/purchases/**/*.ts',
+      'apps/api/src/modules/inventory/**/*.ts',
       'apps/api/src/auth/approvals.ts',
     ],
     rules: {

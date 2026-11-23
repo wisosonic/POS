@@ -461,7 +461,7 @@ export function createSale(db: Database, actor: Actor, body: SaleBody, idem: { k
       `SELECT p.id, p.name, p.stock_alert_milli AS threshold_milli, COALESCE(SUM(l.qty_milli), 0) AS total_milli
          FROM products p LEFT JOIN stock_levels l ON l.product_id = p.id
          WHERE p.id IN (${ids.map(() => '?').join(',')}) AND p.stock_alert_milli IS NOT NULL
-         GROUP BY p.id HAVING total_milli <= p.stock_alert_milli ORDER BY p.id`,
+         GROUP BY p.id HAVING COALESCE(SUM(l.qty_milli), 0) <= p.stock_alert_milli ORDER BY p.id`,
       ids,
     );
 

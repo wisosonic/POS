@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { inWriteTransaction } from '../../db/open';
+import type { Param } from '../../db/adapter';
 import { E } from '../../errors';
 import { hashRequest, requireIdempotencyKey } from '../../util/idempotency';
 import { parse } from '../../util/validate';
-import { writeAudit } from '../audit/service';
+import { writeAuditQ } from '../audit/service';
 import {
   createPurchase,
   getPurchase,
@@ -16,6 +16,7 @@ import {
   receivePurchase,
   supplierPaymentBody,
   updatePurchase,
+  type PurchaseRow,
 } from './service';
 
 const listQuery = z.object({
@@ -26,20 +27,20 @@ const listQuery = z.object({
 });
 
 export default async function purchaseRoutes(app: FastifyInstance) {
-  const db = app.db;
+  const db = app.database;
   const manager = { preHandler: app.requireRole('manager') };
   const idOf = (req: { params: unknown }) => Number((req.params as { id: string }).id);
 
   app.post('/purchases', manager, async (req, reply) => {
-    const id = createPurchase(db, req.auth, parse(purchaseBody, req.body));
-    return reply.status(201).send(purchaseJson(db, getPurchase(db, id)!));
+    const id = await createPurchase(db, req.auth, parse(purchaseBody, req.body));
+    return reply.status(201).send(await purchaseJson(db, (await getPurchase(db, id))!));
   });
 
   app.get('/purchases', manager, async (req) => {
     const q = parse(listQuery, req.query);
     const where: string[] = [];
-    const params: unknown[] = [];
-    const add = (sql: string, v: unknown) => {
+    const params: Param[] = [];
+    const add = (sql: string, v: Param | undefined) => {
       if (v === undefined) return;
       where.push(sql);
       params.push(v);
@@ -47,35 +48,38 @@ export default async function purchaseRoutes(app: FastifyInstance) {
     add('status = ?', q.status);
     add('supplier_id = ?', q.supplierId);
     add('id < ?', q.cursor);
-    const rows = db
-      .prepare(`SELECT * FROM purchases ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`)
-      .all(...params, q.limit + 1) as NonNullable<ReturnType<typeof getPurchase>>[];
+    const rows = await db.all<PurchaseRow>(
+      `SELECT * FROM purchases ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`,
+      [...params, q.limit + 1],
+    );
     const page = rows.slice(0, q.limit);
-    return { data: page.map((p) => purchaseJson(db, p)), nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
+    const data = [];
+    for (const p of page) data.push(await purchaseJson(db, p));
+    return { data, nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
   });
 
   app.get('/purchases/:id', manager, async (req) => {
-    const p = getPurchase(db, idOf(req));
+    const p = await getPurchase(db, idOf(req));
     if (!p) throw E.notFound('Purchase');
     return purchaseJson(db, p);
   });
 
   app.patch('/purchases/:id', manager, async (req) => {
     const id = idOf(req);
-    updatePurchase(db, req.auth, id, parse(purchasePatchBody, req.body));
-    return purchaseJson(db, getPurchase(db, id)!);
+    await updatePurchase(db, req.auth, id, parse(purchasePatchBody, req.body));
+    return purchaseJson(db, (await getPurchase(db, id))!);
   });
 
   // Only a draft can be thrown away.
   app.delete('/purchases/:id', manager, async (req, reply) => {
     const id = idOf(req);
-    const p = getPurchase(db, id);
-    if (!p) throw E.notFound('Purchase');
-    if (p.status !== 'draft') throw E.conflict('PURCHASE_NOT_DRAFT', 'Only a draft purchase can be deleted');
-    inWriteTransaction(db, () => {
-      db.prepare('DELETE FROM purchase_items WHERE purchase_id = ?').run(id);
-      db.prepare('DELETE FROM purchases WHERE id = ?').run(id);
-      writeAudit(db, {
+    await db.tx(async (tx) => {
+      const p = await getPurchase(tx, id);
+      if (!p) throw E.notFound('Purchase');
+      if (p.status !== 'draft') throw E.conflict('PURCHASE_NOT_DRAFT', 'Only a draft purchase can be deleted');
+      await tx.run('DELETE FROM purchase_items WHERE purchase_id = ?', [id]);
+      await tx.run('DELETE FROM purchases WHERE id = ?', [id]);
+      await writeAuditQ(tx, {
         userId: req.auth.id,
         action: 'purchase.delete',
         entity: 'purchase',
@@ -90,7 +94,7 @@ export default async function purchaseRoutes(app: FastifyInstance) {
     const key = requireIdempotencyKey(req);
     const body = parse(receiveBody, req.body ?? {});
     const id = idOf(req);
-    const result = receivePurchase(db, req.auth, id, body, { key, hash: hashRequest({ id, body: req.body ?? {} }) });
+    const result = await receivePurchase(db, req.auth, id, body, { key, hash: hashRequest({ id, body: req.body ?? {} }) });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
     return reply.status(result.statusCode).send(result.body);
   });
@@ -99,20 +103,14 @@ export default async function purchaseRoutes(app: FastifyInstance) {
     const key = requireIdempotencyKey(req);
     const body = parse(supplierPaymentBody, req.body);
     const id = idOf(req);
-    const result = paySupplier(db, req.auth, id, body, { key, hash: hashRequest({ id, body: req.body }) });
+    const result = await paySupplier(db, req.auth, id, body, { key, hash: hashRequest({ id, body: req.body }) });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
     return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
   });
 
   // What the shop owes its suppliers (US-23): every ordered or received purchase that is not fully paid.
   app.get('/reports/payables', manager, async () => {
-    const rows = db
-      .prepare(
-        `SELECT p.id, p.ref, p.supplier_id, s.name AS supplier_name, p.currency, p.total_minor, p.paid_minor, p.status, p.created_at
-         FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id
-         WHERE p.status <> 'draft' AND p.paid_minor < p.total_minor ORDER BY p.created_at, p.id`,
-      )
-      .all() as {
+    const rows = await db.all<{
       id: number;
       ref: number;
       supplier_id: number | null;
@@ -122,7 +120,11 @@ export default async function purchaseRoutes(app: FastifyInstance) {
       paid_minor: number;
       status: string;
       created_at: string;
-    }[];
+    }>(
+      `SELECT p.id, p.ref, p.supplier_id, s.name AS supplier_name, p.currency, p.total_minor, p.paid_minor, p.status, p.created_at
+         FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id
+         WHERE p.status <> 'draft' AND p.paid_minor < p.total_minor ORDER BY p.created_at, p.id`,
+    );
     const totals: Record<'USD' | 'LBP', number> = { USD: 0, LBP: 0 };
     for (const r of rows) totals[r.currency] += r.total_minor - r.paid_minor;
     return {

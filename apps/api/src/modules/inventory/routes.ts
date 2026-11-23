@@ -1,11 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { Db } from '../../db/open';
+import type { Param, Queryable } from '../../db/adapter';
 import { E } from '../../errors';
-import { inWriteTransaction } from '../../db/open';
 import { milliToQty, qtyNumberToMilli } from '../../util/qty';
-import { writeAudit } from '../audit/service';
-import { defaultWarehouseId } from '../settings/context';
+import { writeAuditQ } from '../audit/service';
+import { defaultWarehouseIdQ } from '../settings/context';
 import { parse } from '../../util/validate';
 import { registerStocktakeRoutes } from './stocktake';
 
@@ -26,17 +25,19 @@ const stockJson = (r: StockRow) => ({
   threshold: r.threshold_milli === null ? null : r.threshold_milli / 1000,
 });
 
-/** Active products with a threshold whose quantity is at or below it, most urgent first. */
-export function lowStock(db: Db): ReturnType<typeof stockJson>[] {
-  const rows = db
-    .prepare(
-      `${STOCK}
+/**
+ * Active products with a threshold whose quantity is at or below it, most urgent first.
+ * HAVING and ORDER BY repeat the sum instead of using its alias, and the floor of 1000 is a CASE, not a two-argument MAX(),
+ * because those two shortcuts only work on SQLite (the query must run unchanged on PostgreSQL later).
+ */
+export async function lowStock(q: Queryable): Promise<ReturnType<typeof stockJson>[]> {
+  const rows = await q.all<StockRow>(
+    `${STOCK}
        WHERE p.active = 1 AND p.stock_alert_milli IS NOT NULL
        GROUP BY p.id
-       HAVING total_milli <= p.stock_alert_milli
-       ORDER BY total_milli * 1.0 / MAX(p.stock_alert_milli, 1000), p.name`,
-    )
-    .all() as StockRow[];
+       HAVING COALESCE(SUM(l.qty_milli), 0) <= p.stock_alert_milli
+       ORDER BY COALESCE(SUM(l.qty_milli), 0) * 1.0 / CASE WHEN p.stock_alert_milli > 1000 THEN p.stock_alert_milli ELSE 1000 END, p.name`,
+  );
   return rows.map(stockJson);
 }
 
@@ -55,15 +56,15 @@ const stockQuery = z.object({
 });
 
 export default async function inventoryRoutes(app: FastifyInstance) {
-  const db = app.db;
+  const db = app.database;
   const read = { preHandler: app.authenticate };
 
   app.get('/stock', read, async (req) => {
     const q = parse(stockQuery, req.query);
-    if (q.lowOnly === 'true') return { data: lowStock(db), nextCursor: null };
+    if (q.lowOnly === 'true') return { data: await lowStock(db), nextCursor: null };
 
     const where: string[] = ['p.active = 1'];
-    const params: unknown[] = [];
+    const params: Param[] = [];
     if (q.productId) {
       where.push('p.id = ?');
       params.push(q.productId);
@@ -72,9 +73,10 @@ export default async function inventoryRoutes(app: FastifyInstance) {
       where.push('p.id > ?');
       params.push(q.cursor);
     }
-    const rows = db
-      .prepare(`${STOCK} WHERE ${where.join(' AND ')} GROUP BY p.id ORDER BY p.id LIMIT ?`)
-      .all(...params, q.limit + 1) as StockRow[];
+    const rows = await db.all<StockRow>(`${STOCK} WHERE ${where.join(' AND ')} GROUP BY p.id ORDER BY p.id LIMIT ?`, [
+      ...params,
+      q.limit + 1,
+    ]);
     const page = rows.slice(0, q.limit);
     return { data: page.map(stockJson), nextCursor: rows.length > q.limit ? (page[page.length - 1]?.id ?? null) : null };
   });
@@ -84,31 +86,29 @@ export default async function inventoryRoutes(app: FastifyInstance) {
     const b = parse(adjustmentBody, req.body);
     const delta = typeof b.qtyDelta === 'string' ? Math.round(Number(b.qtyDelta) * 1000) : qtyNumberToMilli(b.qtyDelta);
     if (delta === null || delta === 0) throw E.validation('qtyDelta must be a non-zero number with at most 3 decimals');
-    if (!db.prepare('SELECT 1 FROM products WHERE id = ?').get(b.productId)) throw E.notFound('Product');
-    const warehouseId = defaultWarehouseId(db);
+    if (!(await db.one('SELECT 1 FROM products WHERE id = ?', [b.productId]))) throw E.notFound('Product');
 
-    const result = inWriteTransaction(db, () => {
-      const movementId = Number(
-        db
-          .prepare(
-            `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, user_id, note) VALUES (?, ?, ?, 'adjustment', 'adjustment', ?, ?)`,
-          )
-          .run(b.productId, warehouseId, delta, req.auth.id, b.reason).lastInsertRowid,
+    const result = await db.tx(async (tx) => {
+      const warehouseId = await defaultWarehouseIdQ(tx);
+      const created = await tx.one<{ id: number }>(
+        `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, user_id, note) VALUES (?, ?, ?, 'adjustment', 'adjustment', ?, ?) RETURNING id`,
+        [b.productId, warehouseId, delta, req.auth.id, b.reason],
       );
-      db.prepare(
+      await tx.run(
         `INSERT INTO stock_levels (product_id, warehouse_id, qty_milli) VALUES (?, ?, ?)
          ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty_milli = qty_milli + excluded.qty_milli`,
-      ).run(b.productId, warehouseId, delta);
-      writeAudit(db, {
+        [b.productId, warehouseId, delta],
+      );
+      await writeAuditQ(tx, {
         userId: req.auth.id,
         action: 'stock.adjust',
         entity: 'product',
         entityId: b.productId,
         after: { qtyDelta: milliToQty(delta), reason: b.reason },
       });
-      return movementId;
+      return created!.id;
     });
-    const row = db.prepare(`${STOCK} WHERE p.id = ? GROUP BY p.id`).get(b.productId) as StockRow;
+    const row = (await db.one<StockRow>(`${STOCK} WHERE p.id = ? GROUP BY p.id`, [b.productId]))!;
     return reply.status(201).send({ movementId: result, ...stockJson(row), qtyDelta: milliToQty(delta), reason: b.reason });
   });
 
@@ -119,12 +119,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
       z.object({ limit: z.coerce.number().int().min(1).max(500).default(50), cursor: z.coerce.number().int().positive().optional() }),
       req.query,
     );
-    const rows = db
-      .prepare(
-        `SELECT id, qty_milli_delta, reason, ref_type, ref_id, user_id, note, created_at FROM stock_movements
-         WHERE product_id = ? ${q.cursor ? 'AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
-      )
-      .all(...[productId, ...(q.cursor ? [q.cursor] : []), q.limit + 1]) as {
+    const rows = await db.all<{
       id: number;
       qty_milli_delta: number;
       reason: string;
@@ -133,7 +128,11 @@ export default async function inventoryRoutes(app: FastifyInstance) {
       user_id: number | null;
       note: string | null;
       created_at: string;
-    }[];
+    }>(
+      `SELECT id, qty_milli_delta, reason, ref_type, ref_id, user_id, note, created_at FROM stock_movements
+         WHERE product_id = ? ${q.cursor ? 'AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
+      [productId, ...(q.cursor ? [q.cursor] : []), q.limit + 1],
+    );
     const page = rows.slice(0, q.limit);
     return {
       data: page.map((m) => ({
@@ -151,7 +150,7 @@ export default async function inventoryRoutes(app: FastifyInstance) {
   });
 
   // Cashiers can read alerts so the till can show a badge. Thresholds are edited on the product (managers only).
-  app.get('/stock/alerts', read, async () => ({ data: lowStock(db) }));
+  app.get('/stock/alerts', read, async () => ({ data: await lowStock(db) }));
 
   registerStocktakeRoutes(app);
 }
