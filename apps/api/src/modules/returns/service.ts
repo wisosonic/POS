@@ -9,7 +9,8 @@ import { findReplayQ, rememberResponseQ } from '../../util/idempotency';
 import { milliToQty } from '../../util/qty';
 import { writeAuditQ } from '../audit/service';
 import { bumpExpected, requireOpenSession } from '../registers/service';
-import { currentRateQ, defaultWarehouseIdQ } from '../settings/context';
+import { currentRateQ } from '../settings/context';
+import { warehouseOf, type Terminal } from '../terminals/service';
 import type { Actor } from '../sales/service';
 
 export const RETURN_SCOPE = 'POST /returns';
@@ -42,7 +43,7 @@ type SaleItemRow = { id: number; sale_id: number; product_id: number | null; qty
  * refund out of a register bucket, and, if the sale was not fully paid, the value first reduces what the customer owes.
  * The original sale is never edited except for how much of it is settled. Stock is informational (R2), so returns add to it.
  */
-export function createReturn(db: Database, actor: Actor, body: ReturnBody, idem: { key: string; hash: string }) {
+export function createReturn(db: Database, actor: Actor, terminal: Terminal, body: ReturnBody, idem: { key: string; hash: string }) {
   return db.tx(async (q) => {
     const replay = await findReplayQ(q, RETURN_SCOPE, idem.key, idem.hash);
     if (replay) return { ...replay, replay: true };
@@ -60,8 +61,8 @@ export function createReturn(db: Database, actor: Actor, body: ReturnBody, idem:
     if (!sale) throw E.notFound('Sale');
     if (sale.status === 'void') throw E.unprocessable('SALE_VOID', 'A voided sale cannot be returned');
 
-    const session = await requireOpenSession(q);
-    const warehouseId = await defaultWarehouseIdQ(q);
+    const session = await requireOpenSession(q, terminal);
+    const warehouseId = await warehouseOf(q, terminal);
 
     // ---- what is being returned, and how much of it can still be returned
     const seen = new Set<number>();

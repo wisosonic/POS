@@ -20,7 +20,8 @@ import { findReplayQ, rememberResponseQ } from '../../util/idempotency';
 import { milliToQty } from '../../util/qty';
 import { writeAuditQ } from '../audit/service';
 import { activeMethods, bumpExpected, requireOpenSession } from '../registers/service';
-import { currentRateQ, defaultWarehouseIdQ, shopSettingsQ, walkInCustomerIdQ } from '../settings/context';
+import { currentRateQ, shopSettingsQ, walkInCustomerIdQ } from '../settings/context';
+import { warehouseOf, type Terminal } from '../terminals/service';
 
 export const SALE_SCOPE = 'POST /sales';
 
@@ -248,15 +249,21 @@ export type CreateSaleResult = { statusCode: number; body: unknown; replay: bool
  * Inside the transaction we only await database calls (the adapter enforces it), and transactions never overlap, so two
  * identical requests cannot interleave: the second finds the first's stored answer.
  */
-export function createSale(db: Database, actor: Actor, body: SaleBody, idem: { key: string; hash: string }): Promise<CreateSaleResult> {
+export function createSale(
+  db: Database,
+  actor: Actor,
+  terminal: Terminal,
+  body: SaleBody,
+  idem: { key: string; hash: string },
+): Promise<CreateSaleResult> {
   return db.tx(async (q): Promise<CreateSaleResult> => {
     const replay = await findReplayQ(q, SALE_SCOPE, idem.key, idem.hash);
     if (replay) return { ...replay, replay: true };
 
-    const session = await requireOpenSession(q);
+    const session = await requireOpenSession(q, terminal);
     const rate = await currentRateQ(q);
     const settings = await shopSettingsQ(q);
-    const warehouseId = await defaultWarehouseIdQ(q);
+    const warehouseId = await warehouseOf(q, terminal);
     const walkInId = await walkInCustomerIdQ(q);
 
     const customerId = body.customerId ?? walkInId;

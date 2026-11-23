@@ -74,7 +74,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
   const db = app.database;
   const manager = { preHandler: app.requireRole('manager') };
 
-  app.post('/services', manager, async (req, reply) => {
+  app.post('/services', { preHandler: [app.requireRole('manager'), app.withTerminal] }, async (req, reply) => {
     const key = requireIdempotencyKey(req);
     const b = parse(createBody, req.body);
     if (b.categoryId && !(await db.one('SELECT 1 FROM service_categories WHERE id = ?', [b.categoryId])))
@@ -88,7 +88,7 @@ export default async function serviceRoutes(app: FastifyInstance) {
       const replay = await findReplayQ(tx, SCOPE, key, hash);
       if (replay) return { ...replay, replay: true };
       // Money received at the till needs an open register; it goes in, in the same transaction as the service is recorded.
-      const session = b.receivedInto ? await requireOpenSession(tx) : null;
+      const session = b.receivedInto ? await requireOpenSession(tx, req.terminal) : null;
       const reference = String(await nextRefQ(tx, 'service_ref'));
       const created = await tx.one<{ id: number }>(
         `INSERT INTO service_sales (category_id, customer_id, user_id, session_id, reference, note, cost_minor, fee_minor, profit_minor, currency)

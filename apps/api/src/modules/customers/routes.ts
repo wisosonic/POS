@@ -154,10 +154,10 @@ export default async function customerRoutes(app: FastifyInstance) {
     return { data: rows.map(saleSummaryJson) };
   });
 
-  app.post('/customers/:id/payments', user, async (req, reply) => {
+  app.post('/customers/:id/payments', { preHandler: [app.authenticate, app.withTerminal] }, async (req, reply) => {
     const key = requireIdempotencyKey(req);
     const body = parse(customerPaymentBody, req.body);
-    const result = await receiveCustomerPayment(db, req.auth, idOf(req), body, { key, hash: hashRequest(req.body) });
+    const result = await receiveCustomerPayment(db, req.auth, req.terminal, idOf(req), body, { key, hash: hashRequest(req.body) });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
     return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
   });

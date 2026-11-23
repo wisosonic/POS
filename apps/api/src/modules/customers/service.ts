@@ -5,6 +5,7 @@ import { E } from '../../errors';
 import { findReplayQ, rememberResponseQ } from '../../util/idempotency';
 import { bumpExpected, requireOpenSession } from '../registers/service';
 import { currentRateQ } from '../settings/context';
+import type { Terminal } from '../terminals/service';
 import type { Actor } from '../sales/service';
 
 export const CUSTOMER_PAYMENT_SCOPE = 'POST /customers/payments';
@@ -49,6 +50,7 @@ export const getCustomer = (q: Queryable, id: number) =>
 export function receiveCustomerPayment(
   db: Database,
   actor: Actor,
+  terminal: Terminal,
   customerId: number,
   body: CustomerPaymentBody,
   idem: { key: string; hash: string },
@@ -61,7 +63,7 @@ export function receiveCustomerPayment(
     if (!customer) throw E.notFound('Customer');
     if (customer.is_walk_in) throw E.unprocessable('WALK_IN_NO_ACCOUNT', 'Walk-In has no account to pay into');
 
-    const session = await requireOpenSession(q);
+    const session = await requireOpenSession(q, terminal);
     const rate = await currentRateQ(q);
     const amountLbp = body.currency === 'LBP' ? body.amount : usdToLbp(body.amount, rate);
     if (amountLbp > customer.balance_lbp) {

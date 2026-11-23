@@ -26,14 +26,16 @@ export async function allBuckets(q: Queryable): Promise<Bucket[]> {
   return (await activeMethods(q)).flatMap((method) => CURRENCIES.map((currency) => ({ method, currency })));
 }
 
-/** The till's open session, if any. There is one till, so there is at most one open session. */
-export function getOpenSession(q: Queryable): Promise<SessionRow | undefined> {
-  return q.one<SessionRow>(`SELECT * FROM register_sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1`);
+/** The open session of one terminal, if any. Each terminal has at most one (a unique index in the database says so). */
+export function getOpenSession(q: Queryable, terminalCode: string): Promise<SessionRow | undefined> {
+  return q.one<SessionRow>(`SELECT * FROM register_sessions WHERE status = 'open' AND terminal_id = ? ORDER BY id DESC LIMIT 1`, [
+    terminalCode,
+  ]);
 }
 
-/** Selling needs an open register (decision table #1). */
-export async function requireOpenSession(q: Queryable): Promise<SessionRow> {
-  const session = await getOpenSession(q);
+/** Selling needs an open register on THIS till (decision table #1). */
+export async function requireOpenSession(q: Queryable, terminal: { code: string }): Promise<SessionRow> {
+  const session = await getOpenSession(q, terminal.code);
   if (!session) throw new AppError(409, 'REGISTER_CLOSED', 'Open the register before selling');
   return session;
 }

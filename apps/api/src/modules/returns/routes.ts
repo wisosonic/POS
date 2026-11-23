@@ -19,10 +19,10 @@ export default async function returnRoutes(app: FastifyInstance) {
   const manager = { preHandler: app.requireRole('manager') };
 
   // A cashier may start a return, but the server refuses it without a manager's approval (RETURN_NEEDS_APPROVAL).
-  app.post('/returns', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/returns', { preHandler: [app.authenticate, app.withTerminal] }, async (req, reply) => {
     const key = requireIdempotencyKey(req);
     const body = parse(returnBody, req.body);
-    const result = await createReturn(db, req.auth, body, { key, hash: hashRequest(req.body) });
+    const result = await createReturn(db, req.auth, req.terminal, body, { key, hash: hashRequest(req.body) });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
     return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
   });

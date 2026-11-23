@@ -23,7 +23,8 @@ const amount = z.number().int().min(0);
 const balanceEntry = z.object({ method: z.string().min(1).max(20), currency, amount });
 
 const openBody = z.object({
-  terminalId: z.string().trim().min(1).max(32).default('T1'),
+  /** Optional: the till is known from its device token. If given, it must be this till's own code. */
+  terminalId: z.string().trim().min(1).max(32).optional(),
   openingBalances: z.array(balanceEntry).max(20),
 });
 const closeBody = z.object({ countedBalances: z.array(balanceEntry).max(20) });
@@ -63,24 +64,27 @@ function completeBalances(entries: { method: string; currency: 'USD' | 'LBP'; am
 export default async function registerRoutes(app: FastifyInstance) {
   const db = app.database;
   const user = { preHandler: app.authenticate };
+  const atTerminal = { preHandler: [app.authenticate, app.withTerminal] };
   const manager = { preHandler: app.requireRole('manager') };
 
   // ---------------------------------------------------------------- open (US-11)
-  app.post('/registers/open', user, async (req, reply) => {
+  app.post('/registers/open', atTerminal, async (req, reply) => {
     // One till: a second session is refused whoever asks, and before the body is even looked at.
-    const existing = await getOpenSession(db);
+    const existing = await getOpenSession(db, req.terminal.code);
     if (existing) throw E.conflict('REGISTER_ALREADY_OPEN', `The register is already open (session ${existing.id})`);
 
     const b = parse(openBody, req.body);
+    if (b.terminalId !== undefined && b.terminalId !== req.terminal.code)
+      throw E.validation(`This device is till "${req.terminal.code}", not "${b.terminalId}"`);
     const buckets = await allBuckets(db);
     const opening = completeBalances(b.openingBalances, buckets, 'openingBalances');
 
     const id = await db.tx(async (tx) => {
       // Checked again inside the transaction: two tills opening at the same moment cannot both get through.
-      const again = await getOpenSession(tx);
+      const again = await getOpenSession(tx, req.terminal.code);
       if (again) throw E.conflict('REGISTER_ALREADY_OPEN', `The register is already open (session ${again.id})`);
       const created = await tx.one<{ id: number }>('INSERT INTO register_sessions (terminal_id, opened_by) VALUES (?, ?) RETURNING id', [
-        b.terminalId,
+        req.terminal.code,
         req.auth.id,
       ]);
       const sessionId = created!.id;
@@ -99,22 +103,26 @@ export default async function registerRoutes(app: FastifyInstance) {
         action: 'register.open',
         entity: 'register',
         entityId: sessionId,
-        after: { terminalId: b.terminalId, opening: Object.fromEntries(opening) },
+        after: { terminalId: req.terminal.code, opening: Object.fromEntries(opening) },
       });
       return sessionId;
     });
     return reply.status(201).send(await sessionJson(db, (await getSession(db, id))!));
   });
 
-  app.get('/registers/current', user, async () => {
-    const s = await getOpenSession(db);
+  app.get('/registers/current', atTerminal, async (req) => {
+    const s = await getOpenSession(db, req.terminal.code);
     if (!s) throw new AppError(404, 'NO_OPEN_REGISTER', 'The register is not open');
     return sessionJson(db, s);
   });
 
   // Pre-fills the opening dialog with what was counted at the last close.
-  app.get('/registers/suggested-opening', user, async () => {
-    const last = await db.one<{ id: number }>(`SELECT id FROM register_sessions WHERE status = 'closed' ORDER BY id DESC LIMIT 1`);
+  app.get('/registers/suggested-opening', atTerminal, async (req) => {
+    // What THIS till counted when it last closed: each till has its own drawer.
+    const last = await db.one<{ id: number }>(
+      `SELECT id FROM register_sessions WHERE status = 'closed' AND terminal_id = ? ORDER BY id DESC LIMIT 1`,
+      [req.terminal.code],
+    );
     const counted = new Map<string, number>();
     if (last) {
       for (const r of await db.all<Bucket & { counted: number | null }>(

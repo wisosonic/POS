@@ -25,11 +25,12 @@ const listQuery = z.object({
 export default async function saleRoutes(app: FastifyInstance) {
   const db = app.database;
   const user = { preHandler: app.authenticate };
+  const withTerminal = { preHandler: [app.authenticate, app.withTerminal] };
 
-  app.post('/sales', user, async (req, reply) => {
+  app.post('/sales', withTerminal, async (req, reply) => {
     const key = requireIdempotencyKey(req);
     const body = parse(saleBody, req.body);
-    const result = await createSale(db, req.auth, body, { key, hash: hashRequest(req.body) });
+    const result = await createSale(db, req.auth, req.terminal, body, { key, hash: hashRequest(req.body) });
     if (result.replay) void reply.header('Idempotent-Replay', 'true');
     return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
   });

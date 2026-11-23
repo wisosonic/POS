@@ -61,7 +61,7 @@ export default async function expenseRoutes(app: FastifyInstance) {
   const db = app.database;
   const manager = { preHandler: app.requireRole('manager') };
 
-  app.post('/expenses', manager, async (req, reply) => {
+  app.post('/expenses', { preHandler: [app.requireRole('manager'), app.withTerminal] }, async (req, reply) => {
     const b = parse(createBody, req.body);
     if (b.categoryId && !(await db.one('SELECT 1 FROM expense_categories WHERE id = ?', [b.categoryId])))
       throw E.unprocessable('INVALID_REFERENCE', 'That expense category does not exist');
@@ -69,7 +69,7 @@ export default async function expenseRoutes(app: FastifyInstance) {
 
     const id = await db.tx(async (tx) => {
       // Paying from the drawer needs an open register; the money leaves it in the same transaction as the expense is recorded.
-      const session = b.payFrom ? await requireOpenSession(tx) : null;
+      const session = b.payFrom ? await requireOpenSession(tx, req.terminal) : null;
       const created = await tx.one<{ id: number }>(
         `INSERT INTO expenses (category_id, session_id, title, reference, note, amount_minor, currency) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         [b.categoryId ?? null, session?.id ?? null, b.title, b.reference, b.note ?? null, b.amountMinor, b.currency],

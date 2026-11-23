@@ -6,6 +6,7 @@ import type { BackupService } from '../backup/service';
 import type { Database } from '../db/adapter';
 import type { Db } from '../db/open';
 import type { ReceiptPrinter } from '../modules/printing/driver';
+import type { Terminal } from '../modules/terminals/service';
 import { AppError, E } from '../errors';
 import { hasRole, type Role } from './permissions';
 
@@ -35,11 +36,15 @@ declare module 'fastify' {
     registeredRoutes: { method: string; url: string }[];
     /** preHandler: require a valid access token. Sets `request.auth`. */
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /** preHandler (after `authenticate`): work out which terminal sent this request and set `request.terminal`. */
+    withTerminal: (req: FastifyRequest) => Promise<void>;
     /** preHandler factory: require at least this role. */
     requireRole: (minimum: Role) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
   interface FastifyRequest {
     auth: AuthUser;
+    /** The till this request came from. Set by the `withTerminal` preHandler. */
+    terminal: Terminal;
   }
 }
 

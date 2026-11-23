@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { existsSync, readFileSync } from 'node:fs';
@@ -29,6 +29,8 @@ import registerRoutes from './modules/registers/routes';
 import reportRoutes from './modules/reports/routes';
 import saleRoutes from './modules/sales/routes';
 import rateRoutes from './modules/settings/rates';
+import terminalRoutes from './modules/terminals/routes';
+import { TERMINAL_HEADER, resolveTerminal, type Terminal } from './modules/terminals/service';
 import settingsRoutes from './modules/settings/routes';
 import userRoutes from './modules/users/routes';
 
@@ -145,6 +147,12 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   await app.register(authPlugin, { db, jwtSecret: config.jwtSecret });
   app.decorate('dbPath', resolve(options.databasePath));
   app.decorate('database', createSqliteDatabase(db));
+  // Which till sent this request (docs/11 §3.4). Routes that need a register session or a warehouse use it as a preHandler.
+  app.decorateRequest('terminal', undefined as unknown as Terminal);
+  app.decorate('withTerminal', async (req: FastifyRequest) => {
+    const raw = req.headers[TERMINAL_HEADER];
+    req.terminal = await resolveTerminal(app.database, typeof raw === 'string' && raw ? raw : undefined);
+  });
   app.decorate('requestRestart', options.restart ?? (() => undefined));
   app.decorate('printer', options.printer ?? windowsSpoolerPrinter);
   app.decorate(
@@ -188,6 +196,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(serviceRoutes);
       await api.register(rateRoutes);
       await api.register(customerRoutes);
+      await api.register(terminalRoutes);
       await api.register(registerRoutes);
       await api.register(saleRoutes);
       await api.register(returnRoutes);
