@@ -213,6 +213,25 @@ Invariants (tested after every kind of change): `balanceLbp` = sum of `restLbp` 
 | `GET /reports/payables` | Every ordered or received purchase not fully paid, oldest first, with `owedMinor` and `totalOwed: { USD, LBP }` |
 | Any report | `&format=csv` |
 
+### Print agent (receipt printer on the till's own PC)
+When the server is not on the till PC it cannot reach the USB printer. A small **print agent** (`npm run print-agent -w @pos/api`, `apps/api/src/agent/agent.ts`) runs on the till PC, **connects out** to the server, asks for its terminal's print jobs, prints them and says whether they reached the printer. Nothing listens on the till PC. A terminal has `printMode`: `server` (the server prints on its own printer, today's shop) or `agent`. The server still builds every receipt and decides what is a duplicate and whether the drawer opens (CLAUDE.md "A reprint is not a sale"); the agent only prints what it is given.
+
+The agent has **its own credential**, separate from the till browser's token: an admin asks for a one-time code, the agent trades it for a token, and sends it as `X-Agent-Token`. A user's sign-in opens nothing here, and the agent can do nothing except fetch and report its own terminal's jobs.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/terminals/{id}/agent-code` | admin | `{ agentCode, expiresAt }`: a one-time code (`XXXXX-XXXXX`, 30 minutes) for the agent on this till's PC. Audited |
+| POST | `/agent/enrol` | **open, rate limited** | `{ code }` → `{ token, terminal: { code, name } }`. The token is shown once. Single use. `422 ENROL_CODE_INVALID`. The only open door besides sign-in (listed on purpose in `tests/integration/security.test.ts`) |
+| POST | `/terminals/{id}/agent-revoke` | admin | `204`. The agent's token stops working at once |
+| PATCH | `/terminals/{id}` | admin | now also `{ printMode: "server"\|"agent" }` |
+| GET | `/agent/jobs?wait=<0-25>` | agent | **Long poll.** `{ jobs: [{ id, kind, saleId, duplicate, drawer, bytes (base64 ESC/POS) }] }`, oldest first, up to 3. Answers at once when there are jobs, otherwise waits up to `wait` seconds for one (a queued receipt wakes it; a hang-up ends the wait without taking a job). Marks the jobs `sent`. `401 AGENT_UNKNOWN` |
+| POST | `/agent/jobs/{id}/result` | agent | `{ ok, error? }` → `{ status }`. Only this terminal's job, settled once (saying it again changes nothing). A print that reached the printer is audited as `sale.print` (`via: "agent"`); a failed one is not |
+| POST | `/sales/{id}/print` | cashier | in `agent` mode answers **`202 { queued: true, jobId, jobIds, copies, duplicate }`** instead of printing; one job per copy, the first may open the drawer. A print still on its way counts as "before", so a second click is a duplicate, never a second original |
+| GET | `/print-jobs/{id}` | cashier | `{ status: "queued"\|"sent"\|"printed"\|"failed"\|"cancelled"\|"expired", error }`, for this till's own jobs (`404` otherwise). The till shows "printed", or offers Retry / browser print |
+| POST | `/print-jobs/{id}/cancel` | cashier | Cancels a job still `queued` (so it cannot print later on top of a browser print); a job the agent already took keeps its status |
+
+Job rules (`modules/printing/jobs.ts`): a job nobody picks up in 10 minutes **expires**; a job handed out and not answered for 60 seconds is offered again, up to 3 attempts, then **fails** ("The print agent did not answer"); the agent never prints a job id twice, only reports it again; finished jobs (they hold a receipt) are cleared after 48 hours. Errors: `AGENT_UNKNOWN` (401).
+
 ### Settings & admin
 | Method | Path | Role | Description |
 |---|---|---|---|

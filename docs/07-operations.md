@@ -47,6 +47,18 @@ To remove it: `install-service.ps1 -Uninstall`. Your data and backups are left a
 
 The server runs as the SYSTEM account, which can only use printers installed **for all users**. Install the USB printer from Windows' "Printers & scanners" as a local printer, then sign in as the admin and open **Menu → Settings**. Type the printer's exact name, set the receipt width (42 for an 80 mm printer, 32 for 58 mm), press **Save settings**, then **Print a test slip**. The slip shows the shop header, a long item name that wraps, an Arabic name (it must come out as readable English letters), and a ruler as wide as the receipt, so you can see at once whether the printer cuts the line off. Tick "Also open the cash drawer" to test the drawer. If the slip prints when you are signed in at the PC but not from the server, the printer is not installed for all users.
 
+### A print agent (the printer is on another PC than the server)
+
+Skip this if the receipt printer is on the same PC as the server (the shop as it was). When a till is a different PC from the server, the server cannot reach that PC's USB printer, so that till runs a **print agent**. It connects out to the server (nothing is opened on the till PC), prints the till's receipts and says whether each came out. The cash drawer pulse and the DUPLICATE rule still come from the server.
+
+1. Install the USB printer in Windows on the till PC as an ordinary local printer, and note its exact name.
+2. As the admin: **Menu → Settings → Tills**, find the till, press **Use a print agent**, then **Agent code**. The page shows the one-time command (valid 30 minutes, works once).
+3. On the till PC, in the project folder, run the command shown: `npm run print-agent -w @pos/api -- enrol --server http://<server address>:3000 --code XXXXX-XXXXX --printer "<printer name>"`. It saves `agent.json` (the agent's token and the printer name). **Keep that file private**: whoever has it can fetch that till's receipts.
+4. Start it: `npm run print-agent -w @pos/api -- run`, and make it start with the PC (a Windows scheduled task at log-on, like the server's). It keeps retrying if the server is away, and stops with a clear message if the admin disconnected it (then ask for a new code).
+5. Settings → Tills shows **Print agent: online** while it is running. Sell something and check the receipt comes out and the drawer opens on the first print.
+
+If the agent is off or the printer PC is down, the till waits about 15 seconds, then offers **Retry** and **Print in browser**; the waiting job is cancelled so it cannot print later on top of a browser print. For an https server with its own certificate, set `NODE_EXTRA_CA_CERTS` to the certificate file on the till PC. **This has not been run against a real printer yet** (see "What has not been run").
+
 ### The exchange rate
 
 Every sale uses the rate in force when it is made, and old sales keep theirs forever. The admin sets it at **Menu → Exchange rate** (or by pressing the `1$ = ... LL` chip at the top of the screen). Do this first thing each day the rate moves. A new rate that differs from the old one by more than 10% asks "Is that right?" first, because an extra zero is the usual mistake. A rate can also be set to start later.

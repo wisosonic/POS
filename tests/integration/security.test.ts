@@ -36,6 +36,8 @@ describe('every route asks for a sign-in', () => {
     'POST /api/v1/auth/pin',
     'POST /api/v1/auth/refresh',
     'POST /api/v1/auth/logout',
+    // The print agent trades its one-time code (about 49 bits, single use, 30 minutes, rate limited) for its token: a sign-in of its own.
+    'POST /api/v1/agent/enrol',
   ]);
   const real = () => c.routes.filter((r) => r.url.startsWith(api) && !['HEAD', 'OPTIONS'].includes(r.method));
   const concrete = (url: string) => url.replace(/:\w+/g, '1');

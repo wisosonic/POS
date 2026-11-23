@@ -6,6 +6,7 @@ import type { Param } from '../../db/adapter';
 import { AppError, E } from '../../errors';
 import { writeAuditQ } from '../audit/service';
 import { PrinterError } from '../printing/driver';
+import { enqueueReceipt, pendingForSale, wakeAgent } from '../printing/jobs';
 import { hashRequest, requireIdempotencyKey } from '../../util/idempotency';
 import { parse } from '../../util/validate';
 import { createSale, getSale, receiptFor, saleBody, saleJson, saleSummaryJson, type SaleRow } from './service';
@@ -131,7 +132,7 @@ export default async function saleRoutes(app: FastifyInstance) {
 
   // Print on the USB receipt printer. The sale is already saved, so a failure here is only a 503 for the till to show
   // ("Retry" / "Use browser print"); it never touches the sale.
-  app.post('/sales/:id/print', user, async (req) => {
+  app.post('/sales/:id/print', withTerminal, async (req, reply) => {
     const s = await getSale(db, Number((req.params as { id: string }).id));
     if (!s) throw E.notFound('Sale');
     const body = parse(
@@ -148,15 +149,19 @@ export default async function saleRoutes(app: FastifyInstance) {
     const store = (await db.one<{ printer_name: string | null; receipt_width: number }>(
       'SELECT printer_name, receipt_width FROM store_settings WHERE id = 1',
     ))!;
-    if (!store.printer_name?.trim()) throw new AppError(503, 'PRINTER_NOT_CONFIGURED', 'No receipt printer is set up. Use browser print.');
+    // A till with a print agent has its printer on its own PC: the server holds no printer name for it.
+    const viaAgent = req.terminal.printMode === 'agent';
+    if (!viaAgent && !store.printer_name?.trim())
+      throw new AppError(503, 'PRINTER_NOT_CONFIGURED', 'No receipt printer is set up. Use browser print.');
 
     // A sale that has already been printed once, or that the till says is a reprint, prints as a DUPLICATE. Only prints that
-    // actually reached the printer count, so a first print that failed is still the first.
+    // actually reached the printer count, so a first print that failed is still the first. A print still on its way to the printer
+    // (queued for the agent) counts too: a second click must not become a second "original" that opens the drawer again.
     const printedBefore = (await db.one<{ n: number }>(
       "SELECT count(*) AS n FROM audit_log WHERE action = 'sale.print' AND entity_id = ?",
       [String(s.id)],
     ))!.n;
-    const duplicate = body.duplicate === true || printedBefore > 0;
+    const duplicate = body.duplicate === true || printedBefore > 0 || (viaAgent && (await pendingForSale(db, s.id)) > 0);
 
     // The drawer opens on the first print of a sale that took cash, and never on a reprint: a reprint is not a sale, so it must
     // not be a way to open the drawer.
@@ -166,8 +171,20 @@ export default async function saleRoutes(app: FastifyInstance) {
     const receipt = { ...(await receiptFor(db, s)), duplicate };
     const first = buildEscPos(receipt, { width: store.receipt_width, openDrawer });
     const rest = buildEscPos(receipt, { width: store.receipt_width });
+    if (viaAgent) {
+      // Queued, not printed yet: the agent prints it and reports back, and only then is it audited. The copies are separate jobs so
+      // the first (the one that may open the drawer) is always first.
+      const jobs = Array.from({ length: body.copies }, (_, i) => ({
+        bytes: i === 0 ? first : rest,
+        duplicate,
+        drawer: i === 0 && openDrawer,
+      }));
+      const ids = await db.tx((tx) => enqueueReceipt(tx, { terminalId: req.terminal.id, userId: req.auth.id, saleId: s.id, jobs }));
+      wakeAgent(req.terminal.id);
+      return reply.status(202).send({ queued: true, jobId: ids[0], jobIds: ids, copies: body.copies, duplicate });
+    }
     try {
-      for (let i = 0; i < body.copies; i++) await app.printer.print(i === 0 ? first : rest, store.printer_name);
+      for (let i = 0; i < body.copies; i++) await app.printer.print(i === 0 ? first : rest, store.printer_name!);
     } catch (e) {
       if (e instanceof PrinterError) throw new AppError(503, e.code, e.message);
       throw e;

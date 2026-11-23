@@ -37,10 +37,25 @@ type TerminalRow = {
   enrolled_at: string | null;
   active: number;
   created_at: string;
+  print_mode: 'server' | 'agent';
+  agent_token_hash: string | null;
+  agent_enrol_hash: string | null;
+  agent_enrol_expires_at: string | null;
+  agent_seen_at: string | null;
 };
 
+export type PrintMode = 'server' | 'agent';
+
 /** What a request handler needs to know about the till it came from. */
-export type Terminal = { id: number; code: string; name: string; branchId: number; warehouseId: number | null };
+export type Terminal = {
+  id: number;
+  code: string;
+  name: string;
+  branchId: number;
+  warehouseId: number | null;
+  /** `server`: the server prints on its own printer. `agent`: receipts are queued for the print agent on the till PC. */
+  printMode: PrintMode;
+};
 
 const toTerminal = (r: TerminalRow): Terminal => ({
   id: r.id,
@@ -48,7 +63,11 @@ const toTerminal = (r: TerminalRow): Terminal => ({
   name: r.name,
   branchId: r.branch_id,
   warehouseId: r.warehouse_id,
+  printMode: r.print_mode,
 });
+
+/** An agent that has not asked for work in this long is shown as offline. (It asks at least every 30 seconds.) */
+export const AGENT_ONLINE_SECONDS = 75;
 
 /**
  * Which terminal sent this request.
@@ -95,6 +114,8 @@ export type TerminalListItem = {
   enrolledAt: string | null;
   enrolPending: boolean;
   openSessionId: number | null;
+  printMode: PrintMode;
+  agent: { enrolled: boolean; pending: boolean; online: boolean; seenAt: string | null };
 };
 
 export async function listTerminals(q: Queryable): Promise<TerminalListItem[]> {
@@ -115,6 +136,13 @@ export async function listTerminals(q: Queryable): Promise<TerminalListItem[]> {
     enrolledAt: r.enrolled_at,
     enrolPending: r.enrol_hash !== null && r.enrol_expires_at !== null && r.enrol_expires_at > now,
     openSessionId: r.open_session,
+    printMode: r.print_mode,
+    agent: {
+      enrolled: r.agent_token_hash !== null,
+      pending: r.agent_enrol_hash !== null && r.agent_enrol_expires_at !== null && r.agent_enrol_expires_at > now,
+      online: r.agent_seen_at !== null && Date.parse(r.agent_seen_at) > Date.now() - AGENT_ONLINE_SECONDS * 1000,
+      seenAt: r.agent_seen_at,
+    },
   }));
 }
 
@@ -151,7 +179,14 @@ export async function createTerminal(
     after: { code, name: input.name },
   });
   return {
-    terminal: { id: created!.id, code, name: input.name, branchId: branch.id, warehouseId: input.warehouseId ?? null },
+    terminal: {
+      id: created!.id,
+      code,
+      name: input.name,
+      branchId: branch.id,
+      warehouseId: input.warehouseId ?? null,
+      printMode: 'server',
+    },
     enrolCode,
     expiresAt,
   };
@@ -191,7 +226,76 @@ export async function revokeTerminal(q: Queryable, actorId: number, id: number):
   await writeAuditQ(q, { userId: actorId, action: 'terminal.revoke', entity: 'terminal', entityId: id });
 }
 
-export async function updateTerminal(q: Queryable, actorId: number, id: number, patch: { name?: string; active?: boolean }): Promise<void> {
+// ------------------------------------------------------------------ the print agent's own credential
+// Same idea as a till's enrolment (a one-time code becomes a long-lived token, only hashes stored), but a separate credential in
+// separate columns: a code for a till's browser can never enrol an agent, and the agent can do nothing except fetch and report its
+// own terminal's print jobs.
+
+/** The header the print agent sends with every request. */
+export const AGENT_HEADER = 'x-agent-token';
+
+export async function newAgentCodeFor(q: Queryable, actorId: number, id: number): Promise<{ code: string; expiresAt: string }> {
+  const t = await q.one<TerminalRow>('SELECT * FROM terminals WHERE id = ?', [id]);
+  if (!t) throw E.notFound('Terminal');
+  if (!t.active) throw E.unprocessable('TERMINAL_INACTIVE', 'This terminal is switched off');
+  const code = newEnrolCode();
+  const expiresAt = new Date(Date.now() + ENROL_CODE_MINUTES * 60_000).toISOString();
+  await q.run('UPDATE terminals SET agent_enrol_hash = ?, agent_enrol_expires_at = ? WHERE id = ?', [
+    sha256(normaliseCode(code)),
+    expiresAt,
+    id,
+  ]);
+  await writeAuditQ(q, { userId: actorId, action: 'terminal.agent-code', entity: 'terminal', entityId: id });
+  return { code, expiresAt };
+}
+
+/** The print agent trades its one-time code for its token (shown once). Replaces any token it had. */
+export async function enrolAgent(q: Queryable, code: string): Promise<{ token: string; terminal: Terminal }> {
+  const row = await q.one<TerminalRow>('SELECT * FROM terminals WHERE agent_enrol_hash = ? AND active = 1', [sha256(normaliseCode(code))]);
+  if (!row || !row.agent_enrol_expires_at || row.agent_enrol_expires_at <= nowIso())
+    throw new AppError(422, 'ENROL_CODE_INVALID', 'That code is wrong, already used or has expired. Ask for a new one.');
+  const token = randomBytes(32).toString('base64url');
+  await q.run('UPDATE terminals SET agent_token_hash = ?, agent_enrol_hash = NULL, agent_enrol_expires_at = NULL WHERE id = ?', [
+    sha256(token),
+    row.id,
+  ]);
+  await writeAuditQ(q, { userId: null, action: 'terminal.agent-enrol', entity: 'terminal', entityId: row.id, after: { code: row.code } });
+  return { token, terminal: toTerminal(row) };
+}
+
+export async function revokeAgent(q: Queryable, actorId: number, id: number): Promise<void> {
+  const r = await q.run(
+    'UPDATE terminals SET agent_token_hash = NULL, agent_enrol_hash = NULL, agent_enrol_expires_at = NULL WHERE id = ?',
+    [id],
+  );
+  if (r.changes === 0) throw E.notFound('Terminal');
+  await writeAuditQ(q, { userId: actorId, action: 'terminal.agent-revoke', entity: 'terminal', entityId: id });
+}
+
+/** Which terminal does this agent token belong to? Strict: there is no fallback without a token. */
+export async function resolveAgent(q: Queryable, token: string | undefined): Promise<Terminal> {
+  const row = token
+    ? await q.one<TerminalRow>('SELECT * FROM terminals WHERE agent_token_hash = ? AND active = 1', [sha256(token)])
+    : undefined;
+  if (!row)
+    throw new AppError(
+      401,
+      'AGENT_UNKNOWN',
+      'This print agent is not registered (or its till was switched off). Ask the admin for a new code.',
+    );
+  return toTerminal(row);
+}
+
+export async function markAgentSeen(q: Queryable, terminalId: number): Promise<void> {
+  await q.run('UPDATE terminals SET agent_seen_at = ? WHERE id = ?', [nowIso(), terminalId]);
+}
+
+export async function updateTerminal(
+  q: Queryable,
+  actorId: number,
+  id: number,
+  patch: { name?: string; active?: boolean; printMode?: PrintMode },
+): Promise<void> {
   const t = await q.one<TerminalRow>('SELECT * FROM terminals WHERE id = ?', [id]);
   if (!t) throw E.notFound('Terminal');
   if (patch.active === false && t.active === 1) {
@@ -210,13 +314,17 @@ export async function updateTerminal(q: Queryable, actorId: number, id: number, 
     sets.push('active = ?');
     vals.push(patch.active ? 1 : 0);
   }
+  if (patch.printMode !== undefined) {
+    sets.push('print_mode = ?');
+    vals.push(patch.printMode);
+  }
   if (sets.length) await q.run(`UPDATE terminals SET ${sets.join(', ')} WHERE id = ?`, [...vals, id]);
   await writeAuditQ(q, {
     userId: actorId,
     action: 'terminal.update',
     entity: 'terminal',
     entityId: id,
-    before: { name: t.name, active: t.active === 1 },
+    before: { name: t.name, active: t.active === 1, printMode: t.print_mode },
     after: patch,
   });
 }

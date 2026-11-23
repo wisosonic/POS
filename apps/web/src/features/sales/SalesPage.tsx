@@ -2,7 +2,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../../components/Modal';
-import { useSettings } from '../../hooks/useTillData';
+import { usePrinterAvailable } from '../../hooks/useTillData';
 import { ApiError, api, get, post } from '../../lib/api';
 import { fmtLbp, fmtUsd } from '../../lib/money';
 import { outbox, type Queued } from '../../lib/outbox';
@@ -356,7 +356,7 @@ function DiscardDialog({ item, onClose, onDone }: { item: Queued; onClose: () =>
 
 function SaleDialog({ sale, onClose }: { sale: SaleListItem; onClose: () => void }) {
   const navigate = useNavigate();
-  const settings = useSettings().data;
+  const printerAvailable = usePrinterAvailable();
   const receipt = useQuery({ queryKey: ['receipt', sale.id], queryFn: () => api<string>('GET', `/sales/${sale.id}/receipt?format=text`) });
   const detail = useQuery({ queryKey: ['sale', sale.id], queryFn: () => get<SaleDetail>(`/sales/${sale.id}`) });
   const [printing, setPrinting] = useState<'idle' | 'busy' | 'done'>('idle');
@@ -439,7 +439,7 @@ function SaleDialog({ sale, onClose }: { sale: SaleListItem; onClose: () => void
             <Icon name="print" size={18} />
             Print in browser
           </button>
-          {settings?.printerConfigured && (
+          {printerAvailable && (
             <button className="btn primary" disabled={printing === 'busy'} onClick={() => void printAgain()}>
               <Icon name="print" size={18} />
               {printing === 'done' ? 'Printed. Print again' : 'Print again'}

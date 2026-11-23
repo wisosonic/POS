@@ -54,6 +54,8 @@ export type TerminalMe = {
   name: string;
   branchId: number;
   warehouseId: number | null;
+  /** `server`: the server prints on its own printer. `agent`: receipts are queued for the print agent on this PC. */
+  printMode: 'server' | 'agent';
   openSessionId: number | null;
 };
 
@@ -73,3 +75,10 @@ export function useTerminal() {
 /** True when the server says this device is not a till (no usable token and more than one till exists). */
 export const isNotATill = (error: unknown) =>
   error instanceof ApiError && (error.code === 'TERMINAL_REQUIRED' || error.code === 'TERMINAL_UNKNOWN');
+
+/** Can this till print a receipt on a receipt printer? Either the server has one (a one-till shop) or this till has a print agent. */
+export function usePrinterAvailable(): boolean {
+  const settings = useSettings().data;
+  const terminal = useTerminal().data;
+  return settings?.printerConfigured === true || terminal?.printMode === 'agent';
+}

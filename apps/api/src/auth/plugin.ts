@@ -38,6 +38,8 @@ declare module 'fastify' {
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
     /** preHandler (after `authenticate`): work out which terminal sent this request and set `request.terminal`. */
     withTerminal: (req: FastifyRequest) => Promise<void>;
+    /** preHandler for the print agent's routes: sign in with `X-Agent-Token` and set `request.terminal`. Never a user. */
+    agentOnly: (req: FastifyRequest) => Promise<void>;
     /** preHandler factory: require at least this role. */
     requireRole: (minimum: Role) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }

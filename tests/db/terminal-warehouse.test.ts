@@ -50,8 +50,8 @@ beforeEach(async () => {
           .run(id, method, currency);
   }
   // Both tills are known, so a terminal is chosen by its code here (the HTTP layer does this with the device token).
-  t1 = { id: 1, code: 'T1', name: 'Till 1', branchId: 1, warehouseId: null };
-  t2 = { id: 2, code: 'T2', name: 'Till 2', branchId: 1, warehouseId: 2 };
+  t1 = { id: 1, code: 'T1', name: 'Till 1', branchId: 1, warehouseId: null, printMode: 'server' };
+  t2 = { id: 2, code: 'T2', name: 'Till 2', branchId: 1, warehouseId: 2, printMode: 'server' };
 });
 afterEach(() => {
   raw.close();

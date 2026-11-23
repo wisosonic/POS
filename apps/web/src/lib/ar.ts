@@ -278,4 +278,22 @@ export const AR: Record<string, string> = {
   'Go to the list of tills': 'الانتقال إلى قائمة الصناديق',
   'Ask the admin to set it up (Settings → Tills), or sign in as the admin on this computer.':
     'اطلب من المدير إعداده (الإعدادات ← الصناديق) أو سجّل الدخول كمدير على هذا الجهاز.',
+
+  // ---- the print agent (receipt printer on the till's own PC)
+  Receipts: 'الإيصالات',
+  'Printed by the server': 'تُطبع من الخادم',
+  'Print agent: waiting for its code': 'وكيل الطباعة: بانتظار الرمز',
+  'Print agent: not set up': 'وكيل الطباعة: غير مُعدّ',
+  'Print agent: online': 'وكيل الطباعة: متصل',
+  'Print agent: offline': 'وكيل الطباعة: غير متصل',
+  'Print on the server': 'الطباعة من الخادم',
+  'Use a print agent': 'استخدام وكيل طباعة',
+  'Agent code': 'رمز الوكيل',
+  'Disconnect the agent': 'فصل وكيل الطباعة',
+  'The print agent of {name} will stop printing until it is set up again. Continue?':
+    'سيتوقف وكيل الطباعة الخاص بـ {name} عن الطباعة حتى يُعدّ من جديد. هل تريد المتابعة؟',
+  'On the computer with the receipt printer, run the print agent with this code:':
+    'على الجهاز المتصل بطابعة الإيصالات، شغّل وكيل الطباعة بهذا الرمز:',
+  'Then start it with "npm run print-agent -w @pos/api -- run". The printer name is its name in Windows.':
+    'ثم شغّله بالأمر "npm run print-agent -w @pos/api -- run". اسم الطابعة هو اسمها في ويندوز.',
 };

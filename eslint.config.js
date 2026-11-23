@@ -31,8 +31,8 @@ export default tseslint.config(
     languageOptions: { globals: { __ENV: 'readonly', __VU: 'readonly' } },
   },
   {
-    // The load test is a command-line tool: printing its progress is its job.
-    files: ['tests/load/**/*.ts'],
+    // The load test and the print agent are command-line tools: printing their progress is their job.
+    files: ['tests/load/**/*.ts', 'apps/api/src/cli/print-agent.ts'],
     rules: { 'no-console': 'off' },
   },
   {

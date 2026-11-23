@@ -1,8 +1,53 @@
-import { ApiError, api, post } from './api';
+import { ApiError, api, get, post } from './api';
 
-/** Send the receipt to the USB printer through the server. Rejects with an ApiError the till shows as "Retry". */
-export const printOnPrinter = (saleId: number, duplicate = false): Promise<void> =>
-  post(`/sales/${saleId}/print`, duplicate ? { duplicate: true } : {}).then(() => undefined);
+type JobState = { status: 'queued' | 'sent' | 'printed' | 'failed' | 'cancelled' | 'expired'; error: string | null };
+export type JobDeps = {
+  job: (id: number) => Promise<JobState>;
+  cancel: (id: number) => Promise<JobState>;
+  sleep: (ms: number) => Promise<void>;
+  now: () => number;
+};
+const realDeps: JobDeps = {
+  job: (id) => get<JobState>(`/print-jobs/${id}`),
+  cancel: (id) => post<JobState>(`/print-jobs/${id}/cancel`),
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  now: () => Date.now(),
+};
+
+/**
+ * Wait for a receipt queued for this till's print agent to come out of the printer. Resolves when it printed; rejects with an ApiError
+ * (shown as "Retry" / "Use browser print") when it failed, or when the printer's computer does not answer in `waitMs`. In that case
+ * the queued job is cancelled first, so it cannot print later on top of a browser print. A job the agent has already taken is given a
+ * few more seconds, because it is about to print.
+ */
+export async function waitForPrintJob(id: number, deps: JobDeps = realDeps, waitMs = 15_000, graceMs = 8_000): Promise<void> {
+  let deadline = deps.now() + waitMs;
+  let cancelled = false;
+  for (;;) {
+    const job = await deps.job(id);
+    if (job.status === 'printed') return;
+    if (job.status === 'failed' || job.status === 'cancelled' || job.status === 'expired')
+      throw new ApiError(503, 'PRINTER_OFFLINE', job.error ?? 'The printer did not print');
+    if (deps.now() >= deadline) {
+      if (cancelled) throw new ApiError(503, 'PRINTER_OFFLINE', 'The computer with the printer is not answering');
+      cancelled = true;
+      const after = await deps.cancel(id);
+      if (after.status === 'printed') return;
+      if (after.status !== 'sent') throw new ApiError(503, 'PRINTER_OFFLINE', 'The computer with the printer is not answering');
+      deadline = deps.now() + graceMs; // already with the agent: a few more seconds
+    }
+    await deps.sleep(700);
+  }
+}
+
+/**
+ * Send the receipt to the receipt printer through the server. With a print agent on this till the server only queues it (202) and
+ * this waits until it has really printed. Rejects with an ApiError the till shows as "Retry".
+ */
+export async function printOnPrinter(saleId: number, duplicate = false): Promise<void> {
+  const res = await post<{ queued?: boolean; jobId?: number }>(`/sales/${saleId}/print`, duplicate ? { duplicate: true } : {});
+  if (res.queued && res.jobId !== undefined) await waitForPrintJob(res.jobId);
+}
 
 /**
  * Print through the browser's print dialog, in the 42-column receipt layout. The fallback for when the USB printer is not

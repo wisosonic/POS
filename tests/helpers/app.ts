@@ -11,6 +11,8 @@ import type { ReceiptPrinter } from '../../apps/api/src/modules/printing/driver'
 
 export type TestCtx = {
   http: ReturnType<typeof request>;
+  /** The address the test server listens on, for a test that needs a real client (the print agent). */
+  url: string;
   seed: Seed;
   /** The throwaway database file, for tests that need to look inside (open it read-only). */
   databasePath: string;
@@ -50,11 +52,14 @@ export async function startCtx(
   // built before an `await` (it closes the server under them).
   await app.listen({ host: '127.0.0.1', port: 0 });
   const http = request(app.server);
+  const address = app.server.address();
+  const url = typeof address === 'object' && address ? `http://127.0.0.1:${address.port}` : '';
 
   return {
     http,
     seed,
     databasePath,
+    url,
     routes: app.registeredRoutes,
     async login(role) {
       const u = seed.users[role];

@@ -17,9 +17,11 @@ type TerminalRow = {
   enrolled: boolean;
   enrolPending: boolean;
   openSessionId: number | null;
+  printMode: 'server' | 'agent';
+  agent: { enrolled: boolean; pending: boolean; online: boolean };
 };
 
-type ShownCode = { name: string; code: string; expiresAt: string };
+type ShownCode = { name: string; code: string; expiresAt: string; kind?: 'till' | 'agent' };
 
 /**
  * The tills of this branch. Each till (a browser on a PC or tablet) has its own register. To add one: give it a name here, take the
@@ -29,7 +31,11 @@ export function TerminalsPage() {
   const t = useT();
   const queryClient = useQueryClient();
   const me = useTerminal();
-  const list = useQuery({ queryKey: ['terminals'], queryFn: () => get<{ data: TerminalRow[] }>('/terminals').then((r) => r.data) });
+  const list = useQuery({
+    queryKey: ['terminals'],
+    queryFn: () => get<{ data: TerminalRow[] }>('/terminals').then((r) => r.data),
+    refetchInterval: 15_000, // so an agent coming online or going offline shows without a reload
+  });
   const rows = list.data ?? [];
   const [adding, setAdding] = useState(false);
   const [shown, setShown] = useState<ShownCode | null>(null);
@@ -43,6 +49,45 @@ export function TerminalsPage() {
     try {
       const r = await post<{ enrolCode: string; expiresAt: string }>(`/terminals/${row.id}/enrol-code`);
       setShown({ name: row.name, code: r.enrolCode, expiresAt: r.expiresAt });
+      await refresh();
+    } catch (err) {
+      fail(err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function newAgentCode(row: TerminalRow) {
+    setBusyId(row.id);
+    try {
+      const r = await post<{ agentCode: string; expiresAt: string }>(`/terminals/${row.id}/agent-code`);
+      setShown({ name: row.name, code: r.agentCode, expiresAt: r.expiresAt, kind: 'agent' });
+      await refresh();
+    } catch (err) {
+      fail(err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function setPrintMode(row: TerminalRow, printMode: 'server' | 'agent') {
+    setBusyId(row.id);
+    try {
+      await patch(`/terminals/${row.id}`, { printMode });
+      await queryClient.invalidateQueries({ queryKey: ['terminal'] }); // this computer's own mode may have changed
+      await refresh();
+    } catch (err) {
+      fail(err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function revokeAgent(row: TerminalRow) {
+    if (!window.confirm(t('The print agent of {name} will stop printing until it is set up again. Continue?', { name: row.name }))) return;
+    setBusyId(row.id);
+    try {
+      await post(`/terminals/${row.id}/agent-revoke`);
       await refresh();
     } catch (err) {
       fail(err);
@@ -125,6 +170,7 @@ export function TerminalsPage() {
               <th>{t('Code')}</th>
               <th>{t('Status')}</th>
               <th>{t('Register')}</th>
+              <th>{t('Receipts')}</th>
               <th />
             </tr>
           </thead>
@@ -140,11 +186,41 @@ export function TerminalsPage() {
                   {!r.active ? t('Switched off') : r.enrolled ? t('Set up') : r.enrolPending ? t('Waiting for its code') : t('Not set up')}
                 </td>
                 <td>{r.openSessionId ? t('Open (#{n})', { n: r.openSessionId }) : t('Closed')}</td>
+                <td data-testid="print-mode">
+                  {r.printMode === 'server'
+                    ? t('Printed by the server')
+                    : !r.agent.enrolled
+                      ? r.agent.pending
+                        ? t('Print agent: waiting for its code')
+                        : t('Print agent: not set up')
+                      : r.agent.online
+                        ? t('Print agent: online')
+                        : t('Print agent: offline')}
+                </td>
                 <td className="num">
                   <div className="actions">
                     {r.active && (
                       <button className="btn small" disabled={busyId === r.id} onClick={() => void newCode(r)}>
                         {t('New code')}
+                      </button>
+                    )}
+                    {r.active && (
+                      <button
+                        className="btn small"
+                        disabled={busyId === r.id}
+                        onClick={() => void setPrintMode(r, r.printMode === 'agent' ? 'server' : 'agent')}
+                      >
+                        {r.printMode === 'agent' ? t('Print on the server') : t('Use a print agent')}
+                      </button>
+                    )}
+                    {r.active && r.printMode === 'agent' && (
+                      <button className="btn small" disabled={busyId === r.id} onClick={() => void newAgentCode(r)}>
+                        {t('Agent code')}
+                      </button>
+                    )}
+                    {r.agent.enrolled && (
+                      <button className="btn small" disabled={busyId === r.id} onClick={() => void revokeAgent(r)}>
+                        {t('Disconnect the agent')}
                       </button>
                     )}
                     {r.enrolled && (
@@ -239,9 +315,25 @@ function CodeDialog({ shown, onClose }: { shown: ShownCode; onClose: () => void 
     <Modal label={t('Code for {name}', { name: shown.name })} onClose={onClose}>
       <div style={{ display: 'grid', gap: 14 }}>
         <h2>{t('Code for {name}', { name: shown.name })}</h2>
-        <p style={{ margin: 0 }}>
-          {t('On the computer that will be this till, sign in as the admin, open Settings → Tills and type this code:')}
-        </p>
+        {shown.kind === 'agent' ? (
+          <>
+            <p style={{ margin: 0 }}>{t('On the computer with the receipt printer, run the print agent with this code:')}</p>
+            <code
+              dir="ltr"
+              style={{ display: 'block', padding: 10, userSelect: 'all', overflowWrap: 'anywhere' }}
+              data-testid="agent-command"
+            >
+              {`npm run print-agent -w @pos/api -- enrol --server ${window.location.origin} --code ${shown.code} --printer "<printer name>"`}
+            </code>
+            <p className="muted" style={{ margin: 0 }}>
+              {t('Then start it with "npm run print-agent -w @pos/api -- run". The printer name is its name in Windows.')}
+            </p>
+          </>
+        ) : (
+          <p style={{ margin: 0 }}>
+            {t('On the computer that will be this till, sign in as the admin, open Settings → Tills and type this code:')}
+          </p>
+        )}
         <div className="banner ok" style={{ textAlign: 'center' }}>
           <span style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: 2 }} dir="ltr" data-testid="enrol-code-shown">
             {shown.code}

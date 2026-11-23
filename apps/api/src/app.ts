@@ -30,7 +30,8 @@ import reportRoutes from './modules/reports/routes';
 import saleRoutes from './modules/sales/routes';
 import rateRoutes from './modules/settings/rates';
 import terminalRoutes from './modules/terminals/routes';
-import { TERMINAL_HEADER, resolveTerminal, type Terminal } from './modules/terminals/service';
+import agentRoutes from './modules/printing/agentRoutes';
+import { AGENT_HEADER, TERMINAL_HEADER, resolveAgent, resolveTerminal, type Terminal } from './modules/terminals/service';
 import settingsRoutes from './modules/settings/routes';
 import userRoutes from './modules/users/routes';
 
@@ -149,6 +150,11 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   app.decorate('database', createSqliteDatabase(db));
   // Which till sent this request (docs/11 §3.4). Routes that need a register session or a warehouse use it as a preHandler.
   app.decorateRequest('terminal', undefined as unknown as Terminal);
+  // The print agent on a till PC signs in with its own token (never a user's): it may only fetch and report its terminal's print jobs.
+  app.decorate('agentOnly', async (req: FastifyRequest) => {
+    const raw = req.headers[AGENT_HEADER];
+    req.terminal = await resolveAgent(app.database, typeof raw === 'string' && raw ? raw : undefined);
+  });
   app.decorate('withTerminal', async (req: FastifyRequest) => {
     const raw = req.headers[TERMINAL_HEADER];
     req.terminal = await resolveTerminal(app.database, typeof raw === 'string' && raw ? raw : undefined);
@@ -197,6 +203,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(rateRoutes);
       await api.register(customerRoutes);
       await api.register(terminalRoutes);
+      await api.register(agentRoutes);
       await api.register(registerRoutes);
       await api.register(saleRoutes);
       await api.register(returnRoutes);

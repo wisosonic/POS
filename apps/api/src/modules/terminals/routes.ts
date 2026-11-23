@@ -2,7 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../../util/validate';
 import { getOpenSession } from '../registers/service';
-import { createTerminal, enrolTerminal, listTerminals, newEnrolCodeFor, revokeTerminal, updateTerminal } from './service';
+import {
+  createTerminal,
+  enrolTerminal,
+  listTerminals,
+  newAgentCodeFor,
+  newEnrolCodeFor,
+  revokeAgent,
+  revokeTerminal,
+  updateTerminal,
+} from './service';
 
 const LIMIT = { max: 10, timeWindow: '1 minute' };
 
@@ -15,7 +24,11 @@ const createBody = z.object({
     .optional(),
   warehouseId: z.number().int().positive().nullish(),
 });
-const patchBody = z.object({ name: z.string().trim().min(1).max(60).optional(), active: z.boolean().optional() });
+const patchBody = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  active: z.boolean().optional(),
+  printMode: z.enum(['server', 'agent']).optional(),
+});
 const enrolBody = z.object({ code: z.string().trim().min(6).max(24) });
 
 export default async function terminalRoutes(app: FastifyInstance) {
@@ -30,7 +43,15 @@ export default async function terminalRoutes(app: FastifyInstance) {
   app.get('/terminals/me', { preHandler: [app.authenticate, app.withTerminal] }, async (req) => {
     const t = req.terminal;
     const session = await getOpenSession(db, t.code);
-    return { id: t.id, code: t.code, name: t.name, branchId: t.branchId, warehouseId: t.warehouseId, openSessionId: session?.id ?? null };
+    return {
+      id: t.id,
+      code: t.code,
+      name: t.name,
+      branchId: t.branchId,
+      warehouseId: t.warehouseId,
+      printMode: t.printMode,
+      openSessionId: session?.id ?? null,
+    };
   });
 
   app.post('/terminals', admin, async (req, reply) => {
@@ -56,6 +77,18 @@ export default async function terminalRoutes(app: FastifyInstance) {
     const b = parse(enrolBody, req.body);
     const done = await db.tx((tx) => enrolTerminal(tx, req.auth.id, b.code));
     return { token: done.token, terminal: done.terminal };
+  });
+
+  // A one-time code for the print agent on this till's PC. It trades it for its own token (POST /agent/enrol).
+  app.post('/terminals/:id/agent-code', admin, async (req) => {
+    const issued = await db.tx((tx) => newAgentCodeFor(tx, req.auth.id, idOf(req)));
+    return { agentCode: issued.code, expiresAt: issued.expiresAt };
+  });
+
+  // The print agent is lost or replaced: its token stops working at once.
+  app.post('/terminals/:id/agent-revoke', admin, async (req, reply) => {
+    await db.tx((tx) => revokeAgent(tx, req.auth.id, idOf(req)));
+    return reply.status(204).send();
   });
 
   // Lost or replaced device: its token stops working at once and the till must enrol again.

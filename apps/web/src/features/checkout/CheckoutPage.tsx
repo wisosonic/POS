@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../../components/Modal';
 import { ProductImage } from '../../components/ProductImage';
 import { useScanner } from '../../hooks/useScanner';
-import { useRate, useSettings } from '../../hooks/useTillData';
+import { usePrinterAvailable, useRate, useSettings } from '../../hooks/useTillData';
 import { ApiError, post } from '../../lib/api';
 import { catalog } from '../../lib/catalog';
 import { approvalCovers, discountPct, needsApproval, type Approval, type Discount } from '../../lib/discount';
@@ -32,6 +32,7 @@ export function CheckoutPage() {
   const t = useT();
   const queryClient = useQueryClient();
   const settings = useSettings().data;
+  const printerAvailable = usePrinterAvailable();
   const rate = useRate().data;
   const catalogVersion = useUi((s) => s.catalogVersion);
   const lines = useCart((s) => s.lines);
@@ -220,7 +221,7 @@ export function CheckoutPage() {
       for (const item of sale.lowStock)
         toast.warning(tNow('Low stock: {name} ({qty} left)', { name: item.name.trim(), qty: trimQty(item.qty) }), 6000);
       setDone({ kind: 'sale', sale, print: 'idle' });
-      if (settings?.printerConfigured) void print(sale);
+      if (printerAvailable) void print(sale);
     } catch (e) {
       if (e instanceof ApiError && e.isNetwork) return saveOffline();
       if (e instanceof ApiError && e.code === 'PRICE_MISMATCH') {
