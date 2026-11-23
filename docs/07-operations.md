@@ -4,13 +4,15 @@ How the POS is installed, started, backed up and restored on the till PC. Writte
 
 ## 1. What runs where
 
-One Windows PC at the till runs everything:
+In the simplest shop one Windows PC at the till runs everything:
 
 - the **server** (one program) owns the database file and also serves the web app,
 - the **browser** on the same PC opens `http://localhost:3000`,
 - the **USB receipt printer** is installed in Windows as an ordinary local printer.
 
 Nothing is reachable from outside the PC (the server listens on `127.0.0.1` only).
+
+With **more than one till** the server stays on one PC and the other tills are browsers on other PCs or tablets: see "A tablet or second PC" (HTTPS is needed), then add each till under Menu > Settings > Tills so that it has its own register. A till whose printer is on a different PC than the server needs a **print agent** (below).
 
 ## 2. First install
 
@@ -53,8 +55,8 @@ Skip this if the receipt printer is on the same PC as the server (the shop as it
 
 1. Install the USB printer in Windows on the till PC as an ordinary local printer, and note its exact name.
 2. As the admin: **Menu → Settings → Tills**, find the till, press **Use a print agent**, then **Agent code**. The page shows the one-time command (valid 30 minutes, works once).
-3. On the till PC, in the project folder, run the command shown: `npm run print-agent -w @pos/api -- enrol --server http://<server address>:3000 --code XXXXX-XXXXX --printer "<printer name>"`. It saves `agent.json` (the agent's token and the printer name). **Keep that file private**: whoever has it can fetch that till's receipts.
-4. Start it: `npm run print-agent -w @pos/api -- run`, and make it start with the PC (a Windows scheduled task at log-on, like the server's). It keeps retrying if the server is away, and stops with a clear message if the admin disconnected it (then ask for a new code).
+3. On the till PC, in the project folder (after `npm install`), in a PowerShell opened as Administrator, run: `powershell -ExecutionPolicy Bypass -File scripts\windows\install-print-agent.ps1 -Server http://<server address>:3000 -Code XXXXX-XXXXX -Printer "<printer name>"` (add `-DryRun` first to see the steps). It trades the code for the agent's own token, saves it with the printer name in `C:\POS\agent\agent.json` (readable only by administrators and SYSTEM: **keep that file private**, whoever has it can fetch that till's receipts), and registers a startup task "Darwish POS print agent" that starts at boot and restarts the agent if it stops. By hand instead: `npm run print-agent -w @pos/api -- enrol ...` then `-- run`.
+4. It keeps retrying if the server is away. If the admin disconnects it (Settings > Tills > Disconnect the agent) it stops for good with a clear message in `C:\POS\agent\logs\launcher.log`; ask for a new code and run the script again. `-Uninstall` removes the task. Logs: `C:\POS\agent\logs\agent.log`.
 5. Settings → Tills shows **Print agent: online** while it is running. Sell something and check the receipt comes out and the drawer opens on the first print.
 
 If the agent is off or the printer PC is down, the till waits about 15 seconds, then offers **Retry** and **Print in browser**; the waiting job is cancelled so it cannot print later on top of a browser print. For an https server with its own certificate, set `NODE_EXTRA_CA_CERTS` to the certificate file on the till PC. **This has not been run against a real printer yet** (see "What has not been run").
@@ -86,7 +88,7 @@ A tablet (or a second PC) can use the till over the shop's network **only with H
 3. **Let the network reach it:** in the same file set `HOST=0.0.0.0` and `ALLOWED_HOSTS=till,192.168.1.10` (the names and addresses the tablet will use; anything else is refused), and allow the port in the Windows firewall for the private network only.
 4. **Trust the certificate on the tablet:** open `https://till:3000` once, and install `cert.pem` as a trusted certificate in the tablet's settings (the exact steps depend on the tablet). Until it is trusted the browser warns, and the offline copy of the app (service worker) will not install.
 
-The tablet is a second screen onto **the same till**: one register session, one cart store per browser. The browser tests run the till screens on a 1024 x 768 touch screen (`tablet-1024x768`).
+A tablet or second PC is **its own till**, with its own register and cash drawer count: add it under **Menu > Settings > Tills** (give it a name, then on the tablet sign in as the admin and type the code the page shows). **Do the till you already use first**: ask for a code for "Till 1" and enter it on that PC, and only then add the others, because once a second till exists a device that has not been set up cannot sell. Each till opens and closes its own register. The cart store is per browser. The browser tests run the till screens on a 1024 x 768 touch screen (`tablet-1024x768`).
 
 ## 3. Backups
 
@@ -163,3 +165,5 @@ Anything sold after the last backup is not in it. With a nightly backup that is 
 ## What has not been run on a real till PC
 
 The backup, the encryption, the restore drill (run as separate command-line processes), the scheduler's timing rules, the production start with the web app served by the server, and the install script's dry run are all tested. **The install itself (the scheduled task, the SYSTEM account, the printer from that account) has not been run on a real till PC**: do it with `-DryRun` first, and check printing from the server on the day it is installed. The scheduled task is used instead of a Windows service to avoid adding a service wrapper; it behaves the same for the owner (starts at boot, restarts on failure).
+
+**Also not run on real hardware (built and tested with fakes and a real server in tests):** several tills on separate PCs (terminal enrolment, one register each, the device tokens), the **print agent** against a real USB printer, the Windows spooler from the agent and the **cash drawer pulse** (the agent was tested with fake printers; the spooler code is the same as the server's), the agent's startup scripts (`install-print-agent.ps1` and `run-print-agent.ps1` were only parsed and run with `-DryRun`), the live-updates stream through a real shop network (and any proxy that buffers), and the reports worker on the shop PC. Do each of these once on the real equipment, with the real printer and a real second till, before the first real day with more than one till.

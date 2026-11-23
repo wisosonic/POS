@@ -2,7 +2,9 @@
 
 ## 1. Context
 
-One till, one PC. The server runs on the same Windows PC as the browser.
+A **branch** is one server and one or more **tills**. The simplest shop, and the shop as it was first built, is one Windows PC with the server, the browser and the printer together (the diagram below). With several tills, the server runs on one PC and each till is a browser on a PC or tablet with its own device token, its own register session and its own warehouse (`docs/11-multi-branch.md` §3.4). A till whose receipt printer is not on the server's PC runs a small **print agent** that connects out to the server (`docs/06-api-spec.md`, "Print agent"). Every till hears about price, stock, rate and register changes at once over the live-updates stream (§ below), and heavy reports run in a worker thread so they never hold up a sale. A central **HQ** server for many branches is designed in `docs/11-multi-branch.md` and **not built yet**.
+
+**The single-PC shop:**
 
 ```
 ┌───────────────────────────── Till PC (Windows, behind a UPS) ─────────────────────────────┐
@@ -18,6 +20,21 @@ One till, one PC. The server runs on the same Windows PC as the browser.
  Optional: manager's phone on the shop Wi-Fi opens the same app (dashboard/reports only).
  Nightly: safe copy of the database file → encrypted → external drive + offsite copy.
  Cash, Whish Money and OMT are recorded only; there are no calls to any third-party service.
+```
+
+**A branch with several tills** (built; docs/06 "Terminals" and "Print agent"):
+
+```
+ Server PC (back office or the first till)               Each till: a browser on a PC or tablet
+ ┌──────────────────────────────────────┐   HTTPS   ┌─────────────────────────────────────┐
+ │ Fastify API + SQLite file + /uploads │◀─────────▶│ Till 2 browser (device token)       │
+ │  - one register session per till     │  + live   │   IndexedDB outbox + product cache  │
+ │  - reports worker (read-only)        │  updates  └─────────────────────────────────────┘
+ │  - print queue per till              │  (SSE)    ┌─────────────────────────────────────┐
+ └──────────────────────────────────────┘◀──────────│ Print agent on Till 2's PC          │
+        ▲ also the server's own printer            │   (connects OUT, long poll) ─▶ USB  │
+        │ for the till that sits next to it        │   receipt printer + cash drawer     │
+                                                   └─────────────────────────────────────┘
 ```
 
 ## 2. Principles
