@@ -4,10 +4,6 @@ Questions for the owner. Answer under each one (write after "Answer:"). New ques
 
 ## Open
 
-### 1. Which receipt printer is it?
-The model decides how the cash drawer is opened (the drawer pulse command) and how many characters fit on a line (42 is assumed for an 80 mm printer, 32 for 58 mm). Everything else about printing works and is tested.
-Answer:
-
 ### 2. The 21 shared barcodes: who decides which product stays?
 Menu → Duplicate barcodes lists each one with its stock, how often it sold, and its price. For each group you either give one product its own barcode, or keep one and fold the others into it. It is your decision which stays. Do you want to go through them together, or should I print the list with the numbers so you can work through it yourself?
 Answer:
@@ -78,7 +74,29 @@ Answer:
 I wrote the Arabic myself. The till flow is done (header, menu, sign-in, settings, checkout, cart, payment, held carts, customers at the till, opening the register). Please have someone who works the till read it (`apps/web/src/lib/ar.ts`, or just switch the screen to Arabic) and tell me the words you would change: for example "Walk-In" is **زبون عابر**, "Debts" is **الديون**, "Hold" is **تعليق**. Which screens should be translated next: Sales and Returns, closing the register, or the back office (products, purchases, reports, users)? Digits stay 0-9; say if you want Arabic-Indic digits (٠١٢) on screen instead. Receipts stay English because the printer cannot print Arabic.
 Answer:
 
+### Multi-branch, HR and online marketplace (design in `docs/11-multi-branch.md`)
+
+**10. Online stock: leave the shelf at dispatch or at settlement?** The design posts stock out when the branch records the sale at delivery settlement. Between dispatch and settlement a till could sell an item that is already in the customer's bag. The alternative posts stock out when the order is dispatched and puts it back if delivery fails. Which do you want?
+Answer:
+
+**11. Customer sign-up for the online shop: phone + password only, or a code by SMS/WhatsApp?** A code needs an outside messaging service (cost, and the customer's number is sent to it). Phone + password needs no outside service.
+Answer:
+
+**12. What are the real NSSF and income-tax rules, and who confirms them?** Payroll takes them as dated settings, not code. Someone (your accountant) must give the rates, caps and brackets, and check the first payroll run against their own figures before anyone is paid from it.
+Answer:
+
+**13. Delivery zones: which areas does each branch cover, and what are the fee, minimum order and delivery hours?** Named areas first (maps later). Needed before the online shop can route an order.
+Answer:
+
+**14. How many tills per branch, and which branches come first?** Used to size the first multi-till test and to decide which branch becomes "branch #1" (today's till).
+Answer:
+
 ## Answered
+
+### 1. Which receipt printer is it?
+The model decides how the cash drawer is opened (the drawer pulse command) and how many characters fit on a line (42 is assumed for an 80 mm printer, 32 for 58 mm).
+Answer: **Buerotika BP110N** (2026-10-26, from a photo of its label): thermal receipt printer, 80 mm paper, 230 mm/s, interfaces RJ11 (cash drawer) + USB + LAN. So the width is 42 characters. Still to confirm on the real PC with "Print a test slip": that it prints the slip correctly (ESC/POS) and that the drawer opens on "Also open the cash drawer" (the app sends the standard pulse on pin 2).
+
 
 ### 8. Delete a voided sale, or a sale with returns, permanently? 
 Asked for: a button to delete a **voided** sale permanently, and let a **cashier** delete a sale that has **returned items** completely.
