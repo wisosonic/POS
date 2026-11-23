@@ -228,4 +228,54 @@ export const AR: Record<string, string> = {
   English: 'الإنجليزية',
   'Receipts are always printed in English letters, because the receipt printer cannot print Arabic. Product names are shown as they were typed.':
     'تُطبع الإيصالات دائماً بأحرف إنجليزية لأن طابعة الإيصالات لا تستطيع طباعة العربية. أسماء المنتجات تظهر كما كُتبت.',
+
+  // ---- the tills of the branch (Settings → Tills, and the screen of a computer that is not a till yet)
+  Tills: 'الصناديق',
+  'This computer': 'هذا الجهاز',
+  'This computer is {name} ({code}).': 'هذا الجهاز هو {name} ({code}).',
+  'This computer is not set up as a till. Type the code of the till it should be.':
+    'هذا الجهاز غير مُعدّ كصندوق بيع. اكتب رمز الصندوق المطلوب.',
+  'The server could not say which till this is.': 'تعذّر على الخادم تحديد أي صندوق هذا.',
+  'Set up the till you are using now first, then add the others. Each till has its own register and cash drawer.':
+    'جهّز الصندوق الذي تستخدمه الآن أولاً ثم أضف البقية. لكل صندوق سجلّ نقدي ودرج نقد خاص به.',
+  'Add a till': 'إضافة صندوق',
+  Code: 'الرمز',
+  Status: 'الحالة',
+  Register: 'السجل النقدي',
+  '(this computer)': '(هذا الجهاز)',
+  'Switched off': 'متوقف',
+  'Set up': 'مُعدّ',
+  'Waiting for its code': 'بانتظار الرمز',
+  'Not set up': 'غير مُعدّ',
+  'Open (#{n})': 'مفتوح (#{n})',
+  Closed: 'مغلق',
+  'New code': 'رمز جديد',
+  Disconnect: 'فصل',
+  'Switch off': 'إيقاف',
+  'Switch on': 'تشغيل',
+  '{name} will stop working until it is set up again. Continue?': 'سيتوقف {name} عن العمل حتى يُعدّ من جديد. هل تريد المتابعة؟',
+  '{name} was disconnected': 'تم فصل {name}',
+  'That did not work. Try again.': 'لم تنجح العملية. حاول مرة أخرى.',
+  'Type a name for the till': 'اكتب اسماً للصندوق',
+  'Name (for example Till 2, or Back counter)': 'الاسم (مثلاً الصندوق 2 أو الكاونتر الخلفي)',
+  Add: 'إضافة',
+  Done: 'تم',
+  'Code for {name}': 'رمز {name}',
+  'On the computer that will be this till, sign in as the admin, open Settings → Tills and type this code:':
+    'على الجهاز الذي سيصبح هذا الصندوق، سجّل الدخول كمدير، افتح الإعدادات ← الصناديق واكتب هذا الرمز:',
+  'It works once, for the next {n} minutes. It is not shown again.': 'يعمل مرة واحدة فقط خلال الدقائق {n} القادمة ولا يُعرض مرة أخرى.',
+  'This computer is now {name}': 'أصبح هذا الجهاز {name}',
+  'An admin has to be signed in on this computer to set it up as a till.':
+    'يجب أن يكون المدير مسجّلاً الدخول على هذا الجهاز لإعداده كصندوق بيع.',
+  'Enrolment code': 'رمز الإعداد',
+  'Set up this computer': 'إعداد هذا الجهاز',
+  'This computer is not set up as a till': 'هذا الجهاز غير مُعدّ كصندوق بيع',
+  'The shop has more than one till, and this computer has not been told which one it is. Selling is switched off here until it is.':
+    'في المتجر أكثر من صندوق، ولم يُحدَّد لهذا الجهاز أيّها. البيع متوقف هنا إلى أن يُعدّ.',
+  'Set it up now': 'أعدّه الآن',
+  'Open Settings → Tills on a computer that is already working, add or choose this till, and type its code here.':
+    'افتح الإعدادات ← الصناديق على جهاز يعمل، أضف هذا الصندوق أو اختره، واكتب رمزه هنا.',
+  'Go to the list of tills': 'الانتقال إلى قائمة الصناديق',
+  'Ask the admin to set it up (Settings → Tills), or sign in as the admin on this computer.':
+    'اطلب من المدير إعداده (الإعدادات ← الصناديق) أو سجّل الدخول كمدير على هذا الجهاز.',
 };

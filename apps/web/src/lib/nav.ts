@@ -53,5 +53,6 @@ export const SETTINGS_NAV: NavItem[] = [
   { to: '/settings/shop', label: 'Shop and receipts', icon: 'shop', min: 'admin' },
   { to: '/settings/rate', label: 'Exchange rate', icon: 'rate', min: 'admin' },
   { to: '/settings/users', label: 'Users', icon: 'users', min: 'admin' },
+  { to: '/settings/terminals', label: 'Tills', icon: 'till', min: 'admin' },
   { to: '/settings/backups', label: 'Backups', icon: 'backups', min: 'admin' },
 ];

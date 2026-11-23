@@ -1,5 +1,8 @@
+import { clearTerminalToken, getTerminalToken } from './terminal';
+
 // The one place the till talks to the server. The access token lives in memory only (never in storage a script could read);
-// the refresh token is an httpOnly cookie the browser sends by itself.
+// the refresh token is an httpOnly cookie the browser sends by itself. The till's device token (lib/terminal.ts) says which till
+// this is and goes with every request.
 
 export class ApiError extends Error {
   constructor(
@@ -34,6 +37,8 @@ async function send(method: string, path: string, body: unknown, opts: Options):
   const file = body instanceof Blob ? body : null;
   if (body !== undefined) headers['Content-Type'] = file ? file.type || 'application/octet-stream' : 'application/json';
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const device = getTerminalToken();
+  if (device) headers['X-Terminal-Token'] = device;
   if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
   try {
     return await fetch(`/api/v1${path}`, {
@@ -78,6 +83,14 @@ async function toError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code ?? `HTTP_${res.status}`, detail ?? res.statusText, extra);
 }
 
+async function refusedAsTerminal(res: Response): Promise<boolean> {
+  try {
+    return ((await res.clone().json()) as { code?: string }).code === 'TERMINAL_UNKNOWN';
+  } catch {
+    return false;
+  }
+}
+
 export async function api<T = unknown>(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
@@ -85,6 +98,12 @@ export async function api<T = unknown>(
   opts: Options = {},
 ): Promise<T> {
   let res = await send(method, path, body, opts);
+  // A 401 can also mean "the server does not know this till any more" (it was revoked or switched off). That is not a lost
+  // sign-in: forget the token so the screen offers to enrol again, and do not sign the person out.
+  if (res.status === 401 && (await refusedAsTerminal(res))) {
+    clearTerminalToken();
+    throw await toError(res);
+  }
   if (res.status === 401 && !opts.noRefresh) {
     if (await refreshSession()) res = await send(method, path, body, opts);
     else {

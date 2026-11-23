@@ -5,7 +5,8 @@ import { setShopTitle } from '../lib/shopTitle';
 import { SwitchCashierDialog } from '../features/auth/SwitchCashierDialog';
 import { HoldsDialog } from '../features/checkout/HoldsDialog';
 import { OpenRegisterDialog } from '../features/register/OpenRegisterDialog';
-import { useAlerts, useHolds, useRate, useRegister, useSettings } from '../hooks/useTillData';
+import { isNotATill, useAlerts, useDeviceToken, useHolds, useRate, useRegister, useSettings, useTerminal } from '../hooks/useTillData';
+import { DeviceNotATill } from '../features/terminals/DeviceNotATill';
 import { get } from '../lib/api';
 import type { BackupStatus } from '../lib/types';
 import { useConnection, startConnectionWatch } from '../store/connection';
@@ -36,6 +37,8 @@ export function TillLayout() {
   const settings = useSettings();
   useRate(); // not shown in the header any more, but fetched now so the till is ready the moment it opens
   const register = useRegister();
+  const terminal = useTerminal();
+  const deviceToken = useDeviceToken();
   const holds = useHolds();
   const alerts = useAlerts();
   const { online, waiting, blocked } = useConnection();
@@ -96,6 +99,12 @@ export function TillLayout() {
         </Link>
 
         <div className="header-status">
+          {terminal.data && deviceToken && (
+            <span className="chip hide-small" data-testid="till-name">
+              <Icon name="till" size={15} />
+              {terminal.data.name}
+            </span>
+          )}
           {register.data && (
             <span className="chip hide-small">
               <Icon name="register" size={15} />
@@ -212,6 +221,8 @@ export function TillLayout() {
 
       {!needsRegister ? (
         outlet
+      ) : isNotATill(register.error) || isNotATill(terminal.error) ? (
+        <DeviceNotATill />
       ) : register.isLoading ? (
         <main className="page muted">{t('Loading…')}</main>
       ) : register.data === null ? (

@@ -1,5 +1,7 @@
 import { QueryClient, useQuery } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
 import { ApiError, get } from '../lib/api';
+import { getTerminalToken, subscribeTerminal } from '../lib/terminal';
 import type { HoldSummary, LowStockItem, PublicSettings, RegisterSession } from '../lib/types';
 
 export const queryClient = new QueryClient({
@@ -44,3 +46,30 @@ export const useAlerts = () =>
   useQuery({ queryKey: ['alerts'], queryFn: () => get<{ data: LowStockItem[] }>('/stock/alerts').then((r) => r.data) });
 
 export const money = (n: number | undefined) => n ?? 0;
+
+/** Which till this device is (docs/11-multi-branch.md §3.4). An error with code TERMINAL_REQUIRED means it is not set up as a till yet. */
+export type TerminalMe = {
+  id: number;
+  code: string;
+  name: string;
+  branchId: number;
+  warehouseId: number | null;
+  openSessionId: number | null;
+};
+
+export const useDeviceToken = () => useSyncExternalStore(subscribeTerminal, () => getTerminalToken());
+
+export function useTerminal() {
+  const token = useDeviceToken();
+  // The device token is part of the key, so enrolling (or the server forgetting this till) asks again at once.
+  return useQuery({
+    queryKey: ['terminal', token ?? null],
+    queryFn: () => get<TerminalMe>('/terminals/me'),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+/** True when the server says this device is not a till (no usable token and more than one till exists). */
+export const isNotATill = (error: unknown) =>
+  error instanceof ApiError && (error.code === 'TERMINAL_REQUIRED' || error.code === 'TERMINAL_UNKNOWN');

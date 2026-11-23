@@ -14,6 +14,7 @@ import { useSession } from './store/session';
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] })));
 const UsersPage = page(() => import('./features/users/UsersPage'), 'UsersPage');
+const TerminalsPage = page(() => import('./features/terminals/TerminalsPage'), 'TerminalsPage');
 const CustomersPage = page(() => import('./features/customers/CustomersPage'), 'CustomersPage');
 const DebtsPage = page(() => import('./features/customers/DebtsPage'), 'DebtsPage');
 const BackupsPage = page(() => import('./features/backups/BackupsPage'), 'BackupsPage');
@@ -87,6 +88,7 @@ export function App() {
                 <Route path="shop" element={<SettingsPage />} />
                 <Route path="rate" element={<RatePage />} />
                 <Route path="users" element={<UsersPage />} />
+                <Route path="terminals" element={<TerminalsPage />} />
                 <Route path="backups" element={<BackupsPage />} />
               </Route>
             </Route>
