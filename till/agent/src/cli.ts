@@ -1,4 +1,12 @@
-// The print agent for a till PC. Two commands:
+// The till PC's program. Three commands:
+//
+//   npm run serve --prefix till                          the till's own server: serves the screens and passes calls to the branch server
+//                                                        (PORT 8080, HOST 127.0.0.1, TILL_DATA_DIR ./data, WEB_DIST ../web/dist,
+//                                                        BRANCH_SERVER_URL as the first address, ALLOWED_HOSTS for extra names).
+//                                                        Open http://localhost:8080 ; the branch server's address is set in the till's
+//                                                        Settings (or on the sign-in screen's "Branch server" link).
+//
+// The print agent (separate for now):
 //
 //   npm run print-agent -w @pos/till-agent -- enrol --server http://192.168.1.10:3000 --code XXXXX-XXXXX --printer "POS-80" [--config agent.json]
 //   npm run print-agent -w @pos/till-agent -- run [--config agent.json]
@@ -8,9 +16,11 @@
 // https server with its own certificate, set NODE_EXTRA_CA_CERTS to the certificate file. The token is a secret: keep the file
 // readable only by the person who runs the agent, and never paste it into chat or a ticket.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { AgentRefusedError, runAgent } from './agent';
 import { windowsSpoolerPrinter } from './printer';
+import { createTillServer } from './tillServer';
 
 type Config = { server: string; token: string; printerName: string };
 
@@ -24,7 +34,30 @@ const log = (message: string) => console.log(`${stamp()}  ${message}`);
 const command = process.argv[2];
 const configPath = resolve(arg('config') ?? 'agent.json');
 
-if (command === 'enrol') {
+if (command === 'serve') {
+  const port = Number(process.env.PORT ?? 8080);
+  const host = process.env.HOST ?? '127.0.0.1';
+  const here = dirname(fileURLToPath(import.meta.url));
+  const till = createTillServer({
+    port,
+    dataDir: resolve(process.env.TILL_DATA_DIR ?? 'data'),
+    webDist: resolve(process.env.WEB_DIST ?? resolve(here, '../../web/dist')),
+    defaultBranchServer: process.env.BRANCH_SERVER_URL,
+    allowedHosts: (process.env.ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean),
+    log,
+  });
+  const actual = await till.listen(host);
+  log(
+    `The till is at http://${host === '0.0.0.0' ? 'localhost' : host}:${actual}  (branch server: ${till.branchServer() ?? 'not set yet, set it in Settings'})`,
+  );
+  for (const s of ['SIGINT', 'SIGTERM'] as const)
+    process.on(s, () => {
+      void till.close().then(() => process.exit(0));
+    });
+} else if (command === 'enrol') {
   const server = arg('server');
   const code = arg('code');
   const printerName = arg('printer');
@@ -67,6 +100,6 @@ if (command === 'enrol') {
   }
   log('Print agent stopped.');
 } else {
-  console.error('Usage: print-agent enrol|run  (see the comment at the top of apps/till-agent/src/cli.ts)');
+  console.error('Usage: serve | enrol | run  (see the comment at the top of till/agent/src/cli.ts)');
   process.exit(1);
 }

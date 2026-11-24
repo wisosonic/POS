@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
 
-// The BUILT app, served by the API itself with its real security headers (see playwright.config.ts). The question here is
-// whether the Content-Security-Policy, the cookie and the caching leave the app working, not what the screens do.
+// The BUILT app, served by the till's own server (till/agent) which passes the calls on to a branch server that serves no screens
+// (see playwright.config.ts): the shape of a real till PC. The question here is whether the Content-Security-Policy, the cookie and
+// the caching leave the app working through that pass-through, not what the screens do.
 const CHOC = '9342390005250';
 
 /** Record every time the browser blocks something because of the Content-Security-Policy. */
@@ -172,4 +173,42 @@ test('the offline copy holds every screen, not only the till (the screens load o
   expect(source).toContain('.woff2'); // the fonts too
   expect(source).not.toMatch(/\.woff"/); // but not the old fallback format
   expect(source).not.toMatch(/\.js\.map"/); // no source maps
+});
+
+// docs/11-multi-branch.md §8.4: the till's own server keeps the branch server's address, and the page that sets it works before sign-in.
+test('the branch server page opens without signing in, shows the saved address and tests it', async ({ page }) => {
+  await page.goto('/connection');
+  await expect(page.getByRole('heading', { name: 'Branch server' })).toBeVisible();
+  await expect(page.getByLabel('Address of the branch server')).toHaveValue(/^http:\/\/127\.0\.0\.1:\d+$/);
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Connected' })).toContainText('the branch server answered');
+});
+
+test('a wrong address is refused with its reason, and one that nothing answers is reported before it is saved', async ({ page }) => {
+  await page.goto('/connection');
+  const box = page.getByLabel('Address of the branch server');
+  await box.fill('http://127.0.0.1:3301/api');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('alert')).toContainText('nothing after it');
+  await box.fill('127.0.0.1:3399'); // nothing listens here
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'no branch server' })).toBeVisible();
+});
+
+test('a till whose branch server is gone says so and links to the page that fixes it', async ({ page, context }) => {
+  await page.goto('/login');
+  await context.route('**/api/v1/auth/login', (route) =>
+    route.fulfill({
+      status: 502,
+      contentType: 'application/problem+json',
+      headers: { 'X-Till-Proxy-Error': 'BRANCH_UNREACHABLE' },
+      body: '{"code":"BRANCH_UNREACHABLE"}',
+    }),
+  );
+  await page.getByLabel('Username').fill('manager');
+  await page.getByLabel('Password').fill('anything');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Cannot reach the server')).toBeVisible();
+  await page.getByRole('link', { name: 'Check the branch server address' }).click();
+  await expect(page).toHaveURL(/\/connection$/);
 });

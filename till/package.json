@@ -20,7 +20,8 @@
     "e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "serve": "npm run serve -w @pos/till-agent"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

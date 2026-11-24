@@ -40,8 +40,9 @@ async function send(method: string, path: string, body: unknown, opts: Options):
   const device = getTerminalToken();
   if (device) headers['X-Terminal-Token'] = device;
   if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+  let res: Response;
   try {
-    return await fetch(`/api/v1${path}`, {
+    res = await fetch(`/api/v1${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : (file ?? JSON.stringify(body)),
@@ -52,6 +53,12 @@ async function send(method: string, path: string, body: unknown, opts: Options):
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
     throw new ApiError(0, 'NETWORK', 'Cannot reach the server');
   }
+  // The till's own server (till/agent) answers for the branch server. When it cannot reach the branch server it says so with this
+  // header: that is the same as "offline" to the screens (a sale goes to the queue, nothing signs the person out), but the code
+  // says why (BRANCH_UNREACHABLE, or BRANCH_NOT_CONFIGURED: no address saved yet).
+  const proxyError = res.headers.get('X-Till-Proxy-Error');
+  if (proxyError) throw new ApiError(0, proxyError, 'Cannot reach the branch server');
+  return res;
 }
 
 let refreshing: Promise<boolean> | null = null;

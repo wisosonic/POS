@@ -49,6 +49,17 @@ To remove it: `install-service.ps1 -Uninstall`. Your data and backups are left a
 
 The server runs as the SYSTEM account, which can only use printers installed **for all users**. Install the USB printer from Windows' "Printers & scanners" as a local printer, then sign in as the admin and open **Menu → Settings**. Type the printer's exact name, set the receipt width (42 for an 80 mm printer, 32 for 58 mm), press **Save settings**, then **Print a test slip**. The slip shows the shop header, a long item name that wraps, an Arabic name (it must come out as readable English letters), and a ruler as wide as the receipt, so you can see at once whether the printer cuts the line off. Tick "Also open the cash drawer" to test the drawer. If the slip prints when you are signed in at the PC but not from the server, the printer is not installed for all users.
 
+### The till's own server (a till that is a different PC from the branch server)
+
+A till PC runs one small program of its own, which serves the till screens and passes everything to the branch server, so the PC needs only the `till/` folder (copy that one folder, nothing else from the project):
+
+1. Install Node.js 22 or newer, then in the `till` folder run `npm install` and `npm run build` (the internet is needed once).
+2. `npm run serve` starts it. Open `http://localhost:8080` in the browser on that PC. (`PORT` and `HOST` change where it listens, `TILL_DATA_DIR` where it keeps its settings, `BRANCH_SERVER_URL` gives the first branch server address.)
+3. The first time the sign-in page says it cannot reach the server: press **Check the branch server address**, type the branch server PC's address on the shop network with the port (for example `192.168.1.10:3000`), press **Test connection**, then **Save**. Later it is under **Settings → Branch server**.
+4. The branch server must accept that address: put the name or number you typed into its `ALLOWED_HOSTS` (the test says "does not accept this address" otherwise). Then add this till under **Settings → Tills** as usual.
+
+It has not been installed as a Windows startup task yet (only the print agent has): start it by hand for now. Design and limits: `docs/11-multi-branch.md` §8.4. **Not run on a real till PC yet.**
+
 ### A print agent (the printer is on another PC than the server)
 
 Skip this if the receipt printer is on the same PC as the server (the shop as it was). When a till is a different PC from the server, the server cannot reach that PC's USB printer, so that till runs a **print agent**. It connects out to the server (nothing is opened on the till PC), prints the till's receipts and says whether each came out. The cash drawer pulse and the DUPLICATE rule still come from the server.

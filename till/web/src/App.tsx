@@ -18,6 +18,7 @@ const TerminalsPage = page(() => import('./features/terminals/TerminalsPage'), '
 const CustomersPage = page(() => import('./features/customers/CustomersPage'), 'CustomersPage');
 const DebtsPage = page(() => import('./features/customers/DebtsPage'), 'DebtsPage');
 const BackupsPage = page(() => import('./features/backups/BackupsPage'), 'BackupsPage');
+const ConnectionPage = page(() => import('./features/settings/ConnectionPage'), 'ConnectionPage');
 const RatePage = page(() => import('./features/settings/RatePage'), 'RatePage');
 const SettingsLayout = page(() => import('./features/settings/SettingsLayout'), 'SettingsLayout');
 const LanguagePage = page(() => import('./features/settings/LanguagePage'), 'LanguagePage');
@@ -70,6 +71,8 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Where the branch server is: reachable without signing in, because it is what a till needs when it cannot sign in. */}
+          <Route path="/connection" element={<ConnectionPage />} />
           <Route element={<Protected />}>
             <Route path="/" element={<CheckoutPage />} />
             <Route path="/sales" element={<SalesPage />} />
@@ -89,6 +92,7 @@ export function App() {
                 <Route path="rate" element={<RatePage />} />
                 <Route path="users" element={<UsersPage />} />
                 <Route path="terminals" element={<TerminalsPage />} />
+                <Route path="connection" element={<ConnectionPage />} />
                 <Route path="backups" element={<BackupsPage />} />
               </Route>
             </Route>

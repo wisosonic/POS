@@ -296,4 +296,30 @@ export const AR: Record<string, string> = {
     'على الجهاز المتصل بطابعة الإيصالات، شغّل وكيل الطباعة بهذا الرمز:',
   'Then start it with "npm run print-agent -w @pos/till-agent -- run". The printer name is its name in Windows.':
     'ثم شغّله بالأمر "npm run print-agent -w @pos/till-agent -- run". اسم الطابعة هو اسمها في ويندوز.',
+  'Branch server': 'خادم الفرع',
+  'Check the branch server address': 'تحقق من عنوان خادم الفرع',
+  'Saved. The till now uses {address}.': 'تم الحفظ. يستخدم الصندوق الآن {address}.',
+  'Could not save the address': 'تعذّر حفظ العنوان',
+  'The PC answered, but no branch server is running on that port.': 'الجهاز يردّ لكن لا يعمل أي خادم فرع على هذا المنفذ.',
+  'Nothing answered in time. Check the address and that the branch server PC is switched on.':
+    'لم يردّ أحد في الوقت المناسب. تحقق من العنوان ومن أن جهاز خادم الفرع يعمل.',
+  'That server name is not known on this network. Try its number, like 192.168.1.10.':
+    'اسم الخادم هذا غير معروف في الشبكة. جرّب رقمه مثل 192.168.1.10.',
+  'The branch server is there but does not accept this address. Ask the person who set it up to add it to ALLOWED_HOSTS.':
+    'خادم الفرع موجود لكنه لا يقبل هذا العنوان. اطلب ممن أعدّه إضافته إلى ALLOWED_HOSTS.',
+  'Something answered, but it is not a branch server.': 'ردّ شيء ما لكنه ليس خادم فرع.',
+  'The till program on this PC does not answer.': 'برنامج الصندوق على هذا الجهاز لا يردّ.',
+  'No address is set yet.': 'لم يُحدَّد عنوان بعد.',
+  'This till is served by the branch server itself, so there is no branch server address to set here.':
+    'هذا الصندوق يعمل من خادم الفرع نفسه، فلا يوجد عنوان خادم فرع لتحديده هنا.',
+  'Address of the branch server': 'عنوان خادم الفرع',
+  'The branch server is the PC in the shop that keeps the sales. Use its address on the shop network, with the port.':
+    'خادم الفرع هو الجهاز في المتجر الذي يحفظ المبيعات. استخدم عنوانه على شبكة المتجر مع المنفذ.',
+  'This address came from the start-up settings of the till. Saving here keeps a new one on this PC.':
+    'جاء هذا العنوان من إعدادات تشغيل الصندوق. الحفظ هنا يثبّت عنواناً جديداً على هذا الجهاز.',
+  'Connected: the branch server answered in {ms} ms.': 'تم الاتصال: ردّ خادم الفرع خلال {ms} مللي ثانية.',
+  'Cannot reach that address.': 'لا يمكن الوصول إلى هذا العنوان.',
+  'Test connection': 'اختبار الاتصال',
+  Save: 'حفظ',
+  'Back to sign in': 'العودة إلى تسجيل الدخول',
 };

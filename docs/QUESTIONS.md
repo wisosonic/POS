@@ -66,6 +66,9 @@ Answer:
 **13. Delivery zones: which areas does each branch cover, and what are the fee, minimum order and delivery hours?** Named areas first (maps later). Needed before the online shop can route an order.
 Answer:
 
+**18. Who may change the branch server's address on a till?** Each till keeps the address of its branch server in its own settings (Settings → Branch server, and a link on the sign-in screen when the server cannot be reached). Today anyone sitting at the till PC can change it, because the page must work when nobody can sign in. A wrong or hostile address would stop the till from selling online (queued sales still work) but cannot read the shop's data. Options: (A) leave it open at the till PC; (B) once an address is saved, changing it needs a manager's or admin's name and password, checked by the branch server (the old address must be reachable for that to work, so a "reset" by editing the file on the PC stays the way out).
+Answer:
+
 ## Answered
 
 ### Fresh customer (2026-11-24): the multi-branch system is for a new customer, not a migration of Darwish

@@ -2,7 +2,8 @@ import { resolve } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const API_PORT = 3100;
-const PROD_PORT = 3300;
+const PROD_PORT = 3300; // the till's own server (serves the BUILT screens, passes calls on)
+const PROD_API_PORT = 3301; // the branch server behind it, which does NOT serve the screens
 const TABLET_API_PORT = 3200; // the tablet project gets its own API and web server, so it starts from a fresh database
 const TABLET_WEB_PORT = 5174;
 const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 768 } };
@@ -15,7 +16,8 @@ const tablet = { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 
 // Two ways of looking at the same app:
 //  - till-1366x768: the Vite dev server in front of the API (fast, what most tests use)
 //  - tablet-1024x768: the till-critical specs again on a touch tablet's screen (its own API and web server, so a fresh database)
-//  - production-build: the BUILT app served by the API itself, with the security headers it will really have
+//  - production-build: the BUILT app served by the till's own server (till/agent) in front of a branch server that serves no screens,
+//    with the security headers it will really have: the shape of a real till PC
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: false, // one till, one register session, tests share the server
@@ -53,12 +55,25 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      // Its own database, so the two never share a register or a sale.
+      // Its own database, so the two never share a register or a sale. It serves no screens: the till's server below does.
       command: 'npm run build && npm run e2e-server --prefix ../branch-server',
-      url: `http://127.0.0.1:${PROD_PORT}/api/v1/healthz`,
-      env: { E2E_API_PORT: String(PROD_PORT), E2E_WEB_DIST: resolve('web/dist') },
+      url: `http://127.0.0.1:${PROD_API_PORT}/api/v1/healthz`,
+      env: { E2E_API_PORT: String(PROD_API_PORT) },
       reuseExistingServer: false,
       timeout: 120_000,
+    },
+    {
+      command: 'npm run serve',
+      url: `http://127.0.0.1:${PROD_PORT}/till/health`,
+      env: {
+        PORT: String(PROD_PORT),
+        HOST: '127.0.0.1',
+        WEB_DIST: resolve('web/dist'),
+        BRANCH_SERVER_URL: `http://127.0.0.1:${PROD_API_PORT}`,
+        TILL_DATA_DIR: resolve('test-results/till-data'),
+      },
+      reuseExistingServer: false,
+      timeout: 60_000,
     },
   ],
   projects: [

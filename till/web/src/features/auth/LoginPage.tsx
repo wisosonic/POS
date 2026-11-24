@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { ApiError } from '../../lib/api';
 import { Icon } from '../../components/Icon';
 import { LanguageSwitch } from '../../components/LanguageSwitch';
@@ -13,6 +13,7 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [unreachable, setUnreachable] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (status === 'authenticated') return <Navigate to="/" replace />;
@@ -21,12 +22,15 @@ export function LoginPage() {
     e.preventDefault();
     setBusy(true);
     setError('');
+    setUnreachable(false);
     try {
       await login(username.trim(), password);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'LOCKED') setError(err.message);
-      else if (err instanceof ApiError && err.isNetwork) setError(tNow('Cannot reach the server. Check that it is running.'));
-      else setError(tNow('Wrong username or password.'));
+      else if (err instanceof ApiError && err.isNetwork) {
+        setError(tNow('Cannot reach the server. Check that it is running.'));
+        setUnreachable(true); // the branch server's address may be wrong: offer the page that sets it
+      } else setError(tNow('Wrong username or password.'));
     } finally {
       setBusy(false);
     }
@@ -55,6 +59,7 @@ export function LoginPage() {
             {error}
           </div>
         )}
+        {unreachable && <Link to="/connection">{t('Check the branch server address')}</Link>}
         <button className="btn primary big" type="submit" disabled={busy}>
           {t('Sign in')}
         </button>
