@@ -8,6 +8,7 @@
     "./adapter": "./src/adapter.ts",
     "./credentials": "./src/credentials.ts",
     "./sync": "./src/sync.ts",
+    "./printer": "./src/printer.ts",
     "./sqlite": "./src/sqlite.ts",
     "./open": "./src/open.ts",
     "./txstate": "./src/txstate.ts",

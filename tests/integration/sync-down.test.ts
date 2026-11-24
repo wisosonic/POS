@@ -133,6 +133,42 @@ describe('outages and repeats lose nothing', () => {
     expect(await count()).toEqual(before);
   });
 
+  it('a page that arrives after the branch was disconnected or connected elsewhere is not applied', async () => {
+    await connect('R7b');
+    const link = (await getLink(c.app.database))!;
+    // A page only this test could make (the live loop cannot): a rate with an id HQ never used.
+    const page = async () =>
+      new Response(
+        JSON.stringify({
+          changes: [
+            {
+              seq: 999_999,
+              tbl: 'exchange_rates',
+              pk: 99_999,
+              op: 'u',
+              row: {
+                id: 99_999,
+                rate_lbp_per_usd: 12345,
+                effective_from: '2001-01-01T00:00:00.000Z',
+                created_at: '2001-01-01T00:00:00.000Z',
+              },
+            },
+          ],
+          next: 999_999,
+          more: false,
+        }),
+        { status: 200 },
+      );
+    const stale = { ...link, connectedAt: '2000-01-01T00:00:00.000Z' }; // the link it was asked under is gone
+    const r = await pullOnce(c.app.database, stale, { fetchImpl: page as unknown as typeof fetch });
+    expect(r).toMatchObject({ applied: 0, changed: [] });
+    expect(await c.app.database.one('SELECT 1 FROM exchange_rates WHERE hq_id = 99999')).toBeUndefined();
+    // and under the real link the same page IS applied (so the test above proves the check, not a broken page)
+    const ok = await pullOnce(c.app.database, link, { fetchImpl: page as unknown as typeof fetch });
+    expect(ok).toMatchObject({ applied: 1 });
+    expect(await c.app.database.one('SELECT 1 FROM exchange_rates WHERE hq_id = 99999')).toBeTruthy();
+  });
+
   it('pulls a long log page by page', async () => {
     await connect('R8');
     for (let i = 0; i < 5; i++) await setAtHq(80000 + i);

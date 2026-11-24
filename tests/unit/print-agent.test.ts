@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AgentRefusedError, runAgent } from '../../apps/api/src/agent/agent';
+import { AgentRefusedError, runAgent } from '../../apps/till-agent/src/agent';
 
 // The agent's own rules, with a made-up server (no network): it never prints a job twice, it keeps trying while the server is away,
 // and it gives up when the server says it is not accepted any more. (The real agent against the real server: tests/integration.)

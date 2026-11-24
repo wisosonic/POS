@@ -37,7 +37,7 @@ while ($true) {
     Rotate $err
     Write-Launcher 'starting the print agent'
     $p = Start-Process -FilePath $NodeExe `
-        -ArgumentList @('--import', 'tsx', 'apps/api/src/cli/print-agent.ts', 'run', '--config', $ConfigFile) `
+        -ArgumentList @('--import', 'tsx', 'apps/till-agent/src/cli.ts', 'run', '--config', $ConfigFile) `
         -WorkingDirectory $AppDir `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $out -RedirectStandardError $err

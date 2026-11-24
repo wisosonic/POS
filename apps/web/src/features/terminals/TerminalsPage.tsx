@@ -323,10 +323,10 @@ function CodeDialog({ shown, onClose }: { shown: ShownCode; onClose: () => void 
               style={{ display: 'block', padding: 10, userSelect: 'all', overflowWrap: 'anywhere' }}
               data-testid="agent-command"
             >
-              {`npm run print-agent -w @pos/api -- enrol --server ${window.location.origin} --code ${shown.code} --printer "<printer name>"`}
+              {`npm run print-agent -w @pos/till-agent -- enrol --server ${window.location.origin} --code ${shown.code} --printer "<printer name>"`}
             </code>
             <p className="muted" style={{ margin: 0 }}>
-              {t('Then start it with "npm run print-agent -w @pos/api -- run". The printer name is its name in Windows.')}
+              {t('Then start it with "npm run print-agent -w @pos/till-agent -- run". The printer name is its name in Windows.')}
             </p>
           </>
         ) : (

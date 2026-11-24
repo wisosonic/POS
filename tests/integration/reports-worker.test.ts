@@ -47,7 +47,7 @@ beforeAll(async () => {
   manager = await c.login('manager');
   bulkSales(c.databasePath);
   ro = openDatabase(c.databasePath, { readonly: true });
-}, 120_000);
+}, 300_000); // starting the worker (it loads TypeScript) takes about 2 minutes on this PC: leave room for a busy machine
 afterAll(async () => {
   ro.close();
   await c.close(); // also ends the worker

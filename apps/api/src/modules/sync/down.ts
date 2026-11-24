@@ -71,11 +71,19 @@ export async function pullOnce(db: Database, link: Link, opts: PullOptions = {})
   if ('error' in page) return page;
   const bad = checkPage(page, cursor);
   if (bad) return { error: bad };
+  let stale = false;
   if (page.changes.length > 0 || page.next > cursor) {
     await db.tx(async (tx) => {
+      // The branch may have been disconnected (or connected to another HQ) while this page was on its way: then it is not ours to apply.
+      const now = await tx.one<{ connected_at: string }>('SELECT connected_at FROM hq_link WHERE id = 1');
+      if (!now || now.connected_at !== link.connectedAt) {
+        stale = true;
+        return;
+      }
       for (const c of page.changes) await applyChange(tx, c);
       await tx.run('UPDATE sync_control SET down_cursor = ? WHERE id = 1', [page.next]);
     });
   }
+  if (stale) return { applied: 0, more: false, changed: [] };
   return { applied: page.changes.length, more: page.more, changed: [...new Set(page.changes.map((c) => c.tbl))] };
 }

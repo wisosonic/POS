@@ -1,4 +1,4 @@
-import type { ReceiptPrinter } from '../modules/printing/driver';
+import type { ReceiptPrinter } from '@pos/core/printer';
 
 // The print agent (docs/11-multi-branch.md §3.4): a small program on the till PC that connects OUT to the branch server, asks for this
 // terminal's print jobs, prints them on the local USB printer, and says whether each reached the printer. Nothing listens on the

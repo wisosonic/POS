@@ -215,7 +215,7 @@ Invariants (tested after every kind of change): `balanceLbp` = sum of `restLbp` 
 | Any report | `&format=csv` |
 
 ### Print agent (receipt printer on the till's own PC)
-When the server is not on the till PC it cannot reach the USB printer. A small **print agent** (`npm run print-agent -w @pos/api`, `apps/api/src/agent/agent.ts`) runs on the till PC, **connects out** to the server, asks for its terminal's print jobs, prints them and says whether they reached the printer. Nothing listens on the till PC. A terminal has `printMode`: `server` (the server prints on its own printer, today's shop) or `agent`. The server still builds every receipt and decides what is a duplicate and whether the drawer opens (CLAUDE.md "A reprint is not a sale"); the agent only prints what it is given.
+When the server is not on the till PC it cannot reach the USB printer. A small **print agent** (`npm run print-agent -w @pos/till-agent`, `apps/till-agent/src/agent.ts`) runs on the till PC, **connects out** to the server, asks for its terminal's print jobs, prints them and says whether they reached the printer. Nothing listens on the till PC. A terminal has `printMode`: `server` (the server prints on its own printer, today's shop) or `agent`. The server still builds every receipt and decides what is a duplicate and whether the drawer opens (CLAUDE.md "A reprint is not a sale"); the agent only prints what it is given.
 
 The agent has **its own credential**, separate from the till browser's token: an admin asks for a one-time code, the agent trades it for a token, and sends it as `X-Agent-Token`. A user's sign-in opens nothing here, and the agent can do nothing except fetch and report its own terminal's jobs.
 

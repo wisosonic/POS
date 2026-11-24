@@ -4,13 +4,13 @@
 
 ## Progress
 
-Last updated: 2026-11-24 (P2 complete)
+Last updated: 2026-11-24 (repo split, step 1)
 
 | Phase | Status | Notes |
 |---|---|---|
 | P0 Design docs | **partly done** | Done: `docs/11-multi-branch.md`, questions #10-14, `CLAUDE.md` pointer + adapter/Windows pitfalls. **Still to do:** replace rule 16 and the "one till" statements (when P1 terminals land), new ownership/sync/branch rules, `docs/04`, `docs/06`, `docs/07` |
 | P1 Portability foundation + multi-terminal branch server | **done, except the multi-till load test** (needs `POSDB.sql`; do it on the real data and the real till PC). Built: adapter, terminals, print agent (+ startup scripts, dry-run only), live updates (SSE), paged catalog sync, reports worker. Not run on real hardware | **Done (session 4): terminals, device tokens, one register per till, warehouse per terminal (backend + tests + docs/06).** Earlier: `Database` adapter + SQLite driver (mutex, event-loop guard, statement cache), lint guard, and the **whole money core on the adapter**: holds, sales (create/void/delete/list/print), returns, customers (+ payments), expenses, services, registers, purchases, inventory (+ stocktake), approvals. **Next:** the multi-terminal work (migration 0015: branches, terminals, branch_id, per-branch counters, branch_users; per-terminal register sessions; warehouse by terminal), then SSE, print agent, paginated catalog sync, reports worker. `users`/`auth`/`catalog`/`settings`/`reports` can wait for P8's mechanical pass |
-| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2 done (a to d):** HQ server, enrolment, outage/recovery loop; sales travel up by themselves with snapshot and digests; the exchange rate set at HQ comes down to every branch; two-branch chaos test passes. **Next: the repo split** (`docs/11` §8), then P3 | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
+| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2 done (a to d):** HQ server, enrolment, outage/recovery loop; sales travel up by themselves with snapshot and digests; the exchange rate set at HQ comes down to every branch; two-branch chaos test passes. **Repo split (`docs/11` §8): step 1 done** (print agent is now `apps/till-agent`). **Next: step 2** (the till queue in the agent), then splitting the web app by role, then renaming `apps/api`; then P3 | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
 | P3 HQ-owned data down (catalog, price overrides, users, rates) | not started | |
 | P4 Branch facts up + HQ reports + reconciliation | not started | |
 | P5 Shared customers, transfers, central purchasing | not started | |

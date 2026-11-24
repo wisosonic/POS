@@ -13,8 +13,7 @@
     "restore": "tsx src/cli/restore.ts",
     "etl": "tsx src/etl/cli.ts",
     "rehearse": "tsx src/cli/rehearse.ts",
-    "preflight": "tsx src/cli/preflight.ts",
-    "print-agent": "tsx src/cli/print-agent.ts"
+    "preflight": "tsx src/cli/preflight.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

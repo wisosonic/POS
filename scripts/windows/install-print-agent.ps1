@@ -46,7 +46,7 @@ if ($Uninstall) {
         }
         # A stopped task can leave its node process behind. Only ever stop the node.exe that runs the print agent.
         foreach ($p in (Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue)) {
-            if ($p.CommandLine -like '*cli/print-agent.ts*') { Stop-Process -Id $p.ProcessId -Force }
+            if ($p.CommandLine -like '*till-agent/src/cli.ts*') { Stop-Process -Id $p.ProcessId -Force }
         }
     }
     Write-Host "Done. The agent file in $DataDir was not touched."
@@ -79,7 +79,7 @@ if (-not $haveConfig) {
         New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
         Push-Location $InstallDir
         try {
-            & $node.Source --import tsx apps/api/src/cli/print-agent.ts enrol --server $Server --code $Code --printer $Printer --config $ConfigFile
+            & $node.Source --import tsx apps/till-agent/src/cli.ts enrol --server $Server --code $Code --printer $Printer --config $ConfigFile
             if ($LASTEXITCODE -ne 0) { throw 'Enrolment failed (see the message above). Nothing was installed.' }
         } finally { Pop-Location }
         # The file holds the agent's token: only administrators and the agent itself (SYSTEM) may read it.

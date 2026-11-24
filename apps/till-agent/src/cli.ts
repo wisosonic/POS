@@ -1,7 +1,7 @@
 // The print agent for a till PC. Two commands:
 //
-//   npm run print-agent -w @pos/api -- enrol --server http://192.168.1.10:3000 --code XXXXX-XXXXX --printer "POS-80" [--config agent.json]
-//   npm run print-agent -w @pos/api -- run [--config agent.json]
+//   npm run print-agent -w @pos/till-agent -- enrol --server http://192.168.1.10:3000 --code XXXXX-XXXXX --printer "POS-80" [--config agent.json]
+//   npm run print-agent -w @pos/till-agent -- run [--config agent.json]
 //
 // `enrol` trades the one-time code (Settings → Tills → Print agent → New code) for the agent's own token and saves it, with the
 // printer's Windows name, in the config file. `run` keeps asking the server for this till's receipts and prints them. For an
@@ -9,8 +9,8 @@
 // readable only by the person who runs the agent, and never paste it into chat or a ticket.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { AgentRefusedError, runAgent } from '../agent/agent';
-import { windowsSpoolerPrinter } from '../modules/printing/driver';
+import { AgentRefusedError, runAgent } from './agent';
+import { windowsSpoolerPrinter } from '@pos/core/printer';
 
 type Config = { server: string; token: string; printerName: string };
 
@@ -67,6 +67,6 @@ if (command === 'enrol') {
   }
   log('Print agent stopped.');
 } else {
-  console.error('Usage: print-agent enrol|run  (see the comment at the top of apps/api/src/cli/print-agent.ts)');
+  console.error('Usage: print-agent enrol|run  (see the comment at the top of apps/till-agent/src/cli.ts)');
   process.exit(1);
 }

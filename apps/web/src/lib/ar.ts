@@ -294,6 +294,6 @@ export const AR: Record<string, string> = {
     'سيتوقف وكيل الطباعة الخاص بـ {name} عن الطباعة حتى يُعدّ من جديد. هل تريد المتابعة؟',
   'On the computer with the receipt printer, run the print agent with this code:':
     'على الجهاز المتصل بطابعة الإيصالات، شغّل وكيل الطباعة بهذا الرمز:',
-  'Then start it with "npm run print-agent -w @pos/api -- run". The printer name is its name in Windows.':
-    'ثم شغّله بالأمر "npm run print-agent -w @pos/api -- run". اسم الطابعة هو اسمها في ويندوز.',
+  'Then start it with "npm run print-agent -w @pos/till-agent -- run". The printer name is its name in Windows.':
+    'ثم شغّله بالأمر "npm run print-agent -w @pos/till-agent -- run". اسم الطابعة هو اسمها في ويندوز.',
 };

@@ -32,7 +32,7 @@ export default tseslint.config(
   },
   {
     // The load test and the print agent are command-line tools: printing their progress is their job.
-    files: ['tests/load/**/*.ts', 'apps/api/src/cli/print-agent.ts'],
+    files: ['tests/load/**/*.ts', 'apps/till-agent/src/cli.ts'],
     rules: { 'no-console': 'off' },
   },
   {

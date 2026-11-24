@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { startCtx, type TestCtx } from '../helpers/app';
-import { runAgent } from '../../apps/api/src/agent/agent';
+import { runAgent } from '../../apps/till-agent/src/agent';
 import type { ReceiptPrinter } from '../../apps/api/src/modules/printing/driver';
 
 // The print agent (docs/11-multi-branch.md §3.4, US-06): when the server is not on the till PC, receipts are queued for a small program on
