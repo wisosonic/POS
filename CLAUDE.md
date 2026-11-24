@@ -4,7 +4,7 @@ Guidance for Claude Code and other AI assistants working in this repository.
 
 ## Project
 
-Market POS for Darwish Market (Beirut). Replaces a legacy ASP.NET + SQL Server app. React PWA front end, Fastify + TypeScript API, SQLite (`better-sqlite3`).
+Market POS, first built for Darwish Market (Beirut), replacing a legacy ASP.NET + SQL Server app. **It is now becoming a chain system for a fresh customer (2026-11-24): the legacy Darwish system stays separate, nothing here has to migrate its data, and each customer gets a separate install.** React PWA front end, Fastify + TypeScript API, SQLite (`better-sqlite3`).
 The full design is in `docs/`. **Read the relevant doc before changing a related area, and update the doc when behaviour changes.**
 Deployment: a Windows PC runs the API (which owns the SQLite file); the tills are browsers, on that same PC or on others, and a till whose printer is elsewhere runs a print agent (`docs/04-architecture.md` §1, `docs/07-operations.md`). Current state: the single-branch system is built and tested (milestones in `plan.md`), with several tills per branch; it has **not** been run on a real till PC yet. The multi-branch / HQ plan is in `PLAN-MULTI-BRANCH.md`.
 **Growing into a chain (multi-branch, HR, online shop) is planned in `PLAN-MULTI-BRANCH.md` (architecture in `docs/11-multi-branch.md`). Read it before touching the database layer, registers, sync or users, and update its Progress section at the end of every piece of work.** Until a phase there says otherwise, the one-till rules below still hold.

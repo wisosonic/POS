@@ -12,10 +12,6 @@ Answer: **Later** (2026-11-24). Not settled; the barcode rule stays off.
 Tablets need HTTPS and a certificate made for the PC's name or address. If yes: what is the PC's name or address on the shop network, and how many tablets?
 Answer: **Answered with a question** (2026-11-24): tills (PC or tablet) talk to the branch server over plain local HTTP; only the branch server talks HTTPS to HQ. That is the design. The one catch: a browser on another device treats a plain-HTTP address as not secure, so a tablet could not install the app or keep its offline cache until the branch server has a certificate for its name. Selling itself works. Open: is that acceptable, and how many tablets?
 
-### 7. When is the cut-over, and who runs the rehearsal on the real till PC?
-`npm run rehearse`, `npm run preflight` and `npm run test:load` have to be run once on the real till PC before the real switch (the steps are in `docs/10-cutover.md`). Do you have a date in mind, and will you run them or should I walk you through it?
-Answer:
-
 ### Design (the canvas "Darwish POS Design", https://claude.ai/artifact/UB7D2ukCGYY5api7ThZLge)
 Twelve pages are drawn. Decide page by page; write your choice after each "Answer:" (or tell me in chat and I will write it here).
 
@@ -70,16 +66,24 @@ Answer:
 **13. Delivery zones: which areas does each branch cover, and what are the fee, minimum order and delivery hours?** Named areas first (maps later). Needed before the online shop can route an order.
 Answer:
 
+## Answered
+
+### Fresh customer (2026-11-24): the multi-branch system is for a new customer, not a migration of Darwish
+Answers: same rules as Darwish (Lebanon, LBP and USD, Whish/OMT, no tax); a separate install per customer (own HQ, own branch servers, own data); the legacy import tools are kept but moved out of the main flow; the customer starts from a product list in a spreadsheet (the CSV import is the first-run path). Recorded in `PLAN-MULTI-BRANCH.md`.
+Answer: **Decided** (2026-11-24).
+
+### 7. When is the cut-over, and who runs the rehearsal on the real till PC?
+`npm run rehearse`, `npm run preflight` and `npm run test:load` have to be run once on the real till PC before the real switch (the steps are in `docs/10-cutover.md`). Do you have a date in mind, and will you run them or should I walk you through it?
+Answer: **Not applicable to the new system** (2026-11-24). The new system is for a fresh customer with no old data, so there is no cut-over to date. The rehearsal and the load test on the legacy dump only matter if the Darwish shop itself ever moves to it; the owner called the old system "a one-customer system".
+
 **14. How many tills per branch, and which branches come first?** Used to size the first multi-till test and to decide which branch becomes "branch #1" (today's till).
-Answer:
+Answer: **10 or more tills per branch** (2026-11-24). The multi-till load test will run with 20 tills (needs POSDB.sql). Which branch is first is still to say: tell me when you know. At this size the branch server's headroom matters: the earlier test (50 sales a second, p95 32 ms) is far above 20 tills, but it is re-run before the first real branch.
 
 **16. A sale waited in the till's queue while the branch server was unreachable, and a product's price changed in the meantime. What should happen when the till finally sends it?** Today the server refuses it (`PRICE_MISMATCH`) and a person has to deal with it. The alternative is to accept the price the customer was actually shown (the sale was already made and paid at that price). Which do you want?
-Answer:
+Answer: **Accept the price the customer was shown** (2026-11-24). The sale was already paid. Implementation note (to check when built): the server still computes every total itself from the quantities and unit prices, never from a total the till sends; for a queued sale it accepts a unit price only if the catalog had that price at some moment while the sale waited (needs dated price history at the branch), otherwise it keeps refusing, so a tampered request cannot choose any price. The sale is recorded with a note that the price differed from today's.
 
 **17. Which code may be shared between the five projects?** Only the money, pricing, barcode and receipt code needs to be the same at the till and the branch server (the screen total must equal the server's). The sync format between a branch and HQ could instead be a written contract with a test, and HQ could have its own database plumbing instead of a copy. Fewer copies means less to keep in step, at the cost of a little duplication. Copy only the money/pricing code, or keep copying the sync format and the database layer too?
-Answer:
-
-## Answered
+Answer: **Only money, pricing, barcode and receipt code is copied** (2026-11-24), into the till from the branch server. The sync format becomes a written contract with a contract test; HQ has its own database plumbing.
 
 ### 3. Should cashiers be able to record a service (IT support, a repair) at the till?
 I made Services manager-only, following the first design. If a cashier takes the money, they would need it too.
