@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { inWriteTransaction } from '../../db/open';
+import { AppError } from '../../errors';
 import { parse } from '../../util/validate';
 import { writeAudit } from '../audit/service';
 import { currentRate } from './context';
@@ -39,6 +40,13 @@ export default async function rateRoutes(app: FastifyInstance) {
   }));
 
   app.post('/exchange-rates', { preHandler: app.requireRole('admin') }, async (req, reply) => {
+    // Once this branch is connected to HQ the rate is set at HQ and comes down by itself (docs/12 §15); a second source would fight it.
+    if (db.prepare('SELECT 1 FROM hq_link WHERE id = 1').get())
+      throw new AppError(
+        409,
+        'HQ_OWNS_RATES',
+        'This branch is connected to HQ: the exchange rate is set at HQ and arrives here by itself.',
+      );
     const b = parse(createBody, req.body);
     const before = currentRate(db);
     const effectiveFrom = b.effectiveFrom ? new Date(b.effectiveFrom).toISOString() : new Date().toISOString();

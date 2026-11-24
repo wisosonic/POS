@@ -34,6 +34,7 @@ import agentRoutes from './modules/printing/agentRoutes';
 import { EventBus, eventsFor } from './events/bus';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
+import { pullOnce } from './modules/sync/down';
 import { pushOnce } from './modules/sync/up';
 import syncRoutes from './modules/sync/routes';
 import eventRoutes from './events/routes';
@@ -183,6 +184,10 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   const sync = new SyncAgent({
     db: app.database,
     onChange: () => events.publish('sync.changed'),
+    pull: (link, signal) => pullOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, signal }),
+    onPulled: (tables) => {
+      if (tables.includes('exchange_rates')) events.publish('rate.changed');
+    },
     push: (link, signal) =>
       pushOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, batchSize: options.sync?.batchSize, signal }),
     ...options.sync,

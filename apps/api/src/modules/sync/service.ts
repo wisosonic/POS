@@ -79,12 +79,12 @@ async function startCapture(q: Queryable): Promise<void> {
   await q.run('DELETE FROM sync_outbox');
   await q.run('DELETE FROM sync_snapshot');
   for (const t of SYNC_TABLES) await q.run(`INSERT INTO sync_snapshot (tbl, upto) SELECT ?, COALESCE(MAX(id), 0) FROM ${t.name}`, [t.name]);
-  await q.run('UPDATE sync_control SET capture = 1, last_push_at = NULL WHERE id = 1');
+  await q.run('UPDATE sync_control SET capture = 1, last_push_at = NULL, down_cursor = 0 WHERE id = 1');
 }
 
 /** A branch that is not connected records nothing, and keeps nothing waiting. */
 async function stopCapture(q: Queryable): Promise<void> {
-  await q.run('UPDATE sync_control SET capture = 0, last_push_at = NULL WHERE id = 1');
+  await q.run('UPDATE sync_control SET capture = 0, last_push_at = NULL, down_cursor = 0 WHERE id = 1');
   await q.run('DELETE FROM sync_outbox');
   await q.run('DELETE FROM sync_snapshot');
 }

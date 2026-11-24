@@ -127,7 +127,25 @@ Salary data lives **only at HQ**. Branches get name, code, attendance credential
 
 Details, files and tests per phase are in the approved plan (`plan.md` will get a matching section when P1 starts).
 
-## 8. Risks
+## 8. The five deployable projects (decided 2026-11-24)
+
+One repository, five things that are installed or hosted separately. They share `packages/shared` (money, pricing, receipts) and `packages/core` (database, sync), so the rules cannot drift.
+
+| # | Project | Runs on | Has | Talks to |
+|---|---|---|---|---|
+| 1 | **Till** (`apps/till` screens, `apps/till-agent`) | each till PC | The cashier's screens. A **thin local agent**: printer, cash drawer, scale, and a queue of sales waiting for the branch server. | Branch server only, over the local network (plain HTTP) |
+| 2 | **Branch server** (`apps/api` becoming `apps/branch`, plus `apps/branch-web`) | a server in the branch's server room | The one authority for the branch: totals, registers, approvals, stock, customers' balances here. Manager screens and monitoring. | The tills (LAN) and HQ (HTTPS, branch-initiated) |
+| 3 | **Cloud HQ** (`apps/central`, plus `apps/hq-web`) | cloud | Collects every branch's data, owns the catalog, prices, users, rates; monitoring of all branches; hands online orders to the right branch. | The branch servers and the marketplace server |
+| 4 | **Marketplace** (`apps/shop-api`, `apps/storefront`) | cloud, separate from HQ | The public site and its API: browse a published catalog, sign up, order. Nothing else of HQ is reachable from the internet. | HQ only, over a narrow API |
+| 5 | **Mobile app** (`apps/mobile`) | customers' phones | The same ordering as the storefront. | The marketplace API (a driver app can follow the same way) |
+
+**The till does not decide a sale.** Totals, approvals, the register, credit and idempotency stay in the branch server (rules 2, 3, 6, 20). The till's agent only queues a sale it could not deliver and sends it when the branch server answers: until the branch server accepts it, a queued sale is not in the system (as the browser outbox already works). While the branch server is unreachable a till sells from the prices it last downloaded; credit sales and manager approvals wait for the server. A full sales engine with its own database on every till was rejected: two sources of truth and conflicts to merge, for little gain.
+
+**Mapping from today's code:** `apps/web` is split by role into the till screens and the branch manager screens (the till build stays small and offline-first); the print agent grows into the till agent; `apps/api` and `apps/central` keep their names until the rename is worth its churn. The marketplace is its own server instead of public routes inside HQ (this replaces the P9a placement in the plan), so the only internet-facing part is isolated from HQ's data.
+
+**Order of work:** the split is a re-organisation, done in steps after P2c/P2d so that sync keeps moving: first the till agent role (queue and devices), then splitting the web app by role, then the marketplace server when P9 starts.
+
+## 9. Risks
 
 - **Customer balance offline:** a branch may extend credit against a stale balance (no credit limit by decision); it reconciles on sync and shows "as of last sync".
 - **Late sales into closed sessions:** facts keep their own session id and are never re-attributed.

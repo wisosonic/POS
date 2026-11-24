@@ -1,6 +1,7 @@
 import type { Database } from '../../db/adapter';
 import { nowIso } from '../../util/time';
 import { pingHq } from './hqClient';
+import type { PullOutcome } from './down';
 import type { PushOutcome } from './up';
 import { getLink, recordError, recordOk, type Link } from './service';
 
@@ -24,6 +25,10 @@ export type SyncAgentOptions = {
   onReconnect?: (link: Link) => Promise<void> | void;
   /** Send the next batch of this branch's records to HQ (modules/sync/up.ts). Called again and again while it says there is more. */
   push?: (link: Link, signal: AbortSignal) => Promise<PushOutcome>;
+  /** Fetch and apply the next page of what HQ owns (modules/sync/down.ts). Called again and again while it says there is more. */
+  pull?: (link: Link, signal: AbortSignal) => Promise<PullOutcome>;
+  /** HQ's changes were applied: which tables changed (so the screens can be told). */
+  onPulled?: (tables: string[]) => void;
   /** How often to ask while HQ is answering. */
   intervalMs?: number;
   /** The wait after a failed call: starts at the first, doubles up to the second. */
@@ -85,6 +90,16 @@ export class SyncAgent {
    * or null. A failure is NOT cleared from the outbox: the same batch is simply tried again.
    */
   private async drain(link: Link): Promise<{ error: string; refused?: boolean } | null> {
+    // First what HQ has for us (a new exchange rate matters before the next sale), then what we have for HQ.
+    const pull = this.opts.pull;
+    for (let i = 0; pull && i < 40; i++) {
+      if (this.abort.signal.aborted) return null;
+      const r = await pull(link, this.abort.signal);
+      if ('error' in r) return r;
+      if (r.changed.length > 0) this.opts.onPulled?.(r.changed);
+      if (!r.more) break;
+      if (i === 39) this.moreWaiting = true;
+    }
     const push = this.opts.push;
     if (!push) return null;
     for (let i = 0; i < 40; i++) {

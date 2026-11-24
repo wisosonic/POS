@@ -1,9 +1,9 @@
 import { parse } from '@pos/core/validate';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { MAX_BATCH_ROWS, type Fact } from '@pos/core/sync';
+import { MAX_BATCH_ROWS, MAX_CHANGES_PAGE, type Fact } from '@pos/core/sync';
 import { enrolBranch } from '../branches/service';
-import { applyFacts, tableDigest } from '../facts/service';
+import { applyFacts, changesAfter, tableDigest } from '../facts/service';
 
 const LIMIT = { max: 10, timeWindow: '1 minute' };
 
@@ -35,6 +35,18 @@ export default async function syncRoutes(app: FastifyInstance) {
     const b = parse(z.object({ rows: z.array(factRow).max(MAX_BATCH_ROWS) }), req.body);
     const applied = await db.tx((tx) => applyFacts(tx, req.branch.id, b.rows as Fact[]));
     return { applied };
+  });
+
+  // What HQ owns, after a number: the branch applies the page in order and asks again (docs/12 §15).
+  app.get('/sync/changes', branch, async (req) => {
+    const q = parse(
+      z.object({
+        cursor: z.coerce.number().int().min(0).default(0),
+        limit: z.coerce.number().int().min(1).max(MAX_CHANGES_PAGE).default(MAX_CHANGES_PAGE),
+      }),
+      req.query,
+    );
+    return changesAfter(db, q.cursor, q.limit);
   });
 
   // What HQ holds of one table for the calling branch, as a fingerprint (count, highest id, checksum): the branch compares it with its own.

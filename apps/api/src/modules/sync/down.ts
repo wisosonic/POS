@@ -1,0 +1,81 @@
+import { downTable, validateRow, type Change } from '@pos/core/sync';
+import type { Database, Queryable } from '../../db/adapter';
+import type { Link } from './service';
+
+// Receiving what HQ owns (docs/12-sync-and-hq.md §5, §15). One call to `pullOnce` asks for the next page of HQ's change log after the number
+// this branch remembers, applies the WHOLE page in one short transaction (with the new number), and says whether there is more. A page that
+// fails is not applied and the number does not move, so it is simply asked for again. Applying a row is an upsert on HQ's id (`hq_id`), so
+// applying the same page twice changes nothing.
+
+export type PullOutcome = { applied: number; more: boolean; changed: string[] } | { error: string; refused?: boolean };
+
+export type PullOptions = { fetchImpl?: typeof fetch; signal?: AbortSignal; limit?: number };
+
+type Page = { changes: Change[]; next: number; more: boolean };
+
+async function fetchPage(link: Link, cursor: number, opts: PullOptions): Promise<Page | { error: string; refused?: boolean }> {
+  try {
+    const res = await (opts.fetchImpl ?? fetch)(`${link.hqUrl}/api/v1/sync/changes?cursor=${cursor}&limit=${opts.limit ?? 500}`, {
+      headers: { 'X-Branch-Token': link.token, Accept: 'application/json' },
+      signal: AbortSignal.any([...(opts.signal ? [opts.signal] : []), AbortSignal.timeout(30_000)]),
+    });
+    if (res.status === 401) return { refused: true, error: 'HQ no longer accepts this branch. Ask HQ for a new code and connect again.' };
+    if (!res.ok) return { error: `HQ did not give its changes (${res.status})` };
+    return (await res.json()) as Page;
+  } catch (e) {
+    return { error: e instanceof Error && e.name === 'TimeoutError' ? 'HQ did not answer in time' : 'Cannot reach HQ' };
+  }
+}
+
+/** Check a page before touching anything: a page with a row this version cannot read is refused whole. */
+function checkPage(page: Page, cursor: number): string | null {
+  if (!Array.isArray(page.changes) || !Number.isSafeInteger(page.next) || page.next < cursor)
+    return 'HQ sent a page this branch cannot read';
+  let last = cursor;
+  for (const c of page.changes) {
+    const table = downTable(c.tbl);
+    if (!table) return `HQ sent a table this branch does not know ("${c.tbl}")`;
+    if (!Number.isSafeInteger(c.seq) || c.seq <= last) return 'HQ sent changes out of order';
+    last = c.seq;
+    if (!Number.isSafeInteger(c.pk) || c.pk < 1) return 'HQ sent a bad id';
+    if (c.op === 'u') {
+      const problem = validateRow(table, c.row);
+      if (problem) return `HQ sent a row this branch cannot read: ${problem}`;
+      if (c.row!.id !== c.pk) return 'HQ sent a row whose id does not match';
+    }
+  }
+  return null;
+}
+
+async function applyChange(q: Queryable, c: Change): Promise<void> {
+  // Only exchange rates come down so far. A new table adds its own case here (and to DOWN_TABLES and a migration for its hq_id).
+  if (c.tbl === 'exchange_rates') {
+    if (c.op === 'd') {
+      await q.run('DELETE FROM exchange_rates WHERE hq_id = ?', [c.pk]);
+      return;
+    }
+    const r = c.row!;
+    await q.run(
+      `INSERT INTO exchange_rates (rate_lbp_per_usd, effective_from, created_at, hq_id) VALUES (?, ?, ?, ?)
+       ON CONFLICT (hq_id) WHERE hq_id IS NOT NULL DO UPDATE SET rate_lbp_per_usd = excluded.rate_lbp_per_usd,
+         effective_from = excluded.effective_from, created_at = excluded.created_at`,
+      [r.rate_lbp_per_usd ?? null, r.effective_from ?? null, r.created_at ?? null, c.pk],
+    );
+  }
+}
+
+export async function pullOnce(db: Database, link: Link, opts: PullOptions = {}): Promise<PullOutcome> {
+  const control = await db.one<{ down_cursor: number }>('SELECT down_cursor FROM sync_control WHERE id = 1');
+  const cursor = control?.down_cursor ?? 0;
+  const page = await fetchPage(link, cursor, opts);
+  if ('error' in page) return page;
+  const bad = checkPage(page, cursor);
+  if (bad) return { error: bad };
+  if (page.changes.length > 0 || page.next > cursor) {
+    await db.tx(async (tx) => {
+      for (const c of page.changes) await applyChange(tx, c);
+      await tx.run('UPDATE sync_control SET down_cursor = ? WHERE id = 1', [page.next]);
+    });
+  }
+  return { applied: page.changes.length, more: page.more, changed: [...new Set(page.changes.map((c) => c.tbl))] };
+}

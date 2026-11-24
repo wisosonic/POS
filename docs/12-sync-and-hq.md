@@ -113,7 +113,7 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **Run the whole thing on one machine:** `npm run dev:chain` starts HQ (:4000) and branches A (:3000) and B (:3001), each with its own data folder under `data/chain/`. With `CHAIN_ADMIN_PASSWORD=<any password for this throw-away data>` set it also creates an `admin` in each branch, adds the branches at HQ and connects them. It was run for real: both branches online, HQ saw both, no secret reached the output. To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev -w @pos/web`.
 
-**Not built yet:** the Settings > HQ screen (connect and status are API-only for now), HQ users (P3), and data going DOWN (P2c, P2d). Going up is P2b, §14.
+**Not built yet:** the Settings > HQ screen (connect and status are API-only for now), HQ users (P3), and the chaos tests (P2d). Going up is P2b, §14; going down is P2c, §15.
 
 ## 14. What P2b built (2026-11-24): the sale cluster goes up
 
@@ -128,6 +128,18 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 **Proof.** `digestRows` gives `{ count, maxPk, checksum }` (the checksum is order-independent: the sum of 48-bit SHA-256 prefixes of each row). `GET /sync/verify` at the branch compares its tables with HQ's `GET /sync/digest`; `inSync` is true only when nothing is waiting and every table matches. The integration test uses it after every scenario.
 
 **Known limits.** A sale's rows can land at HQ in different batches, so HQ may briefly show a sale without its lines (it heals on the next batch; reports at HQ must wait for P4's reconciliation before they trust a recent minute). Only the sale cluster goes up. The cost of the triggers on a busy till is not measured yet.
+
+## 15. What P2c built (2026-11-24): HQ's changes go down, starting with the exchange rate
+
+**At HQ (migration 0003).** `exchange_rates` and an append-only `change_log` (never edited or deleted, by trigger). Adding a rate (`POST /exchange-rates`, HQ staff) writes the rate, the log line and an audit row in ONE transaction; the code writes the log line, not a trigger, so it is the same on PostgreSQL later. `GET /sync/changes?cursor=&limit=` (branch token) returns the next page of the log with each row **as it is now** (a row deleted since goes out as a deletion), `next` and `more`.
+
+**At the branch (migration 0019).** `sync_control.down_cursor` remembers how far it got; `exchange_rates.hq_id` keeps HQ's id apart from ids the branch made itself (unique). `modules/sync/down.ts` `pullOnce` asks for the page after the cursor, checks the WHOLE page (known table, well-formed rows, increasing numbers), applies it and moves the cursor in ONE short transaction, and says whether there is more. A bad page is refused whole and the cursor does not move; applying a page twice changes nothing (upsert on `hq_id`). The loop pulls **before** it pushes after every ping (a new rate matters before the next sale) and tells the screens with `rate.changed`. Connecting or disconnecting resets the cursor, so a new HQ is read from its beginning.
+
+**Rule:** while a branch is connected it cannot set its own rate (`409 HQ_OWNS_RATES`): two sources would fight. If HQ is unreachable the branch keeps selling at the last rate it received. Not connected, it works as before.
+
+**How fast:** the branch asks every 10 s, so a new rate reaches every branch within about ten seconds. There is no push from HQ yet (a stream from HQ is an option if that is ever too slow).
+
+**Same pattern for what comes next (P3):** add the table to `DOWN_TABLES` (packages/core/src/sync.ts), a table at HQ with a `change_log` line written by its service, a `hq_id` column at the branch, and a case in `applyChange`. `tests/db/sync-schema.test.ts` checks the lists agree.
 
 ## 13. Shared code (`packages/core`, `@pos/core`)
 

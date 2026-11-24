@@ -6,23 +6,11 @@ Questions for the owner. Answer under each one (write after "Answer:"). New ques
 
 ### 2. The 21 shared barcodes: who decides which product stays?
 Menu → Duplicate barcodes lists each one with its stock, how often it sold, and its price. For each group you either give one product its own barcode, or keep one and fold the others into it. It is your decision which stays. Do you want to go through them together, or should I print the list with the numbers so you can work through it yourself?
-Answer:
-
-### 3. Should cashiers be able to record a service (IT support, a repair) at the till?
-I made Services manager-only, following the first design. If a cashier takes the money, they would need it too.
-Answer:
-
-### 4. Where should the second backup copy go?
-The second folder can be any folder. For it to survive a fire or a stolen PC it has to be a synced or external location. Which should it be: OneDrive, Google Drive, an external drive that is taken home, or something else?
-Answer:
-
-### 5. Until when can a sale be cancelled?
-Today: only while the register that took it is still open (the drawer has not been counted). After that, a return is the way back. The alternative is to allow it until the end of the day, but that would change a drawer count that was already settled. Is the current limit right?
-Answer:
+Answer: **Later** (2026-11-24). Not settled; the barcode rule stays off.
 
 ### 6. Will you use any tablets?
 Tablets need HTTPS and a certificate made for the PC's name or address. If yes: what is the PC's name or address on the shop network, and how many tablets?
-Answer:
+Answer: **Answered with a question** (2026-11-24): tills (PC or tablet) talk to the branch server over plain local HTTP; only the branch server talks HTTPS to HQ. That is the design. The one catch: a browser on another device treats a plain-HTTP address as not secure, so a tablet could not install the app or keep its offline cache until the branch server has a certificate for its name. Selling itself works. Open: is that acceptable, and how many tablets?
 
 ### 7. When is the cut-over, and who runs the rehearsal on the real till PC?
 `npm run rehearse`, `npm run preflight` and `npm run test:load` have to be run once on the real till PC before the real switch (the steps are in `docs/10-cutover.md`). Do you have a date in mind, and will you run them or should I walk you through it?
@@ -72,15 +60,9 @@ Answer:
 
 ### 9. Arabic: who checks the wording, and which screens next?
 I wrote the Arabic myself. The till flow is done (header, menu, sign-in, settings, checkout, cart, payment, held carts, customers at the till, opening the register). Please have someone who works the till read it (`apps/web/src/lib/ar.ts`, or just switch the screen to Arabic) and tell me the words you would change: for example "Walk-In" is **زبون عابر**, "Debts" is **الديون**, "Hold" is **تعليق**. Which screens should be translated next: Sales and Returns, closing the register, or the back office (products, purchases, reports, users)? Digits stay 0-9; say if you want Arabic-Indic digits (٠١٢) on screen instead. Receipts stay English because the printer cannot print Arabic.
-Answer:
+Answer: **Sales and Returns next** (2026-11-24). Still open: someone who works the till to read the existing Arabic.
 
 ### Multi-branch, HR and online marketplace (design in `docs/11-multi-branch.md`)
-
-**10. Online stock: leave the shelf at dispatch or at settlement?** The design posts stock out when the branch records the sale at delivery settlement. Between dispatch and settlement a till could sell an item that is already in the customer's bag. The alternative posts stock out when the order is dispatched and puts it back if delivery fails. Which do you want?
-Answer:
-
-**11. Customer sign-up for the online shop: phone + password only, or a code by SMS/WhatsApp?** A code needs an outside messaging service (cost, and the customer's number is sent to it). Phone + password needs no outside service.
-Answer:
 
 **12. What are the real NSSF and income-tax rules, and who confirms them?** Payroll takes them as dated settings, not code. Someone (your accountant) must give the rates, caps and brackets, and check the first payroll run against their own figures before anyone is paid from it.
 Answer:
@@ -92,6 +74,24 @@ Answer:
 Answer:
 
 ## Answered
+
+### 3. Should cashiers be able to record a service (IT support, a repair) at the till?
+I made Services manager-only, following the first design. If a cashier takes the money, they would need it too.
+Answer: **Yes, cashiers too** (2026-11-24). Services are manager-only in the code today: to be opened to cashiers.
+
+### 4. Where should the second backup copy go?
+The second folder can be any folder. For it to survive a fire or a stolen PC it has to be a synced or external location. Which should it be: OneDrive, Google Drive, an external drive that is taken home, or something else?
+Answer: **A cloud-synced folder** (OneDrive or Google Drive) (2026-11-24). Point the second backup folder at it on the till PC.
+
+### 5. Until when can a sale be cancelled?
+Today: only while the register that took it is still open (the drawer has not been counted). After that, a return is the way back. The alternative is to allow it until the end of the day, but that would change a drawer count that was already settled. Is the current limit right?
+Answer: **Keep the current limit** (2026-11-24): a sale can be cancelled only while its register is still open.
+
+**10. Online stock: leave the shelf at dispatch or at settlement?** The design posts stock out when the branch records the sale at delivery settlement. Between dispatch and settlement a till could sell an item that is already in the customer's bag. The alternative posts stock out when the order is dispatched and puts it back if delivery fails. Which do you want?
+Answer: **At dispatch** (2026-11-24): stock leaves the shelf when the order is dispatched and is put back if the delivery fails. Changes the P9b design (docs/11).
+
+**11. Customer sign-up for the online shop: phone + password only, or a code by SMS/WhatsApp?** A code needs an outside messaging service (cost, and the customer's number is sent to it). Phone + password needs no outside service.
+Answer: **Phone + password only** (2026-11-24), no outside service.
 
 ### 15. Once branches are connected to HQ, who may add or change products, prices and categories?
 (Design: `docs/12-sync-and-hq.md`.) The catalog is owned by HQ so that a product number means the same thing in every branch. Today a manager can add and edit products at the till. Options: **A)** only at HQ; the products screens at a branch become read-only (simplest, no clashes, but a branch that is offline cannot add a new product it just received on the shelf). **B)** a branch can *propose* a product or a price change; HQ approves it. **C)** a branch can add a new product locally with a temporary number and HQ adopts it later (works offline, but two branches can add the same product twice and someone has to merge them).

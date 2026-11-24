@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import branchRoutes from './modules/branches/routes';
 import { resolveBranch, type Branch } from './modules/branches/service';
 import syncRoutes from './modules/sync/routes';
+import rateRoutes from './modules/rates/routes';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -115,6 +116,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
       api.get('/healthz', async () => ({ status: 'ok' }));
       await api.register(branchRoutes);
       await api.register(syncRoutes);
+      await api.register(rateRoutes);
     },
     { prefix: '/api/v1' },
   );

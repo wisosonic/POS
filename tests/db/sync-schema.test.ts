@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { migrateCentral } from '../../apps/central/src/db/migrate';
 import { migrate } from '../../apps/api/src/db/migrate';
 import { openDatabase, type Db } from '../../apps/api/src/db/open';
-import { SYNC_TABLES } from '../../packages/core/src/sync';
+import { DOWN_TABLES, SYNC_TABLES } from '../../packages/core/src/sync';
 
 // Three descriptions of the same rows must agree: the shared list (packages/core/src/sync.ts), the branch's tables, and HQ's copies
 // (docs/12-sync-and-hq.md §4). If someone adds a column to a branch table, this fails until the list and HQ's table know about it too,
@@ -101,5 +101,22 @@ describe('HQ’s copies are mirrors, not records of HQ’s own', () => {
     expect(() => insert(1, 2, 500)).toThrow(/UNIQUE/); // the same branch cannot use a number twice
     db.exec('DELETE FROM sales');
     db.close();
+  });
+});
+
+// What HQ owns and sends down (docs/12 §15): HQ's table has the listed columns; the branch's has them plus hq_id, where HQ's id is kept.
+describe.each(DOWN_TABLES.map((t) => [t.name, t] as const))('down: %s', (_name, table) => {
+  const listed = table.columns.map((c) => ({ name: c.name, kind: c.kind, nullable: c.nullable }));
+  it('HQ has exactly the listed columns', () => {
+    expect(info(hq, table.name).map((c) => ({ name: c.name, kind: kind(c.type), nullable: c.notnull === 0 && c.pk === 0 }))).toEqual(
+      listed,
+    );
+  });
+  it('the branch has the listed columns, and an hq_id (unique) where HQ id is kept apart from its own ids', () => {
+    const cols = info(branch, table.name).map((c) => c.name);
+    for (const c of table.columns.filter((x) => x.name !== 'id')) expect(cols, c.name).toContain(c.name);
+    expect(cols).toContain('hq_id');
+    const idx = branch.prepare(`PRAGMA index_list(${table.name})`).all() as { name: string; unique: number }[];
+    expect(idx.some((i) => i.unique === 1 && i.name.includes('hq'))).toBe(true);
   });
 });

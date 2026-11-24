@@ -4,13 +4,13 @@
 
 ## Progress
 
-Last updated: 2026-11-24 (P2b built)
+Last updated: 2026-11-24 (P2c built)
 
 | Phase | Status | Notes |
 |---|---|---|
 | P0 Design docs | **partly done** | Done: `docs/11-multi-branch.md`, questions #10-14, `CLAUDE.md` pointer + adapter/Windows pitfalls. **Still to do:** replace rule 16 and the "one till" statements (when P1 terminals land), new ownership/sync/branch rules, `docs/04`, `docs/06`, `docs/07` |
 | P1 Portability foundation + multi-terminal branch server | **done, except the multi-till load test** (needs `POSDB.sql`; do it on the real data and the real till PC). Built: adapter, terminals, print agent (+ startup scripts, dry-run only), live updates (SSE), paged catalog sync, reports worker. Not run on real hardware | **Done (session 4): terminals, device tokens, one register per till, warehouse per terminal (backend + tests + docs/06).** Earlier: `Database` adapter + SQLite driver (mutex, event-loop guard, statement cache), lint guard, and the **whole money core on the adapter**: holds, sales (create/void/delete/list/print), returns, customers (+ payments), expenses, services, registers, purchases, inventory (+ stocktake), approvals. **Next:** the multi-terminal work (migration 0015: branches, terminals, branch_id, per-branch counters, branch_users; per-terminal register sessions; warehouse by terminal), then SSE, print agent, paginated catalog sync, reports worker. `users`/`auth`/`catalog`/`settings`/`reports` can wait for P8's mechanical pass |
-| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2a and P2b done** (HQ server, enrolment, outage/recovery loop; the sale cluster travels up by itself, with history snapshot and proof digests). **Next: P2c** (HQ to branch, starting with the exchange rate), then P2d chaos tests | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
+| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2a, P2b and P2c done** (HQ server, enrolment, outage/recovery loop; sales travel up by themselves with snapshot and digests; the exchange rate set at HQ comes down to every branch). **Next: P2d** (two-branch chaos tests), then the repo split, then P3 | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
 | P3 HQ-owned data down (catalog, price overrides, users, rates) | not started | |
 | P4 Branch facts up + HQ reports + reconciliation | not started | |
 | P5 Shared customers, transfers, central purchasing | not started | |
@@ -120,7 +120,14 @@ Last updated: 2026-11-24 (P2b built)
   - **Fix found by the full suite:** the sync loop listened to the live-updates bus like a screen and made `events.size` one too high; it now uses `events.tap`, which is not counted.
   - **Tests (+69):** unit 15 (`sync-core`), db 14 + 12 (`sync-schema`, `sync-capture`), central 19 (`facts`), integration 9 (`sync-up`: real HQ and real branch, history in small batches, HQ down then back, failed calls, a lost answer after HQ stored the batch, void propagates, verify). Full suites green: unit 208, db 175, central 42, integration 888 (4 skipped). Typecheck, ESLint and Prettier clean.
   - **Known limits:** the rows of one sale can reach HQ in different batches, so HQ may briefly show a sale without its lines; nothing but the sale cluster goes up yet (registers, returns, expenses, customers come in P4); the cost of the capture triggers on a busy till is not measured (needs the load test on `POSDB.sql`); no Settings > HQ screen; not run on a real till PC.
+- 2026-11-24 (**architecture decision**, no code): the system is five deployable projects (till, branch server, cloud HQ, marketplace server, mobile app), one repo (`docs/11` §8). The till gets a thin agent (printer, drawer, scale, queue) and never decides a sale; offline = queue only, no local sales engine. The marketplace becomes its own server, replacing the plan's "public routes inside HQ". Answers recorded in `QUESTIONS.md`: online stock leaves at dispatch (Q10), phone + password sign-up (Q11), cashiers may record services (Q3), cancel limit unchanged (Q5), backup copy to a cloud-synced folder (Q4).
   - **Next, P2c:** HQ to branch (a `change_log` at HQ, a cursor at the branch), starting with the exchange rate; then P2d chaos tests with two branches.
+
+- 2026-11-24 (**P2c: HQ changes go down**, session 12, on `main`, **not committed**):
+  - **HQ:** migration `0003_hq_owned.sql` (`exchange_rates`, append-only `change_log`), `POST/GET /exchange-rates` (HQ staff), `GET /sync/changes` (branch token, paged, row as it is now). **Branch:** migration `0019_hq_down.sql` (`down_cursor`, `exchange_rates.hq_id`), `modules/sync/down.ts` `pullOnce` (whole page checked, applied with the cursor in one transaction, repeat-safe), the loop pulls before it pushes and publishes `rate.changed`. Details in `docs/12` §15.
+  - **Rule added:** a connected branch cannot set its own rate (`409 HQ_OWNS_RATES`); not connected, nothing changes. Open: if HQ is down for days the branch keeps selling at the last rate it received (no local override). Say if you want a manager override.
+  - **Tests (+35):** central 9 (`changes`), db 4 (parity for the down table), integration 10 (`sync-down`: a rate set at HQ becomes the till rate, a new sale uses it and an old sale keeps its own, a future date waits, failed calls, HQ down then back, a repeated page, paging, a bad page refused whole, reconnect resets the cursor). Full results below in the next entry.
+  - **Next:** P2d (HQ plus TWO branches in one test: sell offline on both, reconnect, totals agree; kill mid-batch), then the repo split, then P3.
 
 ---
 
@@ -132,6 +139,7 @@ Today the system is one till on one PC (docs/04 "One till, one PC"; rule 16; `ge
 **Decisions from the owner (this session)**
 | Topic | Decision |
 |---|---|
+| Deployable projects | **Five** (decided 2026-11-24, `docs/11` §8): till (screens + thin agent), branch server, cloud HQ, marketplace server (separate from HQ), mobile app. One repository. The till queues sales and never decides one (queue-only offline). |
 | Topology | **Hybrid.** A server in every branch (keeps selling when the internet is down) + one **cloud HQ server**. Both built and run on the dev machine first (different ports/data folders), moved to real machines later. |
 | Offline | Branch keeps selling **fully** offline. **Sync runs automatically the moment the internet connection is restored** (no manual step), in both directions, and resumes where it stopped. |
 | Scale | 5–10 branches (≈ 50 tills). |

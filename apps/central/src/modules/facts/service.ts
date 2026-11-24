@@ -1,6 +1,18 @@
 import type { Queryable } from '@pos/core/adapter';
 import { AppError } from '@pos/core/errors';
-import { digestRows, MAX_BATCH_ROWS, syncTable, validateRow, type Digest, type Fact, type FactRow, type SyncTable } from '@pos/core/sync';
+import {
+  digestRows,
+  downTable,
+  MAX_BATCH_ROWS,
+  MAX_CHANGES_PAGE,
+  syncTable,
+  validateRow,
+  type Change,
+  type Digest,
+  type Fact,
+  type FactRow,
+  type SyncTable,
+} from '@pos/core/sync';
 
 // What branches send up (docs/12-sync-and-hq.md §3-4). HQ stores each row exactly as the branch reports it, keyed by (branch, id). A message is
 // an UPSERT (or a delete), so receiving the same one twice, or in a repeated batch after a lost answer, changes nothing. A whole batch is applied
@@ -58,4 +70,31 @@ export async function tableDigest(q: Queryable, branchId: number, tableName: str
     [branchId],
   );
   return digestRows(table, rows);
+}
+
+// ------------------------------------------------------------------ going down: what HQ owns (docs/12 §5, §15)
+
+/** The next page of HQ's change log after `cursor`: each entry with the row as it is NOW (a row deleted since goes out as a deletion). */
+export async function changesAfter(
+  q: Queryable,
+  cursor: number,
+  limit: number,
+): Promise<{ changes: Change[]; next: number; more: boolean }> {
+  const size = Math.min(Math.max(limit, 1), MAX_CHANGES_PAGE);
+  const log = await q.all<{ seq: number; tbl: string; pk: number; op: 'u' | 'd' }>(
+    'SELECT seq, tbl, pk, op FROM change_log WHERE seq > ? ORDER BY seq LIMIT ?',
+    [cursor, size + 1],
+  );
+  const page = log.slice(0, size);
+  const changes: Change[] = [];
+  for (const e of page) {
+    const table = downTable(e.tbl);
+    if (!table) continue; // a table this version does not send: skip it, but still move the cursor past it
+    const row =
+      e.op === 'u'
+        ? await q.one<FactRow>(`SELECT ${table.columns.map((c) => c.name).join(', ')} FROM ${table.name} WHERE id = ?`, [e.pk])
+        : undefined;
+    changes.push(row ? { seq: e.seq, tbl: e.tbl, pk: e.pk, op: 'u', row } : { seq: e.seq, tbl: e.tbl, pk: e.pk, op: 'd' });
+  }
+  return { changes, next: page.length ? page[page.length - 1]!.seq : cursor, more: log.length > size };
 }

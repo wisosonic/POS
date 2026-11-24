@@ -143,3 +143,18 @@ export function digestRows(table: SyncTable, rows: Iterable<FactRow>): Digest {
   }
   return { count, maxPk, checksum: sum.toString(16).padStart(12, '0') };
 }
+
+// ------------------------------------------------------------------ going DOWN: what HQ owns and the branch receives (docs/12 §5, §15)
+
+/**
+ * The tables HQ owns and branches copy. Each row keeps HQ's id; at a branch it is stored in the column `hq_id` of its own table (so HQ's
+ * numbers never collide with ids the branch made itself). Same column checks as for what goes up.
+ */
+export const DOWN_TABLES: readonly SyncTable[] = [
+  { name: 'exchange_rates', columns: [int('id'), int('rate_lbp_per_usd'), text('effective_from'), text('created_at')] },
+];
+export const downTable = (name: string): SyncTable | undefined => DOWN_TABLES.find((t) => t.name === name);
+
+/** One entry of HQ's change log, as a branch receives it. `seq` is HQ's order; a branch remembers the last one it applied. */
+export type Change = { seq: number; tbl: string; pk: number; op: 'u' | 'd'; row?: FactRow };
+export const MAX_CHANGES_PAGE = 500;
