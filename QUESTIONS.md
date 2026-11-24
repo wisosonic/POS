@@ -73,6 +73,12 @@ Answer:
 **14. How many tills per branch, and which branches come first?** Used to size the first multi-till test and to decide which branch becomes "branch #1" (today's till).
 Answer:
 
+**16. A sale waited in the till's queue while the branch server was unreachable, and a product's price changed in the meantime. What should happen when the till finally sends it?** Today the server refuses it (`PRICE_MISMATCH`) and a person has to deal with it. The alternative is to accept the price the customer was actually shown (the sale was already made and paid at that price). Which do you want?
+Answer:
+
+**17. Which code may be shared between the five projects?** Only the money, pricing, barcode and receipt code needs to be the same at the till and the branch server (the screen total must equal the server's). The sync format between a branch and HQ could instead be a written contract with a test, and HQ could have its own database plumbing instead of a copy. Fewer copies means less to keep in step, at the cost of a little duplication. Copy only the money/pricing code, or keep copying the sync format and the database layer too?
+Answer:
+
 ## Answered
 
 ### 3. Should cashiers be able to record a service (IT support, a repair) at the till?

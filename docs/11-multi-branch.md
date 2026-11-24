@@ -145,6 +145,47 @@ One repository, five things that are installed or hosted separately. They share 
 
 **Order of work:** the split is a re-organisation, done in steps after P2c/P2d so that sync keeps moving: first the till agent role (queue and devices), then splitting the web app by role, then the marketplace server when P9 starts.
 
+### 8.1 Each project runs alone, on its own machine (requirement, 2026-11-24)
+
+At the end, every project can be put on a separate machine and run there, with nothing but its own settings pointing at the next one:
+
+| Project | Needs to run | Its one setting about the others | Where that setting is edited |
+|---|---|---|---|
+| Till | its own folder, Node | the **branch server address** (IP or name, port) | the till's **Settings** page |
+| Branch server | its own folder, Node, its database | the **HQ address** (a URL) and the one-time code | the branch dashboard's **Settings > HQ** page |
+| Cloud HQ | its own folder, Node, its database | none (branches connect to it) | its own admin screens |
+| Marketplace | its own folder, Node | the HQ address | its configuration (no screen for customers) |
+
+Rules that keep this true: (1) a project's code imports only from `packages/*`, never from another app (a lint rule enforces it); (2) every project starts with one command in its own folder and needs only its own settings (environment variables or its settings page), with a documented default; (3) a project that cannot reach the next one keeps working as far as it can (the till queues, the branch sells, HQ simply waits) and says so on screen; (4) one "run alone" test per project starts it in an empty folder, with nothing else running, and proves it answers.
+
+**How the till reaches the branch server (decided with this requirement).** The till PC runs the **till agent**, which is a small local server: it serves the till's screens from the till PC itself, passes the screens' calls on to the branch server at the address in its settings (including the live-updates stream), holds the queue of sales that could not be delivered, and drives the printer and drawer. The browser only ever talks to the agent on its own PC, so it stays on one address: the sign-in cookie, the till's device token header and the Content-Security-Policy (`connect-src 'self'`, rule 22) are unchanged, and no cross-origin permission is needed on the branch server. A side benefit: the till screens still load when the branch server is down, and the queue keeps working. The cost: the agent must be running on the till PC (it already has to be, for the printer). The address is kept in the agent's own settings file; the till's Settings page reads and changes it through the agent and has a "Test connection" button.
+
+**Order of the split, revised:** step 2 the till agent becomes that local server (serves the till build, passes calls through to the configured branch server, holds the queue, Settings page for the branch server address); step 3 the web app is split in two builds, the till screens and the branch dashboard, from shared components; the branch dashboard gets the Settings > HQ page (connect, status, disconnect: the API exists); step 4 the independence rules above (lint rule, per-project start command and settings, run-alone tests, one deployment page per machine in `docs/07-operations.md`); step 5 rename `apps/api` to `apps/branch`.
+
+### 8.2 The repository has five project folders (decided 2026-11-24)
+
+```
+POS/
+  till/            the till: its screens, its local agent (printer, drawer, queue, passes calls to the branch server), tests, docs
+  branch-server/   the branch's server (today apps/api) and the branch dashboard (manager screens), tests, docs; data/ and backups/ at run time (not in git)
+  cloud-hq/        the HQ server (today apps/central) and its monitoring screens, tests, docs
+  marketplace/     the shop server and the storefront, tests, docs
+  mobile-app/      the customers' app, tests, docs
+  docs/            the design of the whole system (these documents)
+  scripts/         install and development scripts for the whole system
+  PLAN-MULTI-BRANCH.md, CLAUDE.md, QUESTIONS.md
+```
+
+There is **no shared library folder**: each project is complete in itself (its own `package.json`, its own `node_modules`, its own tests) and can be copied to another machine on its own. Code that more than one project needs (money, pricing and receipt rules; the sync contract; the database layer) is **copied into each project that needs it**, from one master copy, and a check keeps the copies identical:
+
+- The master copy of each shared module lives in the project that is its authority: money, pricing and receipts and the database layer in `branch-server/`; the sync contract in `branch-server/` too (HQ copies it). `scripts/sync-shared.mjs` copies a master into the projects that use it, into a folder named `shared/` marked "generated: do not edit here".
+- A test in every project, and one in CI, fails if a copy differs from its master. This keeps rule 12 (client and server cannot drift) true without a shared folder. Editing a copy by hand is the one thing that is not allowed.
+- A change to a shared module is made in the master, copied by the script, and every project's tests are run.
+
+**Tests that need several projects at once** (HQ and two branches, the till through to the branch server) cannot import one project from another any more. They start each project as a real process with its own start command and its own empty data folder, and talk to it over HTTP, which is also exactly the "run alone" proof. They live in `cloud-hq/tests/system/` (HQ is the hub) and are slower than today's in-process ones.
+
+**How it gets there (revised order, replaces §8.1's last paragraph):** (a) restructure: move today's `apps/*` and `packages/*` into the five folders, put each project's tests and docs inside it, generate the shared copies, fix every path and script, all suites green; (b) the till agent becomes the local server with the branch-server Settings page; (c) the web app is split into the till build and the branch dashboard, with Settings > HQ; (d) the independence checks (lint rule, run-alone tests, process-based system tests, one deployment page per machine); then P3.
+
 ## 9. Risks
 
 - **Customer balance offline:** a branch may extend credit against a stale balance (no credit limit by decision); it reconciles on sync and shows "as of last sync".
