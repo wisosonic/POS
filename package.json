@@ -1,44 +1,37 @@
 {
-  "name": "pos-new",
+  "name": "pos",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "description": "Five projects, each runs alone (docs/11-multi-branch.md §8). This file only holds shortcuts and the code-style tools.",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run build -w @pos/web",
-    "test": "vitest run --project unit --project db --project web --project central",
-    "test:central": "vitest run --project central",
-    "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration --no-file-parallelism",
-    "test:migration": "vitest run --project migration",
-    "test:e2e": "playwright test",
-    "test:load": "tsx tests/load/run.ts",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "typecheck:tests": "tsc -p tsconfig.tests.json",
+    "setup": "node scripts/setup.mjs",
+    "build": "npm --prefix till run build",
+    "typecheck": "npm --prefix branch-server run typecheck && npm --prefix cloud-hq run typecheck && npm --prefix till run typecheck",
+    "typecheck:tests": "npm --prefix branch-server run typecheck:tests && npm --prefix cloud-hq run typecheck:tests && npm --prefix till run typecheck:tests",
+    "test": "npm --prefix branch-server run test && npm --prefix cloud-hq run test && npm --prefix till run test",
+    "test:unit": "npm --prefix branch-server run test:unit",
+    "test:db": "npm --prefix branch-server run test:db",
+    "test:integration": "npm --prefix branch-server run test:integration",
+    "test:central": "npm --prefix cloud-hq run test:central",
+    "test:system": "npm --prefix cloud-hq run test:system",
+    "test:web": "npm --prefix till run test:web",
+    "test:migration": "npm --prefix branch-server run test:migration",
+    "test:e2e": "npm --prefix till run e2e",
+    "test:load": "npm --prefix branch-server run test:load",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:db": "vitest run --project db",
-    "test:web": "vitest run --project web",
     "dev": "node scripts/dev.mjs",
     "dev:chain": "node scripts/dev-chain.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
-    "@playwright/test": "^1.49.0",
-    "@types/node": "^22.0.0",
-    "@types/supertest": "^6.0.2",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.4.0",
-    "supertest": "^7.0.0",
-    "typescript": "^5.6.0",
-    "typescript-eslint": "^8.18.0",
-    "vitest": "^5.0.5"
+    "typescript-eslint": "^8.18.0"
   }
 }

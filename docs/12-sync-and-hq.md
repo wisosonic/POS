@@ -65,7 +65,7 @@ The sync loop runs inside the branch server. While online it syncs every few sec
 
 | Step | Content |
 |---|---|
-| **P2a** | `apps/central` (Fastify, SQLite through the adapter, its own migrations), HQ branches table and enrolment, `/sync/ping`, a dev command that starts HQ (:4000) and two branches (:3000, :3001) with their own data folders |
+| **P2a** | `cloud-hq` (Fastify, SQLite through the adapter, its own migrations), HQ branches table and enrolment, `/sync/ping`, a dev command that starts HQ (:4000) and two branches (:3000, :3001) with their own data folders |
 | **P2b** | Up, proven on sales: triggers, outbox, sender, HQ ingest and mirror tables for the sale cluster, the snapshot of existing history, digests |
 | **P2c** | Down, proven on the exchange rate: HQ change log, branch puller and applier, `catalog.changed`/`rate.changed` events |
 | **P2d** | The automatic reconnect loop and the chaos tests (three processes) |
@@ -87,7 +87,7 @@ The sync loop runs inside the branch server. While online it syncs every few sec
 
 ## 12. What P2a built (2026-11-23)
 
-**The HQ server** (`apps/central`, run with `npm run dev -w @pos/central` / `start`; port 4000 by default). Its own SQLite database through the shared adapter (`packages/core`, `@pos/core`), its own migrations folder. Configuration: `HQ_ADMIN_TOKEN` (required, at least 24 characters), `PORT`, `HOST` (localhost unless set), `DATABASE_PATH`, `ALLOWED_HOSTS`. HQ refuses a request for any host name or web page origin that is not its own or listed, sends no-store / no-sniff / no-frame headers, and rate-limits the open door in production.
+**The HQ server** (`cloud-hq`, run with `npm run dev --prefix cloud-hq` / `start`; port 4000 by default). Its own SQLite database through the shared adapter (`branch-server/core`, `@pos/core`), its own migrations folder. Configuration: `HQ_ADMIN_TOKEN` (required, at least 24 characters), `PORT`, `HOST` (localhost unless set), `DATABASE_PATH`, `ALLOWED_HOSTS`. HQ refuses a request for any host name or web page origin that is not its own or listed, sends no-store / no-sniff / no-frame headers, and rate-limits the open door in production.
 
 | Method | Path | Who | What |
 |---|---|---|---|
@@ -99,9 +99,9 @@ The sync loop runs inside the branch server. While online it syncs every few sec
 | POST | `/api/v1/sync/enrol` | **open, rate limited** | `{ code }` → `{ token, branch }`, the token shown once; `422 ENROL_CODE_INVALID` |
 | GET | `/api/v1/sync/ping` | branch (`X-Branch-Token`) | `{ ok, serverTime, branch }`; `401 BRANCH_UNKNOWN` |
 
-HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_ADMIN_TOKEN>`, compared in constant time). That is deliberately temporary: HQ users with their own passwords and roles come with P3. Everything HQ changes is written to an append-only `hq_audit`, never a code or a token. Only hashes of codes and tokens are stored. The only open doors are `/healthz` and `/sync/enrol`; `tests/central/hq.test.ts` proves every other route refuses an anonymous request and a garbage token.
+HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_ADMIN_TOKEN>`, compared in constant time). That is deliberately temporary: HQ users with their own passwords and roles come with P3. Everything HQ changes is written to an append-only `hq_audit`, never a code or a token. Only hashes of codes and tokens are stored. The only open doors are `/healthz` and `/sync/enrol`; `cloud-hq/tests/hq.test.ts` proves every other route refuses an anonymous request and a garbage token.
 
-**The branch side** (`apps/api`, migration `0017_hq_link.sql`, `modules/sync/`). An admin connects the branch with HQ's address and the one-time code. The branch trades it for its token, stores it in `hq_link` (**never returned, logged or audited**), and takes HQ's branch code and name for its own local branch row (printed on receipts later).
+**The branch side** (`branch-server`, migration `0017_hq_link.sql`, `modules/sync/`). An admin connects the branch with HQ's address and the one-time code. The branch trades it for its token, stores it in `hq_link` (**never returned, logged or audited**), and takes HQ's branch code and name for its own local branch row (printed on receipts later).
 
 | Method | Path | Who | What |
 |---|---|---|---|
@@ -111,13 +111,13 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **The loop** (`modules/sync/agent.ts`, inside the branch server, never on the sale path): while HQ answers it asks every 10 s; when a call fails the state becomes `offline` and it asks again after 3 s, 6 s, 12 s ... up to 30 s; **the first answer after an outage starts the catch-up** (`onReconnect`, where P2b/P2c plug in); if HQ says the branch is no longer accepted the state is `refused` and it only checks once a minute. Each state change publishes `sync.changed` on the live-updates stream. The loop stops at once when the server closes (`preClose`).
 
-**Run the whole thing on one machine:** `npm run dev:chain` starts HQ (:4000) and branches A (:3000) and B (:3001), each with its own data folder under `data/chain/`. With `CHAIN_ADMIN_PASSWORD=<any password for this throw-away data>` set it also creates an `admin` in each branch, adds the branches at HQ and connects them. It was run for real: both branches online, HQ saw both, no secret reached the output. To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev -w @pos/web`.
+**Run the whole thing on one machine:** `npm run dev:chain` starts HQ (:4000) and branches A (:3000) and B (:3001), each with its own data folder under `data/chain/`. With `CHAIN_ADMIN_PASSWORD=<any password for this throw-away data>` set it also creates an `admin` in each branch, adds the branches at HQ and connects them. It was run for real: both branches online, HQ saw both, no secret reached the output. To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev --prefix till/web`.
 
 **Not built yet:** the Settings > HQ screen (connect and status are API-only for now), HQ users (P3), and the chaos tests (P2d). Going up is P2b, §14; going down is P2c, §15.
 
 ## 14. What P2b built (2026-11-24): the sale cluster goes up
 
-**Which rows:** `sales`, `sale_items`, `payments`, `stock_movements`, listed once in `packages/core/src/sync.ts` (column names, whether each may be empty). That list is the contract: the sender, HQ's checks, the digests and a parity test (`tests/db/sync-schema.test.ts`) all read it, so a column added to a branch table fails the test until HQ's table and the list know it too.
+**Which rows:** `sales`, `sale_items`, `payments`, `stock_movements`, listed once in `branch-server/core/src/sync.ts` (column names, whether each may be empty). That list is the contract: the sender, HQ's checks, the digests and a parity test (`branch-server/tests/db/sync-schema.test.ts`) all read it, so a column added to a branch table fails the test until HQ's table and the list know it too.
 
 **Capturing (branch, migration 0018).** Three triggers per table (insert, update, delete) write `(table, id, 'u' or 'd')` to `sync_outbox` **in the same statement**, so a sale that rolls back leaves nothing. They fire only while `sync_control.capture = 1`, which `saveLink` sets when the branch connects and `clearLink` clears (and empties the outbox), so a shop that is not connected records nothing. The outbox says WHICH row changed; the sender reads the row as it is now, so ten changes to a sale are one message and a row deleted since goes out as a deletion. History that existed before connecting is covered by `sync_snapshot` (per table: the highest id at connecting, how far it got, done).
 
@@ -139,14 +139,14 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **How fast:** the branch asks every 10 s, so a new rate reaches every branch within about ten seconds. There is no push from HQ yet (a stream from HQ is an option if that is ever too slow).
 
-**Same pattern for what comes next (P3):** add the table to `DOWN_TABLES` (packages/core/src/sync.ts), a table at HQ with a `change_log` line written by its service, a `hq_id` column at the branch, and a case in `applyChange`. `tests/db/sync-schema.test.ts` checks the lists agree.
+**Same pattern for what comes next (P3):** add the table to `DOWN_TABLES` (branch-server/core/src/sync.ts), a table at HQ with a `change_log` line written by its service, a `hq_id` column at the branch, and a case in `applyChange`. `branch-server/tests/db/sync-schema.test.ts` checks the lists agree.
 
 ## 16. What P2d proved (2026-11-24): two branches and HQ under failure
 
-`tests/integration/sync-chaos.test.ts` runs HQ and TWO real branch servers over real HTTP. Both branches are seeded the same way, so they have the same ids and the same receipt numbers, which HQ must keep apart. Proven: the two add up at HQ (sales, lines, payments, stock movements: counts and sums, per branch and in total); a rate set at HQ reaches both; both sell while HQ is gone and catch up by themselves when it returns; with 30% of calls failing and 30% of answers lost (a seeded generator, so a failure can be repeated) while both sell at the same time, HQ ends with every row once; and a branch server stopped and started again in the middle of a backlog stays connected and finishes sending.
+`branch-server/tests/integration/sync-chaos.test.ts` runs HQ and TWO real branch servers over real HTTP. Both branches are seeded the same way, so they have the same ids and the same receipt numbers, which HQ must keep apart. Proven: the two add up at HQ (sales, lines, payments, stock movements: counts and sums, per branch and in total); a rate set at HQ reaches both; both sell while HQ is gone and catch up by themselves when it returns; with 30% of calls failing and 30% of answers lost (a seeded generator, so a failure can be repeated) while both sell at the same time, HQ ends with every row once; and a branch server stopped and started again in the middle of a backlog stays connected and finishes sending.
 
 **Not covered:** a crash in the middle of a database write (SQLite and the transactions cover it, but it is not simulated), clock differences between machines, a branch that is away for weeks with a very large backlog, and anything over a real internet link (everything here is one machine).
 
-## 13. Shared code (`packages/core`, `@pos/core`)
+## 13. Shared code (`branch-server/core`, `@pos/core`)
 
-The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `apps/api` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.
+The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

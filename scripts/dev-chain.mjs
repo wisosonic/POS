@@ -3,20 +3,20 @@
 //   node scripts/dev-chain.mjs
 //   CHAIN_ADMIN_PASSWORD=<a password> node scripts/dev-chain.mjs     (also sets everything up, see below)
 //
-//   HQ        http://127.0.0.1:4000      data/chain/hq/
-//   Branch A  http://127.0.0.1:3000      data/chain/a/
-//   Branch B  http://127.0.0.1:3001      data/chain/b/
+//   HQ        http://127.0.0.1:4000      .dev-data/chain/hq/
+//   Branch A  http://127.0.0.1:3000      .dev-data/chain/a/
+//   Branch B  http://127.0.0.1:3001      .dev-data/chain/b/
 //
 // Each has its OWN database folder, so this is the real thing (three separate servers talking over HTTP), only on one machine. Move them
 // to their real machines later by giving each its own PC and address (docs/12-sync-and-hq.md).
 //
 // With CHAIN_ADMIN_PASSWORD set (use any password for this throw-away dev data) it also: creates an `admin` account in each branch if
 // there is none, adds the branches A and B at HQ if they are not there, and connects each branch to HQ. Without it, create the admins
-// yourself (npm run create-admin -w @pos/api) and connect the branches with Settings > HQ (or POST /api/v1/sync/connect).
+// yourself (npm run create-admin --prefix branch-server) and connect the branches with Settings > HQ (or POST /api/v1/sync/connect).
 //
-// The HQ admin token is made once and kept in data/chain/hq-admin-token.txt (it is a secret: it is never printed here).
-// To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev -w @pos/web`
-// (branch B: `API_URL=http://127.0.0.1:3001 WEB_PORT=5174 npm run dev -w @pos/web`). Ctrl+C stops everything.
+// The HQ admin token is made once and kept in .dev-data/chain/hq-admin-token.txt (it is a secret: it is never printed here).
+// To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev --prefix till`
+// (branch B: `API_URL=http://127.0.0.1:3001 WEB_PORT=5174 npm run dev --prefix till`). Ctrl+C stops everything.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -25,12 +25,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const base = join(root, 'data', 'chain');
+const base = join(root, '.dev-data', 'chain');
 const HQ_PORT = 4000;
 const parts = [
-  { name: 'hq', code: 33, port: HQ_PORT, dir: join(base, 'hq'), entry: 'apps/central/src/index.ts', db: 'hq.db' },
-  { name: 'a', code: 36, port: 3000, dir: join(base, 'a'), entry: 'apps/api/src/index.ts', db: 'pos.db' },
-  { name: 'b', code: 35, port: 3001, dir: join(base, 'b'), entry: 'apps/api/src/index.ts', db: 'pos.db' },
+  { name: 'hq', code: 33, port: HQ_PORT, dir: join(base, 'hq'), cwd: 'cloud-hq', entry: 'src/index.ts', db: 'hq.db' },
+  { name: 'a', code: 36, port: 3000, dir: join(base, 'a'), cwd: 'branch-server', entry: 'src/index.ts', db: 'pos.db' },
+  { name: 'b', code: 35, port: 3001, dir: join(base, 'b'), cwd: 'branch-server', entry: 'src/index.ts', db: 'pos.db' },
 ];
 const adminPassword = process.env.CHAIN_ADMIN_PASSWORD;
 
@@ -98,8 +98,8 @@ const hqToken = readFileSync(tokenFile, 'utf8').trim();
 // Before the branches start: give each an admin account if asked (the command creates the database and its tables too).
 if (adminPassword) {
   for (const p of parts.filter((x) => x.name !== 'hq')) {
-    const r = spawnSync(process.execPath, ['--import', 'tsx', 'apps/api/src/cli/create-admin.ts', 'admin', adminPassword], {
-      cwd: root,
+    const r = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli/create-admin.ts', 'admin', adminPassword], {
+      cwd: join(root, 'branch-server'),
       env: { ...process.env, DATABASE_PATH: join(p.dir, p.db) },
       encoding: 'utf8',
     });
@@ -118,7 +118,7 @@ function launch(p) {
     DATABASE_PATH: join(p.dir, p.db),
     ...(p.name === 'hq' ? { HQ_ADMIN_TOKEN: hqToken } : { BACKUP_DIR: join(p.dir, 'backups'), UPLOADS_DIR: join(p.dir, 'uploads') }),
   };
-  const child = spawn(process.execPath, ['--import', 'tsx', p.entry], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['--import', 'tsx', p.entry], { cwd: join(root, p.cwd), env, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
   child.stdout.on('data', (d) => say(p.name, p.code, d));
   child.stderr.on('data', (d) => say(p.name, p.code, d));

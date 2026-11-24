@@ -80,7 +80,7 @@ The original app was ASP.NET Core + EF Core 7 (53 migrations from 2024-01) with 
 
 ## 5. ETL rules (as built)
 
-Run it with the API stopped: `npm run etl -w @pos/api -- --dump ../../POSDB.sql --db ./data/pos.db`. It writes a JSON report beside the database.
+Run it with the API stopped: `npm run etl --prefix branch-server -- --dump ../../POSDB.sql --db ./data/pos.db`. It writes a JSON report beside the database.
 
 1. **One transaction.** Everything is imported or nothing is. A failure leaves the database exactly as it was, and the same command can be run again after the cause is fixed.
 2. **Idempotent.** Every imported row remembers its legacy id, so a second run finds everything already there and adds nothing.

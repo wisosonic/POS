@@ -17,7 +17,7 @@ title POS runner
 
 set "API_URL=http://127.0.0.1:3000"
 set "WEB_URL=http://localhost:5173"
-set "DB=%~dp0apps\api\data\pos.db"
+set "DB=%~dp0branch-server\data\pos.db"
 
 echo.
 echo  === Darwish Market POS: test runner ===
@@ -39,9 +39,9 @@ if %NODEMAJOR% LSS 22 (
 for /f %%v in ('node --version') do echo  [ok] Node.js %%v
 
 rem ---- 2. Requirements --------------------------------------------------------------------------------------
-if not exist node_modules (
+if not exist branch-server\node_modules (
   echo  [..] First run: installing the requirements. This takes a few minutes and needs the internet.
-  call npm install --no-audit --no-fund
+  call node scripts\setup.mjs
   if errorlevel 1 (
     echo  The installation failed. Check the internet connection and run this file again.
     goto :fail
@@ -65,16 +65,16 @@ if exist "%DB%" (
 
 echo  [..] No test database yet: making one.
 set "IMPORT=%RUNNER_IMPORT%"
-if exist "POSDB.sql" if not defined IMPORT (
+if exist "legacy\POSDB.sql" if not defined IMPORT (
   set /p "IMPORT=  Import the old shop data from POSDB.sql (takes about 30 seconds)? [y/N] "
 )
 if /i "%IMPORT%"=="y" (
-  if not exist "POSDB.sql" (
-    echo  POSDB.sql is not in this folder, so there is nothing to import.
+  if not exist "legacy\POSDB.sql" (
+    echo  legacy\POSDB.sql is not there, so there is nothing to import.
     goto :fail
   )
   echo  [..] Importing the old data. Nothing in POSDB.sql or Uploads is changed.
-  call npm run etl -w @pos/api -- --dump ../../POSDB.sql --uploads ../../Uploads
+  call npm run etl --prefix branch-server -- --dump ../legacy/POSDB.sql --uploads ../legacy/Uploads
   if errorlevel 1 (
     echo  The import failed. The messages above say why.
     if exist "%DB%" del /q "%DB%" "%DB%-wal" "%DB%-shm" 2>nul
@@ -90,7 +90,7 @@ if not defined PW (
   set /p "PW=  Password (just press Enter for admin12345): "
 )
 if not defined PW set "PW=admin12345"
-call npm run create-admin -w @pos/api -- admin "%PW%"
+call npm run create-admin --prefix branch-server -- admin "%PW%"
 if errorlevel 1 (
   echo  The admin account could not be made. The messages above say why ^(the password must be at least 8 characters^).
   goto :fail

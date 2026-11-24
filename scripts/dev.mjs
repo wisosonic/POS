@@ -19,8 +19,8 @@ const paint = (code, text) => (color ? `\x1b[${code}m${text}\x1b[0m` : text);
 const parts = [
   // The server runs without the file watcher: a restore chosen on the Backups screen stops it on purpose (exit code 75) and this
   // script starts it again.
-  { name: 'api', code: 36, args: ['run', 'start', '-w', '@pos/api'] },
-  { name: 'web', code: 35, args: ['run', 'dev', '-w', '@pos/web'] },
+  { name: 'api', code: 36, dir: 'branch-server', args: ['run', 'start'] },
+  { name: 'web', code: 35, dir: 'till', args: ['run', 'dev'] },
 ];
 
 let stopping = false;
@@ -100,7 +100,7 @@ const RESTART_EXIT_CODE = 75;
 function launch(p) {
   // One command string (not a list of arguments) so the shell can find npm on every system without a warning.
   const child = spawn(`npm ${p.args.join(' ')}`, {
-    cwd: root,
+    cwd: resolve(root, p.dir),
     shell: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, FORCE_COLOR: '0' },

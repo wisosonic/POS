@@ -34,16 +34,16 @@ Why these choices: [docs/02-decision-table.md](docs/02-decision-table.md).
 | [docs/08-security-review.md](docs/08-security-review.md) | What was reviewed, what was fixed, and the risks that remain |
 | [docs/10-cutover.md](docs/10-cutover.md) | Moving the shop from the old app to the new one: rehearsal, cut-over day, the first two weeks, rolling back |
 | [docs/09-load-test.md](docs/09-load-test.md) | How fast the server is, what slows it, and the proof that money still adds up under load |
-| [tests/README.md](tests/README.md) | Test suite, traceability, hardware checklist |
+| [docs/tests-README.md](docs/tests-README.md) | Test suite, traceability, hardware checklist |
 | [plan.md](plan.md) | Milestones, open questions, risks |
 | [CLAUDE.md](CLAUDE.md) | Instructions for AI coding assistants working on this repo |
 
 ## Repository layout (target)
 
 ```
-apps/api        Fastify API, DB schema/migrations, ETL
-apps/web        React PWA
-packages/shared money, pricing, barcode, receipt logic (used by both)
+branch-server        Fastify API, DB schema/migrations, ETL
+till/web        React PWA
+branch-server/shared money, pricing, barcode, receipt logic (used by both)
 docs/           design documents
 tests/          unit · integration · migration · e2e · load
 POSDB.sql       legacy dump (157 MB, input to the ETL; do not edit)
@@ -55,27 +55,27 @@ Uploads/        legacy product images (709 files)
 ```bash
 npm install
 npm run lint && npm run typecheck     # pass
-npm run test:unit                     # fails until M1 implements packages/shared (test-first)
+npm run test:unit                     # fails until M1 implements branch-server/shared (test-first)
 npm run test:db                       # database schema tests (no Docker needed)
 ```
 
 Import your legacy data (stop the API first; takes about 10 seconds; safe to run again):
 
 ```bash
-npm run etl -w @pos/api -- --dump ../../POSDB.sql --db ./data/pos.db   # writes ./data/pos.db.etl-report.json
+npm run etl --prefix branch-server -- --dump ../../POSDB.sql --db ./data/pos.db   # writes ./data/pos.db.etl-report.json
 ```
 
 Run the API (creates `./data/pos.db` on first start):
 
 ```bash
-npm run create-admin -w @pos/api -- admin "a-long-password"   # the first admin has to be created this way
-npm run dev -w @pos/api                                       # http://127.0.0.1:3000/api/v1/healthz
+npm run create-admin --prefix branch-server -- admin "a-long-password"   # the first admin has to be created this way
+npm run dev --prefix branch-server                                       # http://127.0.0.1:3000/api/v1/healthz
 ```
 
 Run the web app next to it (the API above must be running; the app is at http://localhost:5173):
 
 ```bash
-npm run dev -w @pos/web
+npm run dev --prefix till/web
 ```
 
 On the shop PC the API serves the built app itself, and takes daily backups:
@@ -83,11 +83,11 @@ On the shop PC the API serves the built app itself, and takes daily backups:
 ```bash
 runner.bat                             # Windows, for trying it out: installs what is needed, makes a test database, starts the server and the screen in this one window, opens the browser
 npm run dev                            # the server and the screen together in one terminal ([api] and [web] lines, Ctrl+C stops both)
-npm run build                          # builds apps/web/dist
-npm run backup -w @pos/api -- --to E:\POS-backups     # a backup now (safe while the shop is open)
-npm run restore -w @pos/api -- --from <file> --db <new database file>
-npm run rehearse -w @pos/api -- --dump ../../POSDB.sql   # cut-over rehearsal on a throwaway copy (never touches the real database)
-npm run preflight -w @pos/api -- --env C:POSservice.env   # is this PC ready for opening day?
+npm run build                          # builds till/web/dist
+npm run backup --prefix branch-server -- --to E:\POS-backups     # a backup now (safe while the shop is open)
+npm run restore --prefix branch-server -- --from <file> --db <new database file>
+npm run rehearse --prefix branch-server -- --dump ../../POSDB.sql   # cut-over rehearsal on a throwaway copy (never touches the real database)
+npm run preflight --prefix branch-server -- --env C:POSservice.env   # is this PC ready for opening day?
 ```
 
 Installing it to start with Windows, and the backup and restore routine: [docs/07-operations.md](docs/07-operations.md).

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM"],
+    "paths": {
+      "@pos/shared/money": ["./shared/src/money.ts"],
+      "@pos/shared/pricing": ["./shared/src/pricing.ts"],
+      "@pos/shared/barcode": ["./shared/src/barcode.ts"],
+      "@pos/shared/receipt": ["./shared/src/receipt.ts"],
+      "@pos/shared/translit": ["./shared/src/translit.ts"]
+    }
+  },
+  "include": ["tests/**/*.ts", "vitest.config.ts"]
+}

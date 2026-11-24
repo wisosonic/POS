@@ -1,0 +1,36 @@
+{
+  "name": "@pos/cloud-hq",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The cloud HQ server (docs/11-multi-branch.md §8, docs/12-sync-and-hq.md): knows every branch. Runs alone in the cloud.",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && npm run typecheck --workspaces --if-present",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck:tests": "tsc -p tsconfig.tests.json",
+    "test": "vitest run --project central --project unit",
+    "test:central": "vitest run --project central",
+    "test:unit": "vitest run --project unit",
+    "test:system": "vitest run --project system --no-file-parallelism"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^11.2.1",
+    "@pos/core": "*",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.7",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.5"
+  },
+  "workspaces": [
+    "core"
+  ]
+}

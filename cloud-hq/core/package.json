@@ -1,0 +1,23 @@
+{
+  "name": "@pos/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Infrastructure shared by the branch server (apps/api) and the HQ server (apps/central): the database adapter and its SQLite driver, the migrations runner, errors and input validation.",
+  "exports": {
+    "./adapter": "./src/adapter.ts",
+    "./credentials": "./src/credentials.ts",
+    "./sync": "./src/sync.ts",
+    "./printer": "./src/printer.ts",
+    "./sqlite": "./src/sqlite.ts",
+    "./open": "./src/open.ts",
+    "./txstate": "./src/txstate.ts",
+    "./migrate": "./src/migrate.ts",
+    "./mutex": "./src/mutex.ts",
+    "./errors": "./src/errors.ts",
+    "./validate": "./src/validate.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

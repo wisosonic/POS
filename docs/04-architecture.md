@@ -44,7 +44,7 @@ A **branch** is one server and one or more **tills**. The simplest shop, and the
 3. **Server is the authority for money.** The client shows previews. The server recomputes totals from catalog prices and the rate, and rejects mismatches.
 4. **Append-only history.** Sales, returns, stock movements and audit rows are never edited. Corrections are new rows.
 5. **Durable at the till.** A sale accepted by the PWA is saved in IndexedDB before the request is sent, so an API restart cannot lose it.
-6. **Shared domain code.** Money, pricing, barcode and receipt logic live in `packages/shared` and are used by both client and server.
+6. **Shared domain code.** Money, pricing, barcode and receipt logic live in `branch-server/shared` and are used by both client and server.
 
 ## 3. Repository layout (monorepo, npm workspaces)
 
@@ -95,7 +95,7 @@ The PWA invalidates the matching TanStack Query keys. Heartbeat every 20 s, and 
 
 ## 5. Data model (SQLite)
 
-The authoritative schema is `apps/api/src/db/migrations/0001_init.sql`. Conventions: money is an integer (`…_lbp` whole LBP, `…_minor` in the row's currency, USD = cents); quantities are integer **thousandths** (`…_milli`, so 0.350 kg is `350`); timestamps are ISO-8601 UTC text; enums are `CHECK` constraints. The sketch below is the logical model; column names in the migration win.
+The authoritative schema is `branch-server/src/db/migrations/0001_init.sql`. Conventions: money is an integer (`…_lbp` whole LBP, `…_minor` in the row's currency, USD = cents); quantities are integer **thousandths** (`…_milli`, so 0.350 kg is `350`); timestamps are ISO-8601 UTC text; enums are `CHECK` constraints. The sketch below is the logical model; column names in the migration win.
 
 ```
 users(id, name, role, password_hash, pin_hash, active, must_reset_password)
@@ -168,7 +168,7 @@ Each payment stores its own method and currency, so the register buckets reconci
 | Catalog load | Full ~2k-product catalog cached in the browser, refreshed by `updated_at` delta |
 | Dashboard refresh | < 2 s after a sale |
 
-Design headroom: indexed lookups, a local catalog cache, single-statement stock updates, and no N+1 queries. Verified by `npm run test:load` (`tests/load/`), with the results in `docs/09-load-test.md`.
+Design headroom: indexed lookups, a local catalog cache, single-statement stock updates, and no N+1 queries. Verified by `npm run test:load` (`branch-server/tests/load/`), with the results in `docs/09-load-test.md`.
 
 ## 8. Deployment & operations
 

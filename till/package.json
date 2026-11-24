@@ -1,0 +1,30 @@
+{
+  "name": "@pos/till",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The till (docs/11-multi-branch.md §8): the cashier screens and the local agent. Runs alone on each till PC.",
+  "workspaces": [
+    "web",
+    "agent",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @pos/web",
+    "build": "npm run build -w @pos/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck:tests": "tsc -p tsconfig.tests.json",
+    "test": "vitest run --project web --project agent",
+    "test:web": "vitest run --project web",
+    "test:agent": "vitest run --project agent",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.2",
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.5"
+  }
+}

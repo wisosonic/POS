@@ -8,8 +8,8 @@ The idea in one line: **practise on a copy until it passes, then do the same thi
 
 | Command | What it does | Touches the real data? |
 |---|---|---|
-| `npm run rehearse -w @pos/api -- --dump ../../POSDB.sql` | Imports the dump into a **throwaway** database, checks that it holds the same shop, sells something on it, and proves a backup of it can be restored. About 30 seconds. | **No.** Everything is in a temporary folder, deleted at the end |
-| `npm run preflight -w @pos/api -- --env C:\POS\service.env` | Looks at the **real** PC and database (read-only) and says what is missing for opening day: printer, backups, exchange rate, users, pictures, the app. | Reads only |
+| `npm run rehearse --prefix branch-server -- --dump ../../POSDB.sql` | Imports the dump into a **throwaway** database, checks that it holds the same shop, sells something on it, and proves a backup of it can be restored. About 30 seconds. | **No.** Everything is in a temporary folder, deleted at the end |
+| `npm run preflight --prefix branch-server -- --env C:\POS\service.env` | Looks at the **real** PC and database (read-only) and says what is missing for opening day: printer, backups, exchange rate, users, pictures, the app. | Reads only |
 
 `rehearse` ends with `N of N checks passed` and exits 0, or lists what failed and exits 1. `preflight` marks each line PASS, WARN (works, but know it) or FAIL (do not open the shop like this).
 
@@ -47,7 +47,7 @@ These are facts about your data, not failures. Each has an owner decision or a s
 
 Do these in the days before, on the till PC. None of them touches the old app.
 
-1. **Install** the server: `scripts\windows\install-service.ps1 -DryRun` first, then for real (`docs/07-operations.md` §2). Set the backup folder, a second copy folder (an external drive), and a backup passphrase.
+1. **Install** the server: `branch-server\scripts\windows\install-service.ps1 -DryRun` first, then for real (`docs/07-operations.md` §2). Set the backup folder, a second copy folder (an external drive), and a backup passphrase.
 2. **Run the rehearsal on this PC** with the latest dump you have. It must pass here, not only on the developer's machine (different disk, different speed).
 3. **Run `npm run test:load`** on this PC once (about 5 minutes) and keep the result: it shows this PC is fast enough (`docs/09-load-test.md`).
 4. **Printer.** Install it in Windows, choose it in Settings, press **Test slip**, and check the receipt reads well, with an Arabic-named product too. Check the cash drawer opens on a cash sale (and **does not** open on a reprint).
@@ -61,11 +61,11 @@ Pick a quiet evening after closing. Allow two hours. Write down the time of each
 
 1. **Freeze the old app.** Close the shift in the old app and count the drawer. Note the last receipt number. Nothing is sold in the old app from now on.
 2. **Make the final dump** of the old database, the same way `POSDB.sql` was made. Copy it, and the `Uploads` folder, to the till PC. Keep the old database file as it is.
-3. **Rehearse on the final dump:** `npm run rehearse -w @pos/api -- --dump <final dump>`. If any check fails, **stop**, and go to the rollback section (nothing has changed yet, so rolling back is just opening the old app again).
+3. **Rehearse on the final dump:** `npm run rehearse --prefix branch-server -- --dump <final dump>`. If any check fails, **stop**, and go to the rollback section (nothing has changed yet, so rolling back is just opening the old app again).
 4. **Stop the service** (the import needs the database to itself).
 5. **Back up the empty new database** if it holds anything (a fresh install holds only settings).
-6. **Import for real:** `npm run etl -w @pos/api -- --dump <final dump> --uploads <Uploads folder>`. It is one transaction: a failure changes nothing. Read the counts it prints; the numbers must match the rehearsal's.
-7. **Start the service and set passwords.** Create the admin if there is none (`npm run create-admin -w @pos/api -- <name> <password>`; it makes that name an **admin**, so use it only for the owner's own account). Sign in as the admin, open **Menu → Users**, and give each imported person a first password (and a PIN for cashiers who will switch at the till). Leave "They choose their own password the first time they sign in" ticked: each person is stopped at a *Choose your password* screen on their first sign-in, and the admin never needs to know the final password.
+6. **Import for real:** `npm run etl --prefix branch-server -- --dump <final dump> --uploads <Uploads folder>`. It is one transaction: a failure changes nothing. Read the counts it prints; the numbers must match the rehearsal's.
+7. **Start the service and set passwords.** Create the admin if there is none (`npm run create-admin --prefix branch-server -- <name> <password>`; it makes that name an **admin**, so use it only for the owner's own account). Sign in as the admin, open **Menu → Users**, and give each imported person a first password (and a PIN for cashiers who will switch at the till). Leave "They choose their own password the first time they sign in" ticked: each person is stopped at a *Choose your password* screen on their first sign-in, and the admin never needs to know the final password.
 8. **Set today's exchange rate** (Menu → Exchange rate). It is not the imported 2000-01-01 placeholder.
 9. **Count and close the imported register** (the old app's open session) in Menu → Close register, with the drawer count from step 1. Then the first cashier opens a new one.
 10. **Run `npm run preflight`.** No FAILs. Read the WARNs and decide each.

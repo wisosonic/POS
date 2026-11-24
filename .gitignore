@@ -13,12 +13,13 @@ data/
 *.db-shm
 
 # Load test results (docs/09-load-test.md)
-tests/load/results/
+branch-server/tests/load/results/
 
 # Local leftovers
+.dev-data/
 shots/
 *.log
-/backups/
+backups/
 *.etl-report.json
 .vscode/
 Untitled-*

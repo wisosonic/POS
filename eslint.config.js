@@ -27,17 +27,17 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.js', 'tests/load/**'],
+    files: ['branch-server/tests/**/*.js', 'branch-server/tests/load/**'],
     languageOptions: { globals: { __ENV: 'readonly', __VU: 'readonly' } },
   },
   {
     // The load test and the print agent are command-line tools: printing their progress is their job.
-    files: ['tests/load/**/*.ts', 'apps/till-agent/src/cli.ts'],
+    files: ['branch-server/tests/load/**/*.ts', 'till/agent/src/cli.ts'],
     rules: { 'no-console': 'off' },
   },
   {
     // The service worker runs in the browser's worker scope, not in Node or a page.
-    files: ['apps/web/sw.template.js'],
+    files: ['till/web/sw.template.js'],
     languageOptions: {
       globals: { self: 'readonly', caches: 'readonly', fetch: 'readonly', Response: 'readonly', URL: 'readonly' },
     },
@@ -46,20 +46,20 @@ export default tseslint.config(
     // Plain Node scripts at the top of the project (the one-terminal launcher).
     files: ['scripts/**/*.mjs'],
     languageOptions: {
-      globals: { process: 'readonly', fetch: 'readonly', setTimeout: 'readonly', AbortSignal: 'readonly' },
+      globals: { process: 'readonly', console: 'readonly', fetch: 'readonly', setTimeout: 'readonly', AbortSignal: 'readonly' },
     },
   },
   {
     // The database seam (docs/11-multi-branch.md §4): application code must not import a database library, so that a server
     // can move from SQLite to PostgreSQL by changing the driver only. Only `db/` (the drivers) and the tools below, which
     // work on the database FILE itself (backup, restore checks, rehearsal), may. This list only ever shrinks.
-    files: ['apps/api/src/**/*.ts'],
+    files: ['branch-server/src/**/*.ts'],
     ignores: [
-      'apps/api/src/db/**',
-      'apps/api/src/backup/backup.ts',
-      'apps/api/src/cli/backup.ts',
-      'apps/api/src/cli/preflight.ts',
-      'apps/api/src/cli/rehearse.ts',
+      'branch-server/src/db/**',
+      'branch-server/src/backup/backup.ts',
+      'branch-server/src/cli/backup.ts',
+      'branch-server/src/cli/preflight.ts',
+      'branch-server/src/cli/rehearse.ts',
     ],
     rules: {
       'no-restricted-imports': [
@@ -76,17 +76,17 @@ export default tseslint.config(
     // Modules already converted to the adapter must stay converted: no legacy synchronous handle, no raw SQLite helpers.
     // Add a module's folder here when it is converted.
     files: [
-      'apps/api/src/modules/holds/**/*.ts',
-      'apps/api/src/modules/sales/**/*.ts',
-      'apps/api/src/modules/returns/**/*.ts',
-      'apps/api/src/modules/customers/**/*.ts',
-      'apps/api/src/modules/expenses/**/*.ts',
-      'apps/api/src/modules/services/**/*.ts',
-      'apps/api/src/modules/registers/**/*.ts',
-      'apps/api/src/modules/purchases/**/*.ts',
-      'apps/api/src/modules/inventory/**/*.ts',
-      'apps/api/src/modules/terminals/**/*.ts',
-      'apps/api/src/auth/approvals.ts',
+      'branch-server/src/modules/holds/**/*.ts',
+      'branch-server/src/modules/sales/**/*.ts',
+      'branch-server/src/modules/returns/**/*.ts',
+      'branch-server/src/modules/customers/**/*.ts',
+      'branch-server/src/modules/expenses/**/*.ts',
+      'branch-server/src/modules/services/**/*.ts',
+      'branch-server/src/modules/registers/**/*.ts',
+      'branch-server/src/modules/purchases/**/*.ts',
+      'branch-server/src/modules/inventory/**/*.ts',
+      'branch-server/src/modules/terminals/**/*.ts',
+      'branch-server/src/auth/approvals.ts',
     ],
     rules: {
       'no-restricted-imports': [

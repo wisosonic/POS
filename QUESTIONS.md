@@ -55,7 +55,7 @@ Answer:
 Answer:
 
 ### 9. Arabic: who checks the wording, and which screens next?
-I wrote the Arabic myself. The till flow is done (header, menu, sign-in, settings, checkout, cart, payment, held carts, customers at the till, opening the register). Please have someone who works the till read it (`apps/web/src/lib/ar.ts`, or just switch the screen to Arabic) and tell me the words you would change: for example "Walk-In" is **زبون عابر**, "Debts" is **الديون**, "Hold" is **تعليق**. Which screens should be translated next: Sales and Returns, closing the register, or the back office (products, purchases, reports, users)? Digits stay 0-9; say if you want Arabic-Indic digits (٠١٢) on screen instead. Receipts stay English because the printer cannot print Arabic.
+I wrote the Arabic myself. The till flow is done (header, menu, sign-in, settings, checkout, cart, payment, held carts, customers at the till, opening the register). Please have someone who works the till read it (`till/web/src/lib/ar.ts`, or just switch the screen to Arabic) and tell me the words you would change: for example "Walk-In" is **زبون عابر**, "Debts" is **الديون**, "Hold" is **تعليق**. Which screens should be translated next: Sales and Returns, closing the register, or the back office (products, purchases, reports, users)? Digits stay 0-9; say if you want Arabic-Indic digits (٠١٢) on screen instead. Receipts stay English because the printer cannot print Arabic.
 Answer: **Sales and Returns next** (2026-11-24). Still open: someone who works the till to read the existing Arabic.
 
 ### Multi-branch, HR and online marketplace (design in `docs/11-multi-branch.md`)
@@ -124,7 +124,7 @@ What I suggest instead (gives the tidy list you probably want, keeps the records
 
 Which one? If C, also tell me: may a cashier delete a sale made by another cashier, and does it need a manager's name and password (the same approval used for returns and voids)?
 
-Answer: **Option C** (2026-10-25): delete for real. Built as `POST /sales/{id}/delete`. Two details were left open and I chose the careful default: a cashier may delete only a sale they made, and only with a manager's name and password for that sale (a manager or admin needs no approval). To drop the approval for cashiers, change `deleteSale` in `apps/api/src/modules/sales/delete.ts`.
+Answer: **Option C** (2026-10-25): delete for real. Built as `POST /sales/{id}/delete`. Two details were left open and I chose the careful default: a cashier may delete only a sale they made, and only with a manager's name and password for that sale (a manager or admin needs no approval). To drop the approval for cashiers, change `deleteSale` in `branch-server/src/modules/sales/delete.ts`.
 
 
 

@@ -21,13 +21,13 @@ Grow from one till on one PC to a chain: 8,000+ products, 5-10 branches (about 5
 ## 3. Architecture
 
 ```
- HQ staff ──▶  Cloud HQ (apps/central)  ◀── Customer phone (storefront PWA) / Driver phone (driver PWA)
+ HQ staff ──▶  Cloud HQ (cloud-hq)  ◀── Customer phone (storefront PWA) / Driver phone (driver PWA)
                catalog, prices, users, rates, transfers, reports,
                online orders, HR and payroll, change feed, customer balance authority
                   ▲ pull changes (HTTPS, branch-initiated)      ▲ push facts (batched, idempotent)
         ┌─────────┴────────────┐                     ┌──────────┴───────────┐
         │ Branch A server      │                     │ Branch B server      │  ... up to 10
-        │ apps/api + SQLite    │                     └──────────────────────┘
+        │ branch-server + SQLite    │                     └──────────────────────┘
         │ + sync agent         │
         └──▲────▲────▲─────────┘
    LAN/SSE │    │    │
@@ -36,7 +36,7 @@ Grow from one till on one PC to a chain: 8,000+ products, 5-10 branches (about 5
 
 - Sync is **branch-initiated** (no inbound port at a shop).
 - Tills talk only to their branch server over the LAN and never need the internet.
-- The same `apps/api` runs as a branch server (`MODE=branch`). `apps/central` is the HQ.
+- The same `branch-server` runs as a branch server (`MODE=branch`). `cloud-hq` is the HQ.
 - The public online shop runs **only on the cloud side**.
 
 ### 3.1 Who owns which data (no two writers for the same thing)
@@ -92,7 +92,7 @@ Salary data lives **only at HQ**. Branches get name, code, attendance credential
 - **Rosters and leave** are HQ-owned and edited at HQ (no offline roster edits).
 - **Attendance punches** are append-only branch facts. A mistake is fixed by an adjustment row with a reason and an approver.
 - **Attendance PIN** can only punch in/out; separate from the till PIN, rate-limited, locked out like a login. A punch outside the roster window is flagged, not blocked.
-- **Time is integer minutes, rates are integers, multipliers are basis points.** Pay calculation is a pure function in `packages/shared/src/payroll.ts`.
+- **Time is integer minutes, rates are integers, multipliers are basis points.** Pay calculation is a pure function in `branch-server/shared/src/payroll.ts`.
 - **Pay profiles** (monthly, daily, hourly; LBP or USD; overtime multiplier) and **payroll rules** (NSSF, tax brackets, rounding) are **dated settings**, never hard-coded.
 - **Payroll run:** draft → calculated → approved → paid → **locked** (triggers make it immutable). It refuses to calculate while a branch's attendance has not synced up to the period end. Each payslip stores the rule versions and the exchange rate it used. Invariant: `net = Σ earnings − Σ deductions`.
 - **Privacy:** new roles `hr_manager` and `payroll`; a branch manager sees attendance and roster, **never salaries**; an employee sees only their own payslips. Every payslip view and run change is audited; amounts never go into log lines (rule 21). A payslip is an HTML page that the browser prints or saves as PDF (Arabic renders).
@@ -116,7 +116,7 @@ Salary data lives **only at HQ**. Branches get name, code, attendance credential
 |---|---|
 | P0 | This document, `CLAUDE.md` rule changes, open questions |
 | P1 | Portability foundation, then multi-terminal branch server (SQLite, no cloud) |
-| P2 | Sync foundation, `apps/central`, automatic reconnect |
+| P2 | Sync foundation, `cloud-hq`, automatic reconnect |
 | P3 | HQ-owned data down: catalog, price overrides, users, rates |
 | P4 | Branch facts up, consolidated HQ reports, reconciliation |
 | P5 | Shared customers, transfers, central purchasing |
@@ -129,19 +129,19 @@ Details, files and tests per phase are in the approved plan (`plan.md` will get 
 
 ## 8. The five deployable projects (decided 2026-11-24)
 
-One repository, five things that are installed or hosted separately. They share `packages/shared` (money, pricing, receipts) and `packages/core` (database, sync), so the rules cannot drift.
+One repository, five things that are installed or hosted separately. They share `branch-server/shared` (money, pricing, receipts) and `branch-server/core` (database, sync), so the rules cannot drift.
 
 | # | Project | Runs on | Has | Talks to |
 |---|---|---|---|---|
-| 1 | **Till** (`apps/till` screens, `apps/till-agent`) | each till PC | The cashier's screens. A **thin local agent**: printer, cash drawer, scale, and a queue of sales waiting for the branch server. | Branch server only, over the local network (plain HTTP) |
-| 2 | **Branch server** (`apps/api` becoming `apps/branch`, plus `apps/branch-web`) | a server in the branch's server room | The one authority for the branch: totals, registers, approvals, stock, customers' balances here. Manager screens and monitoring. | The tills (LAN) and HQ (HTTPS, branch-initiated) |
-| 3 | **Cloud HQ** (`apps/central`, plus `apps/hq-web`) | cloud | Collects every branch's data, owns the catalog, prices, users, rates; monitoring of all branches; hands online orders to the right branch. | The branch servers and the marketplace server |
-| 4 | **Marketplace** (`apps/shop-api`, `apps/storefront`) | cloud, separate from HQ | The public site and its API: browse a published catalog, sign up, order. Nothing else of HQ is reachable from the internet. | HQ only, over a narrow API |
-| 5 | **Mobile app** (`apps/mobile`) | customers' phones | The same ordering as the storefront. | The marketplace API (a driver app can follow the same way) |
+| 1 | **Till** (`till/web` screens, `till/agent`) | each till PC | The cashier's screens. A **thin local agent**: printer, cash drawer, scale, and a queue of sales waiting for the branch server. | Branch server only, over the local network (plain HTTP) |
+| 2 | **Branch server** (`branch-server/`, with the branch dashboard to come) | a server in the branch's server room | The one authority for the branch: totals, registers, approvals, stock, customers' balances here. Manager screens and monitoring. | The tills (LAN) and HQ (HTTPS, branch-initiated) |
+| 3 | **Cloud HQ** (`cloud-hq/`, with its monitoring screens to come) | cloud | Collects every branch's data, owns the catalog, prices, users, rates; monitoring of all branches; hands online orders to the right branch. | The branch servers and the marketplace server |
+| 4 | **Marketplace** (`marketplace/`) | cloud, separate from HQ | The public site and its API: browse a published catalog, sign up, order. Nothing else of HQ is reachable from the internet. | HQ only, over a narrow API |
+| 5 | **Mobile app** (`mobile-app/`) | customers' phones | The same ordering as the storefront. | The marketplace API (a driver app can follow the same way) |
 
 **The till does not decide a sale.** Totals, approvals, the register, credit and idempotency stay in the branch server (rules 2, 3, 6, 20). The till's agent only queues a sale it could not deliver and sends it when the branch server answers: until the branch server accepts it, a queued sale is not in the system (as the browser outbox already works). While the branch server is unreachable a till sells from the prices it last downloaded; credit sales and manager approvals wait for the server. A full sales engine with its own database on every till was rejected: two sources of truth and conflicts to merge, for little gain.
 
-**Mapping from today's code:** `apps/web` is split by role into the till screens and the branch manager screens (the till build stays small and offline-first); the print agent grows into the till agent; `apps/api` and `apps/central` keep their names until the rename is worth its churn. The marketplace is its own server instead of public routes inside HQ (this replaces the P9a placement in the plan), so the only internet-facing part is isolated from HQ's data.
+**Mapping from today's code:** `till/web` is split by role into the till screens and the branch manager screens (the till build stays small and offline-first); the print agent grows into the till agent; `branch-server` and `cloud-hq` keep their names until the rename is worth its churn. The marketplace is its own server instead of public routes inside HQ (this replaces the P9a placement in the plan), so the only internet-facing part is isolated from HQ's data.
 
 **Order of work:** the split is a re-organisation, done in steps after P2c/P2d so that sync keeps moving: first the till agent role (queue and devices), then splitting the web app by role, then the marketplace server when P9 starts.
 
@@ -160,15 +160,15 @@ Rules that keep this true: (1) a project's code imports only from `packages/*`, 
 
 **How the till reaches the branch server (decided with this requirement).** The till PC runs the **till agent**, which is a small local server: it serves the till's screens from the till PC itself, passes the screens' calls on to the branch server at the address in its settings (including the live-updates stream), holds the queue of sales that could not be delivered, and drives the printer and drawer. The browser only ever talks to the agent on its own PC, so it stays on one address: the sign-in cookie, the till's device token header and the Content-Security-Policy (`connect-src 'self'`, rule 22) are unchanged, and no cross-origin permission is needed on the branch server. A side benefit: the till screens still load when the branch server is down, and the queue keeps working. The cost: the agent must be running on the till PC (it already has to be, for the printer). The address is kept in the agent's own settings file; the till's Settings page reads and changes it through the agent and has a "Test connection" button.
 
-**Order of the split, revised:** step 2 the till agent becomes that local server (serves the till build, passes calls through to the configured branch server, holds the queue, Settings page for the branch server address); step 3 the web app is split in two builds, the till screens and the branch dashboard, from shared components; the branch dashboard gets the Settings > HQ page (connect, status, disconnect: the API exists); step 4 the independence rules above (lint rule, per-project start command and settings, run-alone tests, one deployment page per machine in `docs/07-operations.md`); step 5 rename `apps/api` to `apps/branch`.
+**Order of the split, revised:** step 2 the till agent becomes that local server (serves the till build, passes calls through to the configured branch server, holds the queue, Settings page for the branch server address); step 3 the web app is split in two builds, the till screens and the branch dashboard, from shared components; the branch dashboard gets the Settings > HQ page (connect, status, disconnect: the API exists); step 4 the independence rules above (lint rule, per-project start command and settings, run-alone tests, one deployment page per machine in `docs/07-operations.md`); step 5 rename `branch-server` to `apps/branch`.
 
 ### 8.2 The repository has five project folders (decided 2026-11-24)
 
 ```
 POS/
   till/            the till: its screens, its local agent (printer, drawer, queue, passes calls to the branch server), tests, docs
-  branch-server/   the branch's server (today apps/api) and the branch dashboard (manager screens), tests, docs; data/ and backups/ at run time (not in git)
-  cloud-hq/        the HQ server (today apps/central) and its monitoring screens, tests, docs
+  branch-server/   the branch's server and the branch dashboard (manager screens), tests, docs; data/ and backups/ at run time (not in git)
+  cloud-hq/        the HQ server and its monitoring screens, tests, docs
   marketplace/     the shop server and the storefront, tests, docs
   mobile-app/      the customers' app, tests, docs
   docs/            the design of the whole system (these documents)
@@ -184,7 +184,13 @@ There is **no shared library folder**: each project is complete in itself (its o
 
 **Tests that need several projects at once** (HQ and two branches, the till through to the branch server) cannot import one project from another any more. They start each project as a real process with its own start command and its own empty data folder, and talk to it over HTTP, which is also exactly the "run alone" proof. They live in `cloud-hq/tests/system/` (HQ is the hub) and are slower than today's in-process ones.
 
-**How it gets there (revised order, replaces §8.1's last paragraph):** (a) restructure: move today's `apps/*` and `packages/*` into the five folders, put each project's tests and docs inside it, generate the shared copies, fix every path and script, all suites green; (b) the till agent becomes the local server with the branch-server Settings page; (c) the web app is split into the till build and the branch dashboard, with Settings > HQ; (d) the independence checks (lint rule, run-alone tests, process-based system tests, one deployment page per machine); then P3.
+**How it gets there (revised order, replaces §8.1's last paragraph):** (a) restructure: move the old `apps/*` and `packages/*` into the five folders, put each project's tests and docs inside it, generate the shared copies, fix every path and script, all suites green; (b) the till agent becomes the local server with the branch-server Settings page; (c) the web app is split into the till build and the branch dashboard, with Settings > HQ; (d) the independence checks (lint rule, run-alone tests, process-based system tests, one deployment page per machine); then P3.
+
+### 8.3 Where the restructure stands (2026-11-24)
+
+Done (step a): the code is in `branch-server/`, `cloud-hq/`, `till/` (the screens in `till/web`, the agent in `till/agent`); each has its own `package.json`, its own `node_modules` (`npm run setup` installs all four, or `npm install` in one project), its own TypeScript and test configuration, and its own tests. Inside a project, `core/` and `shared/` are small local packages (npm workspaces of that project only). The master of `shared/` is `branch-server/shared`; `till/shared` is a copy; `cloud-hq/core` is HQ's own copy of the database plumbing; `till/agent/src/printer.ts` is the agent's copy of the printer driver.
+
+Still to do, and known to be short of the goal: (1) the web app is still ONE app in `till/web` (the manager screens are in it); the branch server serves `till/web/dist`, so a branch server machine still needs that build until step c; (2) the tests that need two projects (`cloud-hq/tests/system`, `till/agent/tests/system`) import the other project's code directly: they become process-based in step d; (3) the check that the copies of `shared/` match their master is not written yet; (4) `marketplace/` and `mobile-app/` are placeholders; (5) the legacy import tools are still inside `branch-server` (`src/etl`, `src/cli/rehearse.ts`) and the old data (`POSDB.sql`, `Uploads/`, the old `data/`) are still at the top, to move to `legacy/`.
 
 ## 9. Risks
 
