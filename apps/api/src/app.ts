@@ -34,6 +34,7 @@ import agentRoutes from './modules/printing/agentRoutes';
 import { EventBus, eventsFor } from './events/bus';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
+import { pushOnce } from './modules/sync/up';
 import syncRoutes from './modules/sync/routes';
 import eventRoutes from './events/routes';
 import { AGENT_HEADER, TERMINAL_HEADER, resolveAgent, resolveTerminal, type Terminal } from './modules/terminals/service';
@@ -69,7 +70,17 @@ export type BuildOptions = {
    * The loop that keeps this branch in touch with HQ (modules/sync/agent.ts). It does nothing until an admin connects the branch to HQ.
    * `{ enabled: false }` (tests) never starts it; the intervals can be shortened to watch an outage and a recovery.
    */
-  sync?: { enabled?: boolean; intervalMs?: number; backoffMs?: [number, number]; refusedRetryMs?: number; idleMs?: number };
+  sync?: {
+    enabled?: boolean;
+    intervalMs?: number;
+    backoffMs?: [number, number];
+    refusedRetryMs?: number;
+    idleMs?: number;
+    /** How many rows travel to HQ in one batch (default 200). Small in tests, to watch a backlog being sent in pieces. */
+    batchSize?: number;
+    /** Replaces `fetch` for every call to HQ: a test makes the connection fail or lose answers. */
+    fetchImpl?: typeof fetch;
+  };
 };
 
 /**
@@ -169,7 +180,17 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   app.decorate('events', events);
   const reports = new ReportRunner({ databasePath: options.databasePath, db, ...options.reports });
   app.decorate('reports', reports);
-  const sync = new SyncAgent({ db: app.database, onChange: () => events.publish('sync.changed'), ...options.sync });
+  const sync = new SyncAgent({
+    db: app.database,
+    onChange: () => events.publish('sync.changed'),
+    push: (link, signal) =>
+      pushOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, batchSize: options.sync?.batchSize, signal }),
+    ...options.sync,
+  });
+  // A sale (or anything that moves stock or a register) is worth sending now, not at the next round.
+  events.tap((e) => {
+    if (e.type === 'sale.completed' || e.type === 'stock.changed' || e.type === 'register.updated') sync.nudgeSoon();
+  });
   app.decorate('sync', sync);
   app.addHook('onReady', async () => {
     if (options.sync?.enabled !== false) sync.start();

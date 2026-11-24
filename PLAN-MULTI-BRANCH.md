@@ -4,13 +4,13 @@
 
 ## Progress
 
-Last updated: 2026-11-23 (P2a built)
+Last updated: 2026-11-24 (P2b built)
 
 | Phase | Status | Notes |
 |---|---|---|
 | P0 Design docs | **partly done** | Done: `docs/11-multi-branch.md`, questions #10-14, `CLAUDE.md` pointer + adapter/Windows pitfalls. **Still to do:** replace rule 16 and the "one till" statements (when P1 terminals land), new ownership/sync/branch rules, `docs/04`, `docs/06`, `docs/07` |
 | P1 Portability foundation + multi-terminal branch server | **done, except the multi-till load test** (needs `POSDB.sql`; do it on the real data and the real till PC). Built: adapter, terminals, print agent (+ startup scripts, dry-run only), live updates (SSE), paged catalog sync, reports worker. Not run on real hardware | **Done (session 4): terminals, device tokens, one register per till, warehouse per terminal (backend + tests + docs/06).** Earlier: `Database` adapter + SQLite driver (mutex, event-loop guard, statement cache), lint guard, and the **whole money core on the adapter**: holds, sales (create/void/delete/list/print), returns, customers (+ payments), expenses, services, registers, purchases, inventory (+ stocktake), approvals. **Next:** the multi-terminal work (migration 0015: branches, terminals, branch_id, per-branch counters, branch_users; per-terminal register sessions; warehouse by terminal), then SSE, print agent, paginated catalog sync, reports worker. `users`/`auth`/`catalog`/`settings`/`reports` can wait for P8's mechanical pass |
-| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2a done** (HQ server, enrolment, branch link, outage/recovery loop, `npm run dev:chain`). **Next: P2b** (branch facts up, proven on sales) | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
+| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2a and P2b done** (HQ server, enrolment, outage/recovery loop; the sale cluster travels up by itself, with history snapshot and proof digests). **Next: P2c** (HQ to branch, starting with the exchange rate), then P2d chaos tests | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
 | P3 HQ-owned data down (catalog, price overrides, users, rates) | not started | |
 | P4 Branch facts up + HQ reports + reconciliation | not started | |
 | P5 Shared customers, transfers, central purchasing | not started | |
@@ -111,6 +111,16 @@ Last updated: 2026-11-23 (P2a built)
   - **`npm run dev:chain`** (`scripts/dev-chain.mjs`) starts HQ (:4000) and branches A (:3000) and B (:3001) with separate folders under `data/chain/`; with `CHAIN_ADMIN_PASSWORD` set it also creates the admins, adds the branches at HQ and connects them. **Run for real:** all three came up, both branches were `online`, HQ saw both, no secret was in the output, and the ports were freed on exit.
   - **Not verified or not built:** no data moves yet in either direction (P2b up, P2c down, P2d chaos tests); no Settings > HQ screen (API only); no TLS in front of HQ; the loop was exercised on one machine only.
   - **Next, P2b:** branch-owned tables get change-capture triggers into a `sync_outbox`; a sender ships batches to HQ's new mirror tables (idempotent upserts); proven on the sale cluster first, then the snapshot of existing history and the digests.
+
+- 2026-11-24 (**P2b: sales travel up to HQ**, session 12, on `main`, **not committed**):
+  - **What it does:** a connected branch sends its sale cluster (`sales`, `sale_items`, `payments`, `stock_movements`) to HQ by itself, within moments of each sale, and catches up after an outage with nobody doing anything. Design and numbers in `docs/12-sync-and-hq.md` §14.
+  - **Branch:** migration `0018_sync_outbox.sql` (triggers record "this row changed" into `sync_outbox` in the same statement, ONLY while connected; `sync_snapshot` covers history that existed before connecting; `sync_control`). `modules/sync/up.ts` sends batches (outbox first, then the snapshot) and clears the outbox only after HQ confirms. The agent drains after each successful ping; a sale nudges it after 250 ms so a burst travels together. `GET /sync/status` gained `progress`; new `GET /sync/verify` compares digests with HQ.
+  - **HQ:** migration `0002_branch_facts.sql` (mirror tables keyed by branch and id), `POST /sync/facts` (one transaction per batch, upserts, a bad batch is refused whole with `FACTS_INVALID`), `GET /sync/digest`. The branch id comes from the token.
+  - **Shared:** `packages/core/src/sync.ts` is the one list of what is synced, the row checks and the digest. A parity test fails if a branch table, the list and HQ's copy ever disagree.
+  - **Fix found by the full suite:** the sync loop listened to the live-updates bus like a screen and made `events.size` one too high; it now uses `events.tap`, which is not counted.
+  - **Tests (+69):** unit 15 (`sync-core`), db 14 + 12 (`sync-schema`, `sync-capture`), central 19 (`facts`), integration 9 (`sync-up`: real HQ and real branch, history in small batches, HQ down then back, failed calls, a lost answer after HQ stored the batch, void propagates, verify). Full suites green: unit 208, db 175, central 42, integration 888 (4 skipped). Typecheck, ESLint and Prettier clean.
+  - **Known limits:** the rows of one sale can reach HQ in different batches, so HQ may briefly show a sale without its lines; nothing but the sale cluster goes up yet (registers, returns, expenses, customers come in P4); the cost of the capture triggers on a busy till is not measured (needs the load test on `POSDB.sql`); no Settings > HQ screen; not run on a real till PC.
+  - **Next, P2c:** HQ to branch (a `change_log` at HQ, a cursor at the branch), starting with the exchange rate; then P2d chaos tests with two branches.
 
 ---
 

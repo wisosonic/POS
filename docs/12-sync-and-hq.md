@@ -113,7 +113,21 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **Run the whole thing on one machine:** `npm run dev:chain` starts HQ (:4000) and branches A (:3000) and B (:3001), each with its own data folder under `data/chain/`. With `CHAIN_ADMIN_PASSWORD=<any password for this throw-away data>` set it also creates an `admin` in each branch, adds the branches at HQ and connects them. It was run for real: both branches online, HQ saw both, no secret reached the output. To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev -w @pos/web`.
 
-**Not built yet:** the Settings > HQ screen (connect and status are API-only for now), HQ users (P3), and any data moving either way (P2b, P2c, P2d).
+**Not built yet:** the Settings > HQ screen (connect and status are API-only for now), HQ users (P3), and data going DOWN (P2c, P2d). Going up is P2b, §14.
+
+## 14. What P2b built (2026-11-24): the sale cluster goes up
+
+**Which rows:** `sales`, `sale_items`, `payments`, `stock_movements`, listed once in `packages/core/src/sync.ts` (column names, whether each may be empty). That list is the contract: the sender, HQ's checks, the digests and a parity test (`tests/db/sync-schema.test.ts`) all read it, so a column added to a branch table fails the test until HQ's table and the list know it too.
+
+**Capturing (branch, migration 0018).** Three triggers per table (insert, update, delete) write `(table, id, 'u' or 'd')` to `sync_outbox` **in the same statement**, so a sale that rolls back leaves nothing. They fire only while `sync_control.capture = 1`, which `saveLink` sets when the branch connects and `clearLink` clears (and empties the outbox), so a shop that is not connected records nothing. The outbox says WHICH row changed; the sender reads the row as it is now, so ten changes to a sale are one message and a row deleted since goes out as a deletion. History that existed before connecting is covered by `sync_snapshot` (per table: the highest id at connecting, how far it got, done).
+
+**Sending (`modules/sync/up.ts`).** `pushOnce` sends one batch (default 200 rows): the outbox first, oldest first, then the snapshot table by table. The outbox is cleared **only after HQ answers OK**, so a failure or a lost answer sends the same batch again. The agent calls it after every successful ping (up to 40 batches a round, then takes a breath), and a sale wakes it after 250 ms. It never runs inside a sale's transaction and its network calls are outside any transaction.
+
+**Storing (HQ, migration 0002).** Mirror tables with the same columns plus `branch_id` and `hq_received_at`, keyed `(branch_id, id)`, no foreign keys (a sale's lines may arrive in another batch). `POST /sync/facts` checks the whole batch, then applies it in one transaction with `INSERT ... ON CONFLICT DO UPDATE` or `DELETE`. A batch with any bad row is refused whole (`422 FACTS_INVALID`), so a version mismatch is loud, not a silent loss. The branch id comes from the token, never the body.
+
+**Proof.** `digestRows` gives `{ count, maxPk, checksum }` (the checksum is order-independent: the sum of 48-bit SHA-256 prefixes of each row). `GET /sync/verify` at the branch compares its tables with HQ's `GET /sync/digest`; `inSync` is true only when nothing is waiting and every table matches. The integration test uses it after every scenario.
+
+**Known limits.** A sale's rows can land at HQ in different batches, so HQ may briefly show a sale without its lines (it heals on the next batch; reports at HQ must wait for P4's reconciliation before they trust a recent minute). Only the sale cluster goes up. The cost of the triggers on a busy till is not measured yet.
 
 ## 13. Shared code (`packages/core`, `@pos/core`)
 

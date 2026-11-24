@@ -17,9 +17,23 @@ export class EventBus {
     return () => void this.listeners.delete(fn);
   }
 
+  /** Server-side watchers (the sync loop): like `subscribe`, but not a screen, so `size` (the listening screens) does not count them. */
+  private readonly taps = new Set<(e: PosEvent) => void>();
+  tap(fn: (e: PosEvent) => void): () => void {
+    this.taps.add(fn);
+    return () => void this.taps.delete(fn);
+  }
+
   /** Tell everyone. A listener that throws (a dead connection) never stops the others, and never affects the request that caused it. */
   publish(type: EventType): void {
     const event: PosEvent = { type, at: new Date().toISOString() };
+    for (const fn of [...this.taps]) {
+      try {
+        fn(event);
+      } catch {
+        /* a watcher must never affect the request */
+      }
+    }
     for (const fn of [...this.listeners]) {
       try {
         fn(event);

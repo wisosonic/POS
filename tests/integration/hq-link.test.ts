@@ -31,6 +31,8 @@ beforeAll(async () => {
 });
 afterEach(async () => {
   await c.http.post(`${api}/sync/disconnect`).set(auth(admin));
+  // Start the next test from a clean state: the loop has noticed there is no link. (Otherwise a quick reconnect can skip "unlinked".)
+  expect(await until(async () => (await status()).state === 'unlinked')).toBe(true);
 });
 afterAll(async () => {
   await c.close();
@@ -94,7 +96,7 @@ describe('connecting a branch to HQ (Settings > HQ)', () => {
     const res = await c.http.post(`${api}/sync/connect`).set(auth(admin)).send({ url: hq.url, code });
     expect(JSON.stringify(res.body)).not.toMatch(/token/i);
     expect(Object.keys(await status()).sort()).toEqual(
-      ['branch', 'connectedAt', 'hqUrl', 'lastError', 'lastOkAt', 'linked', 'since', 'state'].sort(),
+      ['branch', 'connectedAt', 'hqUrl', 'lastError', 'lastOkAt', 'linked', 'progress', 'since', 'state'].sort(),
     );
     const audit = (await c.http.get(`${api}/audit?action=hq.connect`).set(auth(admin))).body.data;
     expect(audit.length).toBeGreaterThan(0);

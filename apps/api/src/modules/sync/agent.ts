@@ -1,6 +1,7 @@
 import type { Database } from '../../db/adapter';
 import { nowIso } from '../../util/time';
 import { pingHq } from './hqClient';
+import type { PushOutcome } from './up';
 import { getLink, recordError, recordOk, type Link } from './service';
 
 // The branch's sync loop (docs/12-sync-and-hq.md §7). It runs inside the branch server, needs nobody, and never touches the sale path:
@@ -21,6 +22,8 @@ export type SyncAgentOptions = {
   onChange?: () => void;
   /** HQ has just become reachable (the first time after connecting, or again after an outage). */
   onReconnect?: (link: Link) => Promise<void> | void;
+  /** Send the next batch of this branch's records to HQ (modules/sync/up.ts). Called again and again while it says there is more. */
+  push?: (link: Link, signal: AbortSignal) => Promise<PushOutcome>;
   /** How often to ask while HQ is answering. */
   intervalMs?: number;
   /** The wait after a failed call: starts at the first, doubles up to the second. */
@@ -37,6 +40,8 @@ export class SyncAgent {
   private abort = new AbortController();
   private wake: (() => void) | null = null;
   private lastWrite = 0;
+  private nudged = false;
+  private moreWaiting = false;
 
   constructor(private readonly opts: SyncAgentOptions) {}
 
@@ -61,12 +66,35 @@ export class SyncAgent {
     this.wake?.();
   }
 
+  /** Something worth sending happened (a sale): look soon, after a short pause so a burst of sales travels together. */
+  nudgeSoon(): void {
+    this.nudged = true;
+    this.wake?.();
+  }
+
   private set(state: SyncState, lastError: string | null = null): boolean {
     const changed = this.current.state !== state || this.current.lastError !== lastError;
     if (this.current.state !== state) this.current = { state, since: nowIso(), lastError };
     else this.current = { ...this.current, lastError };
     if (changed) this.opts.onChange?.();
     return changed;
+  }
+
+  /**
+   * Send batches until nothing is left, or a fair number (so a long backlog does not starve the "are you there?"). Returns what went wrong,
+   * or null. A failure is NOT cleared from the outbox: the same batch is simply tried again.
+   */
+  private async drain(link: Link): Promise<{ error: string; refused?: boolean } | null> {
+    const push = this.opts.push;
+    if (!push) return null;
+    for (let i = 0; i < 40; i++) {
+      if (this.abort.signal.aborted) return null;
+      const r = await push(link, this.abort.signal);
+      if ('error' in r) return r;
+      if (!r.more) return null;
+    }
+    this.moreWaiting = true;
+    return null;
   }
 
   /** Wait, but stop waiting at once if the loop is stopped or nudged. */
@@ -110,7 +138,28 @@ export class SyncAgent {
             this.lastWrite = Date.now();
           }
           if (!wasOnline) await this.opts.onReconnect?.(link);
-          await this.sleep(interval);
+          // Send what is waiting: first what changed, then the history from before this branch connected.
+          const failed = await this.drain(link);
+          if (failed?.refused) {
+            this.set('refused', failed.error);
+            await db.tx((tx) => recordError(tx, failed.error));
+            await this.sleep(this.opts.refusedRetryMs ?? 60_000);
+          } else if (failed) {
+            this.set('offline', failed.error);
+            await db.tx((tx) => recordError(tx, failed.error));
+            await this.sleep(delay);
+            delay = Math.min(delay * 2, maxDelay);
+          } else if (this.moreWaiting) {
+            this.moreWaiting = false; // plenty left: take a breath (so a ping and a sale can get in) and carry on at once
+            await this.sleep(0);
+          } else {
+            await this.sleep(interval);
+            // Woken early by a sale: give a burst of them a moment, so they travel together.
+            if (this.nudged) {
+              this.nudged = false;
+              await this.sleep(250);
+            }
+          }
         } else if (result.refused) {
           this.set('refused', result.error);
           await db.tx((tx) => recordError(tx, result.error));
