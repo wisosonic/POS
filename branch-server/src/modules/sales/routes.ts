@@ -106,7 +106,7 @@ export default async function saleRoutes(app: FastifyInstance) {
     return reply.status(result.replay ? 200 : result.statusCode).send(result.body);
   });
 
-  // Delete a cancelled sale, or one that has had items returned, for good (QUESTIONS.md #8). A cashier needs a manager's approval
+  // Delete a cancelled sale, or one that has had items returned, for good (docs/QUESTIONS.md #8). A cashier needs a manager's approval
   // (DELETE_NEEDS_APPROVAL) and sees only their own sales.
   app.post('/sales/:id/delete', user, async (req, reply) => {
     const key = requireIdempotencyKey(req);

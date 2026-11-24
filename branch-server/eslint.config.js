@@ -2,18 +2,10 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
+// Code-style rules of the branch server. Each project carries its own copy of the shared part (docs/11-multi-branch.md §8.2).
 export default tseslint.config(
   {
-    ignores: [
-      '**/node_modules/**',
-      '**/dist/**',
-      'Uploads/**',
-      'POSDB.sql',
-      'docs/mockups/**',
-      'coverage/**',
-      'playwright-report/**',
-      'test-results/**',
-    ],
+    ignores: ['**/node_modules/**', '**/dist/**', 'data/**', 'backups/**', 'coverage/**', 'test-results/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -27,40 +19,20 @@ export default tseslint.config(
     },
   },
   {
-    files: ['branch-server/tests/**/*.js', 'branch-server/tests/load/**'],
+    files: ['tests/**/*.js', 'tests/load/**'],
     languageOptions: { globals: { __ENV: 'readonly', __VU: 'readonly' } },
   },
   {
-    // The load test and the print agent are command-line tools: printing their progress is their job.
-    files: ['branch-server/tests/load/**/*.ts', 'till/agent/src/cli.ts'],
+    // The load test is a command-line tool: printing its progress is its job.
+    files: ['tests/load/**/*.ts'],
     rules: { 'no-console': 'off' },
-  },
-  {
-    // The service worker runs in the browser's worker scope, not in Node or a page.
-    files: ['till/web/sw.template.js'],
-    languageOptions: {
-      globals: { self: 'readonly', caches: 'readonly', fetch: 'readonly', Response: 'readonly', URL: 'readonly' },
-    },
-  },
-  {
-    // Plain Node scripts at the top of the project (the one-terminal launcher).
-    files: ['scripts/**/*.mjs'],
-    languageOptions: {
-      globals: { process: 'readonly', console: 'readonly', fetch: 'readonly', setTimeout: 'readonly', AbortSignal: 'readonly' },
-    },
   },
   {
     // The database seam (docs/11-multi-branch.md §4): application code must not import a database library, so that a server
     // can move from SQLite to PostgreSQL by changing the driver only. Only `db/` (the drivers) and the tools below, which
     // work on the database FILE itself (backup, restore checks, rehearsal), may. This list only ever shrinks.
-    files: ['branch-server/src/**/*.ts'],
-    ignores: [
-      'branch-server/src/db/**',
-      'branch-server/src/backup/backup.ts',
-      'branch-server/src/cli/backup.ts',
-      'branch-server/src/cli/preflight.ts',
-      'branch-server/src/cli/rehearse.ts',
-    ],
+    files: ['src/**/*.ts'],
+    ignores: ['src/db/**', 'src/backup/backup.ts', 'src/cli/backup.ts', 'src/cli/preflight.ts', 'src/cli/rehearse.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -76,17 +48,17 @@ export default tseslint.config(
     // Modules already converted to the adapter must stay converted: no legacy synchronous handle, no raw SQLite helpers.
     // Add a module's folder here when it is converted.
     files: [
-      'branch-server/src/modules/holds/**/*.ts',
-      'branch-server/src/modules/sales/**/*.ts',
-      'branch-server/src/modules/returns/**/*.ts',
-      'branch-server/src/modules/customers/**/*.ts',
-      'branch-server/src/modules/expenses/**/*.ts',
-      'branch-server/src/modules/services/**/*.ts',
-      'branch-server/src/modules/registers/**/*.ts',
-      'branch-server/src/modules/purchases/**/*.ts',
-      'branch-server/src/modules/inventory/**/*.ts',
-      'branch-server/src/modules/terminals/**/*.ts',
-      'branch-server/src/auth/approvals.ts',
+      'src/modules/holds/**/*.ts',
+      'src/modules/sales/**/*.ts',
+      'src/modules/returns/**/*.ts',
+      'src/modules/customers/**/*.ts',
+      'src/modules/expenses/**/*.ts',
+      'src/modules/services/**/*.ts',
+      'src/modules/registers/**/*.ts',
+      'src/modules/purchases/**/*.ts',
+      'src/modules/inventory/**/*.ts',
+      'src/modules/terminals/**/*.ts',
+      'src/auth/approvals.ts',
     ],
     rules: {
       'no-restricted-imports': [

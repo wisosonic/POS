@@ -12,12 +12,13 @@ rem    RUNNER_NO_BROWSER=1   do not open the browser
 rem  The same thing without this file: npm run dev   (scripts\dev.mjs)
 rem ============================================================================================================
 setlocal EnableExtensions EnableDelayedExpansion
-cd /d "%~dp0"
+rem This file lives in scripts\, the work is done from the folder above it.
+cd /d "%~dp0.."
 title POS runner
 
 set "API_URL=http://127.0.0.1:3000"
 set "WEB_URL=http://localhost:5173"
-set "DB=%~dp0branch-server\data\pos.db"
+set "DB=%CD%\branch-server\data\pos.db"
 
 echo.
 echo  === Darwish Market POS: test runner ===

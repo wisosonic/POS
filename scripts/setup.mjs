@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const only = process.argv.slice(2);
-const projects = ['.', 'branch-server', 'cloud-hq', 'till'].filter((p) => only.length === 0 || only.includes(p));
+const projects = ['branch-server', 'cloud-hq', 'till'].filter((p) => only.length === 0 || only.includes(p));
 for (const p of projects) {
   console.log(`\n== npm install in ${p}`);
   const r = spawnSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: resolve(root, p), stdio: 'inherit', shell: true });

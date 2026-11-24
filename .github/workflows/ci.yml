@@ -6,22 +6,17 @@ on:
   pull_request:
 
 jobs:
-  check:
+  cross-project-typecheck:
+    # The system tests of cloud-hq and the till still import the branch server's code, so this job installs all three.
+    # It goes away when those tests become process-based (docs/11-multi-branch.md §8.3).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - run: npm install --no-audit --no-fund
       - run: node scripts/setup.mjs branch-server cloud-hq till
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run typecheck
       - run: npm run typecheck:tests
-      - run: npm run build # the web app must still build
-      - run: npm audit --omit=dev --audit-level=high --prefix branch-server # no known serious flaw in what ships
-      - run: npm audit --omit=dev --audit-level=high --prefix cloud-hq
 
   branch-server:
     runs-on: ubuntu-latest
@@ -34,6 +29,10 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm install --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm audit --omit=dev --audit-level=high # no known serious flaw in what ships
       - run: npm run test:unit
       - run: npm run test:db # includes the backup and restore drill
       - run: npm run test:migration # the real-dump tests skip themselves here; the hand-made-dump tests run
@@ -49,6 +48,10 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm install --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm test
 
   till:
@@ -62,6 +65,10 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm install --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run build # the web app must still build
       - run: npm run test:web
 
   integration:

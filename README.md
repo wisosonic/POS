@@ -2,7 +2,7 @@
 
 A new point-of-sale system for **Darwish Market** (Beirut). It replaces the legacy ASP.NET/SQL Server app and keeps its real transaction history (22,600 sales since Nov 2025).
 
-**Status:** design and test-first scaffolding complete, updated with the owner's decisions (see "Decisions" in [plan.md](plan.md)). No application code yet.
+**Status:** design and test-first scaffolding complete, updated with the owner's decisions (see "Decisions" in [docs/plan.md](docs/plan.md)). No application code yet.
 
 ## Goals
 
@@ -35,7 +35,7 @@ Why these choices: [docs/02-decision-table.md](docs/02-decision-table.md).
 | [docs/10-cutover.md](docs/10-cutover.md) | Moving the shop from the old app to the new one: rehearsal, cut-over day, the first two weeks, rolling back |
 | [docs/09-load-test.md](docs/09-load-test.md) | How fast the server is, what slows it, and the proof that money still adds up under load |
 | [docs/tests-README.md](docs/tests-README.md) | Test suite, traceability, hardware checklist |
-| [plan.md](plan.md) | Milestones, open questions, risks |
+| [docs/plan.md](docs/plan.md) | Milestones, open questions, risks |
 | [CLAUDE.md](CLAUDE.md) | Instructions for AI coding assistants working on this repo |
 
 ## Repository layout (target)
@@ -81,7 +81,7 @@ npm run dev --prefix till/web
 On the shop PC the API serves the built app itself, and takes daily backups:
 
 ```bash
-runner.bat                             # Windows, for trying it out: installs what is needed, makes a test database, starts the server and the screen in this one window, opens the browser
+scripts\runner.bat                     # Windows, for trying it out: installs what is needed, makes a test database, starts the server and the screen in this one window, opens the browser
 npm run dev                            # the server and the screen together in one terminal ([api] and [web] lines, Ctrl+C stops both)
 npm run build                          # builds till/web/dist
 npm run backup --prefix branch-server -- --to E:\POS-backups     # a backup now (safe while the shop is open)

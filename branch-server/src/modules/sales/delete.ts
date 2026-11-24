@@ -8,7 +8,7 @@ import { writeAuditQ } from '../audit/service';
 import { computeBreakdown } from '../registers/service';
 import type { Actor } from './service';
 
-// Deleting a sale for good (QUESTIONS.md #8, option C). Allowed for a cancelled sale, and for a sale that has had items taken back.
+// Deleting a sale for good (docs/QUESTIONS.md #8, option C). Allowed for a cancelled sale, and for a sale that has had items taken back.
 // Everything the sale and its returns did is taken back out in ONE transaction, as if they never happened: the stock they moved
 // goes back, the register's expected figures are recomputed from what is left (a counted register's variance changes with them),
 // and the customer's balance loses what this sale added. The audit log is never touched: it keeps what the sale was, and who deleted it.

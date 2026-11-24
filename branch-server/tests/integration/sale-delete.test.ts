@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startCtx, type TestCtx } from '../helpers/app';
 
-// US-14c (QUESTIONS.md #8, option C): a cancelled sale, or a sale that has had items taken back, can be deleted for good.
+// US-14c (docs/QUESTIONS.md #8, option C): a cancelled sale, or a sale that has had items taken back, can be deleted for good.
 // Everything it did is taken back out in one transaction; a cashier needs a manager's approval; the audit log keeps the trace.
 let c: TestCtx;
 let cashier: string;

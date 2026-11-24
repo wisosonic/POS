@@ -2,7 +2,7 @@
   "name": "pos",
   "private": true,
   "type": "module",
-  "description": "Five projects, each runs alone (docs/11-multi-branch.md §8). This file only holds shortcuts and the code-style tools.",
+  "description": "Five projects, each runs alone (docs/11-multi-branch.md §8). This file only holds shortcuts: it has no packages of its own.",
   "engines": {
     "node": ">=22"
   },
@@ -21,17 +21,10 @@
     "test:migration": "npm --prefix branch-server run test:migration",
     "test:e2e": "npm --prefix till run e2e",
     "test:load": "npm --prefix branch-server run test:load",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "lint": "npm --prefix branch-server run lint && npm --prefix cloud-hq run lint && npm --prefix till run lint",
+    "format": "npm --prefix branch-server run format && npm --prefix cloud-hq run format && npm --prefix till run format",
+    "format:check": "npm --prefix branch-server run format:check && npm --prefix cloud-hq run format:check && npm --prefix till run format:check",
     "dev": "node scripts/dev.mjs",
     "dev:chain": "node scripts/dev-chain.mjs"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.17.0",
-    "eslint": "^9.17.0",
-    "eslint-config-prettier": "^9.1.0",
-    "prettier": "^3.4.0",
-    "typescript-eslint": "^8.18.0"
   }
 }

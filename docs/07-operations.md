@@ -67,7 +67,7 @@ Every sale uses the rate in force when it is made, and old sales keep theirs for
 
 ### The first day
 
-Bring the old data over with the importer (`docs/01-data-analysis.md`; the whole procedure, with a rehearsal that must pass first, is `docs/10-cutover.md`), set passwords for the imported users (**Menu → Users**, admin only: add people, give a first password that they must replace on first sign-in, set or remove a cashier's PIN, switch someone off), set the printer and the exchange rate (above), and close the imported open register before the first real day. See the owner-review list in `plan.md`.
+Bring the old data over with the importer (`docs/01-data-analysis.md`; the whole procedure, with a rehearsal that must pass first, is `docs/10-cutover.md`), set passwords for the imported users (**Menu → Users**, admin only: add people, give a first password that they must replace on first sign-in, set or remove a cashier's PIN, switch someone off), set the printer and the exchange rate (above), and close the imported open register before the first real day. See the owner-review list in `docs/plan.md`.
 
 ### Product pictures
 
@@ -133,7 +133,7 @@ On a second PC (or the same one, into a different file) with the project install
 
 The restore also puts back the product pictures: it takes the `uploads` folder that sits beside the backup file (keep the two together when you copy a backup) and copies into `D:\drill\uploads` the pictures that are not there yet. It says how many it put back.
 
-**From the screen:** Settings → Backups lists the backups; **Restore** on a file (after a confirmation) checks it, backs up the data as it is now, stops the server, and the launcher (the Darwish POS task, `runner.bat` or `npm run dev`) starts it again with the backup in place. The old database file is kept as `pos.db.before-restore-<time>`. Without `BACKUP_DIR`, a test run (not production) keeps its backups in the `backups` folder of the project.
+**From the screen:** Settings → Backups lists the backups; **Restore** on a file (after a confirmation) checks it, backs up the data as it is now, stops the server, and the launcher (the Darwish POS task, `scripts\runner.bat` or `npm run dev`) starts it again with the backup in place. The old database file is kept as `pos.db.before-restore-<time>`. Without `BACKUP_DIR`, a test run (not production) keeps its backups in the `backups` folder of the project.
 
 **A real disaster** (the till PC died): install on the new PC as in section 2, **stop the Darwish POS task**, then restore into `C:\POS\pos.db` with `--force`, start the task again, and check a recent sale before opening the shop.
 

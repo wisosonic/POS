@@ -74,7 +74,7 @@ The sync loop runs inside the branch server. While online it syncs every few sec
 
 ## 10. Decisions for the owner
 
-1. **Who may add or change products, prices and categories once a branch is connected?** **Decided 2026-11-23 (`QUESTIONS.md` #15): only at HQ.** At a connected branch the products, categories, brands, units and suppliers screens become read-only (P3 does this); HQ is the only place a product or a price changes. A branch that is not connected works as before. This is what makes the down path (§5) conflict-free.
+1. **Who may add or change products, prices and categories once a branch is connected?** **Decided 2026-11-23 (`docs/QUESTIONS.md` #15): only at HQ.** At a connected branch the products, categories, brands, units and suppliers screens become read-only (P3 does this); HQ is the only place a product or a price changes. A branch that is not connected works as before. This is what makes the down path (§5) conflict-free.
 2. Everything else in this document is a technical choice I will make unless you object: row-level capture by triggers, HQ mirror tables with `branch_id`, HQ adopting the first branch's catalog and ids, and starting with one table each way.
 
 ## 11. Risks

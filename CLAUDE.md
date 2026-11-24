@@ -6,8 +6,8 @@ Guidance for Claude Code and other AI assistants working in this repository.
 
 Market POS, first built for Darwish Market (Beirut), replacing a legacy ASP.NET + SQL Server app. **It is now becoming a chain system for a fresh customer (2026-11-24): the legacy Darwish system stays separate, nothing here has to migrate its data, and each customer gets a separate install.** React PWA front end, Fastify + TypeScript API, SQLite (`better-sqlite3`).
 The full design is in `docs/`. **Read the relevant doc before changing a related area, and update the doc when behaviour changes.**
-Deployment: a Windows PC runs the API (which owns the SQLite file); the tills are browsers, on that same PC or on others, and a till whose printer is elsewhere runs a print agent (`docs/04-architecture.md` §1, `docs/07-operations.md`). Current state: the single-branch system is built and tested (milestones in `plan.md`), with several tills per branch; it has **not** been run on a real till PC yet. The multi-branch / HQ plan is in `PLAN-MULTI-BRANCH.md`.
-**Growing into a chain (multi-branch, HR, online shop) is planned in `PLAN-MULTI-BRANCH.md` (architecture in `docs/11-multi-branch.md`). Read it before touching the database layer, registers, sync or users, and update its Progress section at the end of every piece of work.** Until a phase there says otherwise, the one-till rules below still hold.
+Deployment: a Windows PC runs the API (which owns the SQLite file); the tills are browsers, on that same PC or on others, and a till whose printer is elsewhere runs a print agent (`docs/04-architecture.md` §1, `docs/07-operations.md`). Current state: the single-branch system is built and tested (milestones in `docs/plan.md`), with several tills per branch; it has **not** been run on a real till PC yet. The multi-branch / HQ plan is in `docs/PLAN-MULTI-BRANCH.md`.
+**Growing into a chain (multi-branch, HR, online shop) is planned in `docs/PLAN-MULTI-BRANCH.md` (architecture in `docs/11-multi-branch.md`). Read it before touching the database layer, registers, sync or users, and update its Progress section at the end of every piece of work.** Until a phase there says otherwise, the one-till rules below still hold.
 
 ## Layout (docs/11-multi-branch.md §8.2, §8.3)
 
@@ -21,7 +21,8 @@ marketplace/, mobile-app/   not built yet (placeholders)
 legacy/          the old Darwish data and tools (POSDB.sql, Uploads/, old data/); not part of any project
 ```
 
-- **Each project has its own `node_modules`.** `npm run setup` (top level) installs all four, or `npm install` inside one project. Run a project's commands from its folder or with `npm --prefix <project> run <script>`. The top level's scripts are shortcuts.
+- **Each project has its own `node_modules`.** `npm run setup` (top level) installs all four, or `npm install` inside one project. Run a project's commands from its folder or with `npm --prefix <project> run <script>`. The top level's scripts are shortcuts, and the top level has no `node_modules` of its own.
+- **Code style is per project too:** each project has its own `eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `.editorconfig` and its own `lint`, `format`, `format:check` scripts (the shared part is copied, like `shared/`: change one, change all three). The adapter lint rules are in `branch-server/eslint.config.js`. `scripts/` is not linted.
 - **No project imports another project.** The one exception, for now: `cloud-hq/tests/system` and `till/agent/tests/system` import the branch server's code; they become process-based later.
 - **Copies:** `till/shared` is copied from `branch-server/shared` (the master): change the master, copy the files, run both projects' tests. `cloud-hq/core` is HQ's own copy of the database layer and may diverge. `till/agent/src/printer.ts` is the agent's copy of `branch-server/core/src/printer.ts`. The check that copies match is not written yet.
 - `node scripts/check-alone.mjs` starts each server alone from its own folder and checks it answers.
@@ -40,7 +41,7 @@ npm run dev:chain          # HQ (:4000) + branch A (:3000) + branch B (:3001), s
 POSDB_DUMP=./legacy/POSDB.sql npm run test:migration
 npm run test:e2e           # Playwright (till/), starts its own throwaway branch server
 npm run typecheck
-npm run dev                   # API and web screen together in ONE terminal (scripts/dev.mjs; Ctrl+C stops both). runner.bat wraps it for Windows
+npm run dev                   # API and web screen together in ONE terminal (scripts/dev.mjs; Ctrl+C stops both). scripts/runner.bat wraps it for Windows
 npm run dev --prefix branch-server       # API alone on 127.0.0.1:3000 (SQLite file in ./data)
 npm run create-admin --prefix branch-server -- <user> <password>
 npm run test:load             # ~5 min; imports POSDB.sql into a temp copy, drives the real server, re-checks every money invariant
@@ -58,7 +59,7 @@ npm run preflight --prefix branch-server -- --env <service.env>      # read-only
 2. **The server decides totals.** Recompute from catalog prices and the rate. Never trust client-sent totals.
 3. **One DB transaction per sale** covering sale, items, payments, stock movements, customer balance, register balances and audit, via `inWriteTransaction` (`BEGIN IMMEDIATE`). Never write outside it. Only the API process may open the database for writing.
 4. **History is append-only.** Never UPDATE or DELETE sales, payments, stock movements or audit rows. Corrections are new rows (returns, adjustments, voids). The database enforces this with triggers (migration 0001), so a violation throws.
-   **One exception, by the owner's decision (QUESTIONS.md #8, option C):** a cancelled sale, or a sale that has had items taken back, can be deleted for good through `POST /sales/{id}/delete` (`modules/sales/delete.ts`, migration 0014). That is the only code that deletes these rows. The triggers let a sale's own rows go only while `sale_delete_unlock` holds a row for that sale, which the routine inserts and removes inside its one transaction. It reverses the stock, recomputes the register's expected figures (a counted register's variance changes) and lowers the customer's balance in that same transaction, and the audit log (never deletable) keeps what the sale was and who deleted it. Do not add another delete path, and never leave a row in `sale_delete_unlock`.
+   **One exception, by the owner's decision (docs/QUESTIONS.md #8, option C):** a cancelled sale, or a sale that has had items taken back, can be deleted for good through `POST /sales/{id}/delete` (`modules/sales/delete.ts`, migration 0014). That is the only code that deletes these rows. The triggers let a sale's own rows go only while `sale_delete_unlock` holds a row for that sale, which the routine inserts and removes inside its one transaction. It reverses the stock, recomputes the register's expected figures (a counted register's variance changes) and lowers the customer's balance in that same transaction, and the audit log (never deletable) keeps what the sale was and who deleted it. Do not add another delete path, and never leave a row in `sale_delete_unlock`.
    **SQLite rules:** quantities are integer thousandths (`qty_milli`), never floats. Use `openDatabase()` so WAL, `synchronous=FULL` and `foreign_keys=ON` are set. Schema changes are new numbered `.sql` files in `branch-server/src/db/migrations/`. Never edit an applied migration.
 5. **Stock = ledger.** Change stock only by inserting `stock_movements`. `stock_levels` is a cache updated in the same transaction.
 6. **Idempotency** on `POST /sales`, `/returns`, `/customers/{id}/payments`, `/purchases/{id}/receive`.
@@ -154,9 +155,9 @@ npm run preflight --prefix branch-server -- --env <service.env>      # read-only
 - The dump contains plaintext passwords. Never print them, copy them into docs, or commit them.
 - `Uploads/` holds ~700 product images. Treat as read-only input.
 
-## Open questions (see QUESTIONS.md and plan.md)
+## Open questions (see docs/QUESTIONS.md and docs/plan.md)
 
-**Whenever you have a question for the owner, add it to `QUESTIONS.md` (Open section, with context and an `Answer:` line) instead of asking in chat, and read the file for answers before asking again. Move answered ones to "Answered" with the date.**
+**Whenever you have a question for the owner, add it to `docs/QUESTIONS.md` (Open section, with context and an `Answer:` line) instead of asking in chat, and read the file for answers before asking again. Move answered ones to "Answered" with the date.**
 
 
-Only the printer model remains open (deferred by the owner). Resolved decisions are in `plan.md` → "Decisions from the owner". Don't re-ask them. There is no customer credit limit by decision.
+Only the printer model remains open (deferred by the owner). Resolved decisions are in `docs/plan.md` → "Decisions from the owner". Don't re-ask them. There is no customer credit limit by decision.

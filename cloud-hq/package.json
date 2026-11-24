@@ -12,7 +12,10 @@
     "test": "vitest run --project central --project unit",
     "test:central": "vitest run --project central",
     "test:unit": "vitest run --project unit",
-    "test:system": "vitest run --project system --no-file-parallelism"
+    "test:system": "vitest run --project system --no-file-parallelism",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@fastify/rate-limit": "^11.2.1",
@@ -23,11 +26,16 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.0.0",
     "@types/supertest": "^6.0.2",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.0",
     "supertest": "^7.0.0",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.18.0",
     "vitest": "^5.0.5"
   },
   "workspaces": [

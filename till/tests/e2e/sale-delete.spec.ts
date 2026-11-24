@@ -1,7 +1,7 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
-// US-14c (QUESTIONS.md #8, option C): a cancelled sale, or a sale that has had items taken back, can be deleted for good. A cashier
+// US-14c (docs/QUESTIONS.md #8, option C): a cancelled sale, or a sale that has had items taken back, can be deleted for good. A cashier
 // needs a manager's approval; a manager does not. Same throwaway stack as the other specs.
 const TOWEL = '5287000107945'; // 75,000
 

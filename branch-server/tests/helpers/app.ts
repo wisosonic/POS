@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-// buildApp is created in milestone M1 (see plan.md). The database layer already exists.
+// buildApp is created in milestone M1 (see docs/plan.md). The database layer already exists.
 import { buildApp, type BuildOptions } from '../../src/app';
 import { migrate } from '../../src/db/migrate';
 import { seedTestData, type Seed } from '../../src/db/seed-test';

@@ -69,7 +69,7 @@ Answer:
 ## Answered
 
 ### Fresh customer (2026-11-24): the multi-branch system is for a new customer, not a migration of Darwish
-Answers: same rules as Darwish (Lebanon, LBP and USD, Whish/OMT, no tax); a separate install per customer (own HQ, own branch servers, own data); the legacy import tools are kept but moved out of the main flow; the customer starts from a product list in a spreadsheet (the CSV import is the first-run path). Recorded in `PLAN-MULTI-BRANCH.md`.
+Answers: same rules as Darwish (Lebanon, LBP and USD, Whish/OMT, no tax); a separate install per customer (own HQ, own branch servers, own data); the legacy import tools are kept but moved out of the main flow; the customer starts from a product list in a spreadsheet (the CSV import is the first-run path). Recorded in `docs/PLAN-MULTI-BRANCH.md`.
 Answer: **Decided** (2026-11-24).
 
 ### 7. When is the cut-over, and who runs the rehearsal on the real till PC?

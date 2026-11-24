@@ -125,7 +125,7 @@ Salary data lives **only at HQ**. Branches get name, code, attendance credential
 | P8 | Move to PostgreSQL |
 | P7 | Operations and cut-over (branch #1 = today's till) |
 
-Details, files and tests per phase are in the approved plan (`plan.md` will get a matching section when P1 starts).
+Details, files and tests per phase are in the approved plan (`docs/plan.md` will get a matching section when P1 starts).
 
 ## 8. The five deployable projects (decided 2026-11-24)
 
@@ -173,7 +173,7 @@ POS/
   mobile-app/      the customers' app, tests, docs
   docs/            the design of the whole system (these documents)
   scripts/         install and development scripts for the whole system
-  PLAN-MULTI-BRANCH.md, CLAUDE.md, QUESTIONS.md
+  docs/PLAN-MULTI-BRANCH.md, CLAUDE.md, docs/QUESTIONS.md
 ```
 
 There is **no shared library folder**: each project is complete in itself (its own `package.json`, its own `node_modules`, its own tests) and can be copied to another machine on its own. Code that more than one project needs (money, pricing and receipt rules; the sync contract; the database layer) is **copied into each project that needs it**, from one master copy, and a check keeps the copies identical:
