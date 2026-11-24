@@ -4,13 +4,13 @@
 
 ## Progress
 
-Last updated: 2026-11-24 (P2c built)
+Last updated: 2026-11-24 (P2 complete)
 
 | Phase | Status | Notes |
 |---|---|---|
 | P0 Design docs | **partly done** | Done: `docs/11-multi-branch.md`, questions #10-14, `CLAUDE.md` pointer + adapter/Windows pitfalls. **Still to do:** replace rule 16 and the "one till" statements (when P1 terminals land), new ownership/sync/branch rules, `docs/04`, `docs/06`, `docs/07` |
 | P1 Portability foundation + multi-terminal branch server | **done, except the multi-till load test** (needs `POSDB.sql`; do it on the real data and the real till PC). Built: adapter, terminals, print agent (+ startup scripts, dry-run only), live updates (SSE), paged catalog sync, reports worker. Not run on real hardware | **Done (session 4): terminals, device tokens, one register per till, warehouse per terminal (backend + tests + docs/06).** Earlier: `Database` adapter + SQLite driver (mutex, event-loop guard, statement cache), lint guard, and the **whole money core on the adapter**: holds, sales (create/void/delete/list/print), returns, customers (+ payments), expenses, services, registers, purchases, inventory (+ stocktake), approvals. **Next:** the multi-terminal work (migration 0015: branches, terminals, branch_id, per-branch counters, branch_users; per-terminal register sessions; warehouse by terminal), then SSE, print agent, paginated catalog sync, reports worker. `users`/`auth`/`catalog`/`settings`/`reports` can wait for P8's mechanical pass |
-| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2a, P2b and P2c done** (HQ server, enrolment, outage/recovery loop; sales travel up by themselves with snapshot and digests; the exchange rate set at HQ comes down to every branch). **Next: P2d** (two-branch chaos tests), then the repo split, then P3 | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
+| P2 Sync foundation (`apps/central`, automatic reconnect) | **P2 done (a to d):** HQ server, enrolment, outage/recovery loop; sales travel up by themselves with snapshot and digests; the exchange rate set at HQ comes down to every branch; two-branch chaos test passes. **Next: the repo split** (`docs/11` §8), then P3 | Design in `docs/12-sync-and-hq.md`. Decision `QUESTIONS.md` #15: **products/prices only at HQ** |
 | P3 HQ-owned data down (catalog, price overrides, users, rates) | not started | |
 | P4 Branch facts up + HQ reports + reconciliation | not started | |
 | P5 Shared customers, transfers, central purchasing | not started | |
@@ -128,6 +128,8 @@ Last updated: 2026-11-24 (P2c built)
   - **Rule added:** a connected branch cannot set its own rate (`409 HQ_OWNS_RATES`); not connected, nothing changes. Open: if HQ is down for days the branch keeps selling at the last rate it received (no local override). Say if you want a manager override.
   - **Tests (+35):** central 9 (`changes`), db 4 (parity for the down table), integration 10 (`sync-down`: a rate set at HQ becomes the till rate, a new sale uses it and an old sale keeps its own, a future date waits, failed calls, HQ down then back, a repeated page, paging, a bad page refused whole, reconnect resets the cursor). Full results below in the next entry.
   - **Next:** P2d (HQ plus TWO branches in one test: sell offline on both, reconnect, totals agree; kill mid-batch), then the repo split, then P3.
+
+- 2026-11-24 (**P2d: two-branch chaos test**, session 12, on `main`, **not committed**): `tests/integration/sync-chaos.test.ts` (5 tests, about 6 s): HQ plus two real branches with identical ids and receipt numbers stay apart and add up; a rate reaches both; both sell with HQ down and catch up alone; random failures and lost answers (30% each, seeded) while both sell at once end with every row once at HQ; a branch server restarted mid-backlog finishes sending. Details and what is NOT covered in `docs/12` §16. One run took 74 s instead of 6 s and I could not reproduce it in four more runs (6.2 to 6.7 s): keep an eye on it. **P2 is complete.**
 
 ---
 

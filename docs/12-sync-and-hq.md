@@ -141,6 +141,12 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **Same pattern for what comes next (P3):** add the table to `DOWN_TABLES` (packages/core/src/sync.ts), a table at HQ with a `change_log` line written by its service, a `hq_id` column at the branch, and a case in `applyChange`. `tests/db/sync-schema.test.ts` checks the lists agree.
 
+## 16. What P2d proved (2026-11-24): two branches and HQ under failure
+
+`tests/integration/sync-chaos.test.ts` runs HQ and TWO real branch servers over real HTTP. Both branches are seeded the same way, so they have the same ids and the same receipt numbers, which HQ must keep apart. Proven: the two add up at HQ (sales, lines, payments, stock movements: counts and sums, per branch and in total); a rate set at HQ reaches both; both sell while HQ is gone and catch up by themselves when it returns; with 30% of calls failing and 30% of answers lost (a seeded generator, so a failure can be repeated) while both sell at the same time, HQ ends with every row once; and a branch server stopped and started again in the middle of a backlog stays connected and finishes sending.
+
+**Not covered:** a crash in the middle of a database write (SQLite and the transactions cover it, but it is not simulated), clock differences between machines, a branch that is away for weeks with a very large backlog, and anything over a real internet link (everything here is one machine).
+
 ## 13. Shared code (`packages/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `apps/api` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.
