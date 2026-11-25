@@ -4,72 +4,42 @@ Questions for the owner. Answer under each one (write after "Answer:"). New ques
 
 ## Open
 
-### 2. The 21 shared barcodes: who decides which product stays?
-Menu → Duplicate barcodes lists each one with its stock, how often it sold, and its price. For each group you either give one product its own barcode, or keep one and fold the others into it. It is your decision which stays. Do you want to go through them together, or should I print the list with the numbers so you can work through it yourself?
-Answer: **Later** (2026-11-24). Not settled; the barcode rule stays off.
-
-### 6. Will you use any tablets?
-Tablets need HTTPS and a certificate made for the PC's name or address. If yes: what is the PC's name or address on the shop network, and how many tablets?
-Answer: **Answered with a question** (2026-11-24): tills (PC or tablet) talk to the branch server over plain local HTTP; only the branch server talks HTTPS to HQ. That is the design. The one catch: a browser on another device treats a plain-HTTP address as not secure, so a tablet could not install the app or keep its offline cache until the branch server has a certificate for its name. Selling itself works. Open: is that acceptable, and how many tablets?
-
-### Design (the canvas "Darwish POS Design", https://claude.ai/artifact/UB7D2ukCGYY5api7ThZLge)
-Twelve pages are drawn. Decide page by page; write your choice after each "Answer:" (or tell me in chat and I will write it here).
-
-**D0. The overall look.** Warm paper background, white cards, deep teal for the main action, IBM Plex Sans (it has Arabic too), big touch targets. Keep teal and this feel, or another direction (darker till, more colour, plainer)?
-Answer:
-
-**D1. Sign in.** Split screen: brand panel on the left, form on the right. The panel text is a placeholder I invented: "Scan. Pay. Done.", "the shop on Hamra Street" and the Arabic name. What are the real shop address and Arabic name, or should the panel be plain?
-Answer:
-
-**D2. Open the register.** Six numbers (cash, Whish, OMT, each in lira and dollars) in one dialog. Fine, or only cash first and the wallets on request?
-Answer:
-
-**D3. The till.** Search on top, a big "Just scanned" card, quick buttons for items without a barcode, cart on the right with the big Pay button. Which quick items should those buttons be, and do you want product pictures shown on the till?
-Answer:
-
-**D4. Taking payment.** One dialog with Cash / Whish / OMT tabs, quick amounts, change in large type. Anything missing (for example the customer's name on credit sales)?
-Answer:
-
-**D5. Sales and receipts.** List on the left, the receipt and its actions on the right. Right order and wording of the actions (Print again, Return items, Cancel this sale)?
-Answer:
-
-**D6. Returns.** Find the sale, type what comes back, then Ask a manager. Good as it is?
-Answer:
-
-**D7. Closing the register.** The count table with the difference as you type, and today's totals on the right. Should the cashier see "Should hold" before counting, or only after (so counting stays honest)?
-Answer:
-
-**D8. Manager approval.** The same dialog for returns, cancelling, price and discount. OK?
-Answer:
-
-**D9. Menu for the back office.** Built as a slide-in panel (grouped, with icons) from the Menu button, with Settings behind a gear and the account on the right, as you asked. The permanent left sidebar I drew on the canvas is NOT built: it needs more room than the till has. Keep the panel, or do you want the sidebar on the back-office pages only?
-Answer:
-
-**D10. Dashboard.** Four tiles, sales by the hour, best sellers, what is owed. What does the owner look at first each morning, so that goes top-left?
-Answer:
-
-**D11. Products, D12. Reports, D13. Users.** Look right? Anything to add or remove?
-Answer:
-
-**D14. Pages not drawn yet:** discount dialog, switch cashier (PIN), held carts, customer accounts, purchases, stocktake, services, expenses, cash in/out, settings, exchange rate, backups, duplicate barcodes, CSV import, product edit. Which should I draw next?
-Answer:
-
-### 9. Arabic: who checks the wording, and which screens next?
-I wrote the Arabic myself. The till flow is done (header, menu, sign-in, settings, checkout, cart, payment, held carts, customers at the till, opening the register). Please have someone who works the till read it (`till/web/src/lib/ar.ts`, or just switch the screen to Arabic) and tell me the words you would change: for example "Walk-In" is **زبون عابر**, "Debts" is **الديون**, "Hold" is **تعليق**. Which screens should be translated next: Sales and Returns, closing the register, or the back office (products, purchases, reports, users)? Digits stay 0-9; say if you want Arabic-Indic digits (٠١٢) on screen instead. Receipts stay English because the printer cannot print Arabic.
-Answer: **Sales and Returns next** (2026-11-24). Still open: someone who works the till to read the existing Arabic.
-
-### Multi-branch, HR and online marketplace (design in `docs/11-multi-branch.md`)
-
-**12. What are the real NSSF and income-tax rules, and who confirms them?** Payroll takes them as dated settings, not code. Someone (your accountant) must give the rates, caps and brackets, and check the first payroll run against their own figures before anyone is paid from it.
-Answer:
-
-**13. Delivery zones: which areas does each branch cover, and what are the fee, minimum order and delivery hours?** Named areas first (maps later). Needed before the online shop can route an order.
-Answer:
-
-**18. Who may change the branch server's address on a till?** Each till keeps the address of its branch server in its own settings (Settings → Branch server, and a link on the sign-in screen when the server cannot be reached). Today anyone sitting at the till PC can change it, because the page must work when nobody can sign in. A wrong or hostile address would stop the till from selling online (queued sales still work) but cannot read the shop's data. Options: (A) leave it open at the till PC; (B) once an address is saved, changing it needs a manager's or admin's name and password, checked by the branch server (the old address must be reachable for that to work, so a "reset" by editing the file on the PC stays the way out).
-Answer:
+Nothing is open. (New questions for the product owner are added here.)
 
 ## Answered
+
+### 19. Assisted selling on tablets: the details (answered 2026-11-25, all as proposed)
+- **Sign-in:** the employee signs in on the tablet with their own name and PIN or password. A new role, **floor assistant**, may build carts and send them to a till but cannot take payment, open a register or see reports. Cashiers keep PIN sign-in; a PIN is never allowed for managers or admins (hard rule 20 stays).
+- **Seller recorded:** the sale records both the employee who built the cart (`assisted_by`) and the cashier who took the payment.
+- **Busy or closed till:** only tills with an open register are offered. The cart waits at that till; the cashier finishes the current sale first. If the cashier refuses it, or the till closes, the tablet is told and can send the cart to another till.
+- **Waiting time:** 30 minutes, then the cart returns to the employee as a held cart (a held cart never touches stock or money).
+- **Prices, discounts, credit:** the tablet shows the same prices; discounts, price changes and credit sales stay with the cashier at the till, with a manager's approval where needed.
+
+### Product decisions (2026-11-25): the system is a product with no customer waiting
+Each was proposed as a default and approved one by one, except where a change is noted. Build items are in `docs/PLAN-MULTI-BRANCH.md`.
+
+- **#9 Arabic.** English and Arabic both ship. Order: Sales and Returns, then closing the register, then the back office. Digits stay 0-9; receipts stay English. A native speaker who works a till reads `till/web/src/lib/ar.ts` before any release or marketing.
+- **#12 payroll rules.** No legal rates built in: NSSF and tax are dated tables the customer's accountant fills in, with a "check the first run" warning. HR is built after the core and the pilot.
+- **#13 delivery zones.** Customer data: named zones with fee, minimum order and hours, entered by the customer, none seeded. Built with the marketplace, after the pilot.
+- **#18 changing a till's branch server address.** The first address needs no password; changing a saved one needs a manager's or admin's name and password, checked by the branch server. If the old server is gone, the way out is deleting the till's settings file (documented).
+- **D0 look.** Keep warm paper, white cards, deep teal, IBM Plex Sans, big touch targets.
+- **D1 sign in.** A plain panel showing the company name and logo set in the first-run wizard; none of the invented text.
+- **D2 the register: changed from the proposal.** **Cash belongs to each till; Whish and OMT belong to the branch** (all tills share them). A till's open and close ask for cash only (lira and dollars), prefilled from the last closing. Whish and OMT are one running balance per branch: every till's wallet payments add to it, and a manager counts it once (for example when the branch opens and closes) and any time they want to check it, with the difference recorded. **This changes hard rule 14** (register balances are no longer six buckets per session) **and the data model, the register screens, the Z-report, the sync tables and the reports.** It must be built before the sync format is frozen.
+- **D3 the till.** Quick buttons are products a manager pins (none by default); pictures shown when a product has one.
+- **D4, D5, D6, D8, D11, D12, D13.** Keep as built.
+- **D7 closing: changed from the proposal.** A **setting per shop**: blind count for cashiers by default ("Should hold" appears after the count is entered), or show it while counting. A manager sees it at once either way. Cash only, after D2.
+- **D9 menu.** Keep the slide-in panel, no permanent sidebar.
+- **D10 dashboard.** Top-left: today's net sales; then the cash in the drawers, what is owed, sales by hour, best sellers.
+- **D14 more drawn pages.** The design canvas is dropped: review the real screens instead.
+
+### 2. Shared barcodes (answered 2026-11-25)
+**Approved default:** the question was about the Darwish legacy data, so it is closed. A fresh install starts with the unique-barcode rule **ON**; the CSV import already refuses duplicates; the *Duplicate barcodes* screen stays as a clean-up tool for messy imports. (Build: make "on" the default of `store_settings.barcode_unique` for a new install.)
+
+### 6. Tablets (answered 2026-11-25)
+**Not the proposed default: a new feature.** Tablets are **staff tools for assisted selling**: an employee walks the store with a tablet, scans the customer's items into a cart, then **sends the cart to a specific till** where the cashier takes the payment. The tablet never takes money and never opens a register.
+- **Scanning is with the tablet's camera.** A browser only allows the camera on a secure (HTTPS) page, so **the branch server must have an HTTPS certificate for its name** wherever tablets are used. The product needs a guided way to set that up (docs/07), and tablets are not offered without it.
+- **The employee picks the till.** The tablet lists the tills that have an open register; the chosen till shows an alert and the cart waits there until the cashier opens it.
+- Built on what exists: held carts, the live-update stream, and tills identified by their device token. Plan: `docs/PLAN-MULTI-BRANCH.md` ("Assisted selling on tablets"). Still to decide (proposed defaults to follow): the employee's sign-in and role, who is recorded as the seller, what a busy till or a rejected cart does, and how long a sent cart waits.
 
 ### Fresh customer (2026-11-24): the multi-branch system is for a new customer, not a migration of Darwish
 Answers: same rules as Darwish (Lebanon, LBP and USD, Whish/OMT, no tax); a separate install per customer (own HQ, own branch servers, own data); the legacy import tools are kept but moved out of the main flow; the customer starts from a product list in a spreadsheet (the CSV import is the first-run path). Recorded in `docs/PLAN-MULTI-BRANCH.md`.
