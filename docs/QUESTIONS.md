@@ -8,6 +8,12 @@ Nothing is open. (New questions for the product owner are added here.)
 
 ## Answered
 
+### 20. Wallets per branch: three choices (answered 2026-11-25, all as proposed)
+Design note: `docs/13-branch-wallets.md`.
+- **After a void or a delete, an earlier wallet count's variance does not change.** A count is a statement made at a moment; the void or delete is a visible correction entry and the next count absorbs it.
+- **Counting the wallets is never required.** Opening and closing counts are the recommended practice, with a dashboard reminder when a wallet has not been counted since yesterday; nothing blocks selling or opening a till.
+- **Managers and admins** count the wallets and record wallet-only movements; cashiers and floor assistants never see or change the wallet ledger.
+
 ### 19. Assisted selling on tablets: the details (answered 2026-11-25, all as proposed)
 - **Sign-in:** the employee signs in on the tablet with their own name and PIN or password. A new role, **floor assistant**, may build carts and send them to a till but cannot take payment, open a register or see reports. Cashiers keep PIN sign-in; a PIN is never allowed for managers or admins (hard rule 20 stays).
 - **Seller recorded:** the sale records both the employee who built the cart (`assisted_by`) and the cashier who took the payment.
