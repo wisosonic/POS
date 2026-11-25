@@ -26,6 +26,7 @@ import holdRoutes from './modules/holds/routes';
 import purchaseRoutes from './modules/purchases/routes';
 import returnRoutes from './modules/returns/routes';
 import registerRoutes from './modules/registers/routes';
+import walletRoutes from './modules/wallets/routes';
 import reportRoutes from './modules/reports/routes';
 import saleRoutes from './modules/sales/routes';
 import rateRoutes from './modules/settings/rates';
@@ -267,6 +268,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(syncRoutes);
       await api.register(eventRoutes, { bus: events });
       await api.register(registerRoutes);
+      await api.register(walletRoutes);
       await api.register(saleRoutes);
       await api.register(returnRoutes);
       await api.register(holdRoutes);

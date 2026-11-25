@@ -17,6 +17,13 @@ describe('which requests cause which events', () => {
     expect(eventsFor('POST', '/returns', 200)).toEqual([]);
   });
 
+  it('a wallet count or a wallet-only movement tells the screens that show the wallets', () => {
+    expect(eventsFor('POST', '/wallets/counts', 201)).toEqual(['wallet.updated']);
+    expect(eventsFor('POST', '/wallets/movements', 201)).toEqual(['wallet.updated']);
+    expect(eventsFor('POST', '/wallets/counts', 400)).toEqual([]);
+    expect(eventsFor('GET', '/wallets', 200)).toEqual([]);
+  });
+
   it('stock changes: purchases (and the cost they may move), adjustments, a finished stocktake', () => {
     expect(eventsFor('POST', '/purchases/:id/receive', 200)).toEqual(['stock.changed', 'catalog.changed']);
     expect(eventsFor('POST', '/stock/adjustments', 201)).toEqual(['stock.changed']);

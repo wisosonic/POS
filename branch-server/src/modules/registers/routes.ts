@@ -8,6 +8,7 @@ import {
   activeMethods,
   bucketKey,
   bumpExpected,
+  completeBalances,
   computeBreakdown,
   getOpenSession,
   getSession,
@@ -44,23 +45,6 @@ const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.coerce.number().int().positive().optional(),
 });
-
-/** Every bucket must be given exactly once. Returns the entries keyed by bucket, or throws a 400 listing what is wrong. */
-function completeBalances(entries: { method: string; currency: 'USD' | 'LBP'; amount: number }[], buckets: Bucket[], label: string) {
-  const byKey = new Map<string, number>();
-  const problems: { path: string; message: string }[] = [];
-  for (const e of entries) {
-    const key = bucketKey(e);
-    if (!buckets.some((b) => bucketKey(b) === key)) problems.push({ path: label, message: `${key} is not a balance of this register` });
-    else if (byKey.has(key)) problems.push({ path: label, message: `${key} was given more than once` });
-    else byKey.set(key, e.amount);
-  }
-  for (const b of buckets) {
-    if (!byKey.has(bucketKey(b))) problems.push({ path: label, message: `${bucketKey(b)} is missing` });
-  }
-  if (problems.length) throw E.validation(`Provide one amount for each of: ${buckets.map(bucketKey).join(', ')}`, problems);
-  return byKey;
-}
 
 export default async function registerRoutes(app: FastifyInstance) {
   const db = app.database;

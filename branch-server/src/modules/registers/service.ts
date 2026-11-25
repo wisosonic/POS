@@ -1,6 +1,6 @@
-import { AppError } from '../../errors';
+import { AppError, E } from '../../errors';
 import type { Queryable } from '../../db/adapter';
-import { addWalletEntry, type WalletCause } from './wallets';
+import { addWalletEntry, walletActivity, type WalletCause } from './wallets';
 
 export type Currency = 'USD' | 'LBP';
 export type Bucket = { method: string; currency: Currency };
@@ -36,6 +36,31 @@ export const tillBuckets = (q: Queryable): Promise<Bucket[]> => bucketsHeldBy(q,
 
 /** The balances the branch tracks once for all its tills, as a ledger (wallets.ts): the methods the branch holds (Whish, OMT). */
 export const walletBuckets = (q: Queryable): Promise<Bucket[]> => bucketsHeldBy(q, 'branch');
+
+/**
+ * Every bucket must be given exactly once (an opening, a closing count, a wallet count). Returns the amounts keyed by bucket, or
+ * throws a 400 listing what is wrong. `what` finishes the sentence "... is not a balance of this ...".
+ */
+export function completeBalances(
+  entries: { method: string; currency: Currency; amount: number }[],
+  buckets: Bucket[],
+  label: string,
+  what = 'register',
+) {
+  const byKey = new Map<string, number>();
+  const problems: { path: string; message: string }[] = [];
+  for (const e of entries) {
+    const key = bucketKey(e);
+    if (!buckets.some((b) => bucketKey(b) === key)) problems.push({ path: label, message: `${key} is not a balance of this ${what}` });
+    else if (byKey.has(key)) problems.push({ path: label, message: `${key} was given more than once` });
+    else byKey.set(key, e.amount);
+  }
+  for (const b of buckets) {
+    if (!byKey.has(bucketKey(b))) problems.push({ path: label, message: `${bucketKey(b)} is missing` });
+  }
+  if (problems.length) throw E.validation(`Provide one amount for each of: ${buckets.map(bucketKey).join(', ')}`, problems);
+  return byKey;
+}
 
 export async function holderOf(q: Queryable, method: string): Promise<Holder> {
   const row = await q.one<{ holder: Holder }>('SELECT holder FROM payment_methods WHERE code = ?', [method]);
@@ -263,6 +288,8 @@ export async function zReport(q: Queryable, s: SessionRow) {
       const row = stored.get(bucketKey(b));
       return { ...b, counted: row?.counted ?? null, variance: row?.variance ?? null };
     }),
+    // What this till did to the branch's wallets, as information (the wallets are counted by a manager, not at a till's close).
+    wallets: await walletActivity(q, s.id),
     totals: {
       salesCount: sales.n,
       salesTotalLbp: sales.total,

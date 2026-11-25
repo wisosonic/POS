@@ -27,6 +27,7 @@ export function useLiveUpdates(): void {
       'register.updated': () => invalidate('register'),
       'sale.completed': () => undefined, // the stock event that comes with it does the work
       'sync.changed': () => invalidate('sync'),
+      'wallet.updated': () => invalidate('wallets'), // a manager counted a wallet or moved money in or out of one
     };
 
     const stop = startEvents({
@@ -35,7 +36,7 @@ export function useLiveUpdates(): void {
       onConnected: (again) => {
         if (!again) return; // the till has just loaded all of this itself
         syncCatalog();
-        invalidate('alerts', 'rate', 'settings', 'register', 'terminal');
+        invalidate('alerts', 'rate', 'settings', 'register', 'terminal', 'wallets');
       },
     });
     return () => {

@@ -46,11 +46,65 @@ export type WalletBalance = Bucket & {
   /** The latest count's figure plus everything that moved since it (nothing counted yet: just everything that moved). */
   expected: number;
   /** The latest count of this wallet, or null if it was never counted. */
-  lastCount: { id: number; counted: number; expected: number | null; variance: number | null; countedAt: string; countedBy: number } | null;
+  lastCount: {
+    id: number;
+    counted: number;
+    expected: number | null;
+    variance: number | null;
+    purpose: string;
+    note: string | null;
+    countedAt: string;
+    countedBy: number;
+    countedByName: string | null;
+  } | null;
   /** What moved since that count: money in, money out. */
   inSince: number;
   outSince: number;
 };
+
+export type WalletActivity = Bucket & {
+  salesIn: number;
+  customerPaymentsIn: number;
+  refundsOut: number;
+  /** Movements in and out (a top-up, an expense paid from the wallet). */
+  movementsNet: number;
+  /** Voids and deleted sales taking things back. */
+  correctionsNet: number;
+  net: number;
+};
+
+/**
+ * What ONE till session did to the branch's wallets, for the Z-report. It is information only: a till has no expected or counted
+ * figure for a wallet, because the wallet is the branch's and a manager counts it (docs/13-branch-wallets.md).
+ */
+export async function walletActivity(q: Queryable, sessionId: number): Promise<WalletActivity[]> {
+  const rows = await q.all<{ method: string; currency: Currency; kind: WalletKind; n: number }>(
+    `SELECT method, currency, kind, SUM(amount) AS n FROM wallet_entries WHERE session_id = ? GROUP BY method, currency, kind`,
+    [sessionId],
+  );
+  const by = new Map<string, WalletActivity>();
+  for (const r of rows) {
+    const key = `${r.method}/${r.currency}`;
+    const a = by.get(key) ?? {
+      method: r.method,
+      currency: r.currency,
+      salesIn: 0,
+      customerPaymentsIn: 0,
+      refundsOut: 0,
+      movementsNet: 0,
+      correctionsNet: 0,
+      net: 0,
+    };
+    if (r.kind === 'sale') a.salesIn += r.n;
+    else if (r.kind === 'customer_payment') a.customerPaymentsIn += r.n;
+    else if (r.kind === 'refund') a.refundsOut += -r.n;
+    else if (r.kind === 'movement') a.movementsNet += r.n;
+    else a.correctionsNet += r.n;
+    a.net += r.n;
+    by.set(key, a);
+  }
+  return [...by.values()].sort((a, b) => `${a.method}/${a.currency}`.localeCompare(`${b.method}/${b.currency}`));
+}
 
 /** Where every wallet stands now. `buckets` are the wallet buckets (see walletBuckets). */
 export async function walletBalances(q: Queryable, buckets: Bucket[]): Promise<WalletBalance[]> {
@@ -62,10 +116,15 @@ export async function walletBalances(q: Queryable, buckets: Bucket[]): Promise<W
       expected: number | null;
       variance: number | null;
       entry_mark: number;
+      purpose: string;
+      note: string | null;
       counted_at: string;
       counted_by: number;
+      counted_by_name: string | null;
     }>(
-      'SELECT id, counted, expected, variance, entry_mark, counted_at, counted_by FROM wallet_counts WHERE method = ? AND currency = ? ORDER BY id DESC LIMIT 1',
+      `SELECT c.id, c.counted, c.expected, c.variance, c.entry_mark, c.purpose, c.note, c.counted_at, c.counted_by, u.name AS counted_by_name
+         FROM wallet_counts c LEFT JOIN users u ON u.id = c.counted_by
+        WHERE c.method = ? AND c.currency = ? ORDER BY c.id DESC LIMIT 1`,
       [b.method, b.currency],
     );
     const since = (await q.one<{ inn: number; outn: number }>(
@@ -83,8 +142,11 @@ export async function walletBalances(q: Queryable, buckets: Bucket[]): Promise<W
             counted: last.counted,
             expected: last.expected,
             variance: last.variance,
+            purpose: last.purpose,
+            note: last.note,
             countedAt: last.counted_at,
             countedBy: last.counted_by,
+            countedByName: last.counted_by_name,
           }
         : null,
       inSince: since.inn,

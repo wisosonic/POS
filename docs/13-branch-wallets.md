@@ -1,6 +1,6 @@
 # 13 · Cash per till, wallets per branch
 
-**Status:** design note, 2026-11-25, **all choices decided** (§11). **Slice 1 of §10 is built (2026-11-25)**: migration `0020`, the holder, the ledger and its routing, the till screens, the tests. Slices 2 to 4 are not. Decided by the product owner (`docs/QUESTIONS.md`, Answered, D2 and D7); this note says how to build it and what it touches. Hard rule 14 in `CLAUDE.md` is replaced by §3 when this is built.
+**Status:** design note, 2026-11-25, **all choices decided** (§11). **Slices 1 and 2 of §10 are built (2026-11-25)**: migration `0020`, the holder, the ledger and its routing, the till screens, and the wallet routes (`GET /wallets`, counts, branch-only movements, the ledger, the count history, the Z-report `wallets` block, the `wallet.updated` event) with their tests and `docs/06`. Slices 3 and 4 are not. Decided by the product owner (`docs/QUESTIONS.md`, Answered, D2 and D7); this note says how to build it and what it touches. Hard rule 14 in `CLAUDE.md` is replaced by §3 when this is built.
 
 ## 1. The problem
 

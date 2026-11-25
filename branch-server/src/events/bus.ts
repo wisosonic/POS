@@ -4,7 +4,14 @@
 // thing through the normal, authorised calls, and a till that missed any (it was offline) simply refreshes everything when it reconnects.
 
 export type EventType =
-  'catalog.changed' | 'stock.changed' | 'rate.changed' | 'settings.changed' | 'register.updated' | 'sale.completed' | 'sync.changed';
+  | 'catalog.changed'
+  | 'stock.changed'
+  | 'rate.changed'
+  | 'settings.changed'
+  | 'register.updated'
+  | 'sale.completed'
+  | 'sync.changed'
+  | 'wallet.updated';
 
 export type PosEvent = { type: EventType; at: string };
 
@@ -66,6 +73,7 @@ export function eventsFor(method: string, route: string, status: number): EventT
     return ['catalog.changed'];
   if (method !== 'GET' && /^\/products\/:id\/image$/.test(route)) return ['catalog.changed'];
   if (is('POST', '/exchange-rates')) return ['rate.changed'];
+  if (is('POST', '/wallets/counts') || is('POST', '/wallets/movements')) return ['wallet.updated'];
   if (is('PATCH', '/settings')) return ['settings.changed'];
   if (
     is('POST', '/registers/open') ||
