@@ -295,6 +295,7 @@ test('printer failure never blocks the sale', async ({ page }) => {
 
 test('keyboard-only: F9 opens payment, Enter completes', async ({ page }) => {
   await scan(page, TOWEL);
+  await expect(page.getByTestId('cart-row')).toHaveCount(1); // F9 does nothing on an empty cart: wait until the scan has landed
   await page.keyboard.press('F9');
   await page.getByLabel('Cash LBP').fill('75000');
   await page.keyboard.press('Enter');
