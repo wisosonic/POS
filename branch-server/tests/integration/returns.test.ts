@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { startCtx, type TestCtx } from '../helpers/app';
+import { walletExpected } from '../helpers/wallets';
 
 // Returns (US-14): stock back on the shelf, the refund out of the right register balance, and for an unpaid sale the
 // value first reduces what the customer owes. The sale itself is never edited except for how much of it is settled.
@@ -28,6 +29,7 @@ const giveBack = (
 const qtyOf = async (productId: number) =>
   Number((await c.http.get(`${api}/stock?productId=${productId}`).set(auth(manager))).body.data[0].qty);
 const expected = async (method: string, currency: string) => {
+  if (method !== 'cash') return walletExpected(c, method, currency); // a wallet belongs to the branch (docs/13-branch-wallets.md)
   const cur = await c.http.get(`${api}/registers/current`).set(auth(cashier));
   return cur.body.balances.find((b: { method: string; currency: string }) => b.method === method && b.currency === currency)
     .expected as number;

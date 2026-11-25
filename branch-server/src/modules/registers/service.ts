@@ -1,5 +1,6 @@
 import { AppError } from '../../errors';
 import type { Queryable } from '../../db/adapter';
+import { addWalletEntry, type WalletCause } from './wallets';
 
 export type Currency = 'USD' | 'LBP';
 export type Bucket = { method: string; currency: Currency };
@@ -17,13 +18,29 @@ export type SessionRow = {
   status: 'open' | 'closed';
 };
 
-/** Methods the owner currently accepts. Every register session tracks one balance per method × currency. */
+/** Who keeps the money of a payment method: each till (cash) or the branch (a wallet such as Whish or OMT). docs/13-branch-wallets.md */
+export type Holder = 'till' | 'branch';
+
+/** Methods the owner currently accepts. */
 export async function activeMethods(q: Queryable): Promise<string[]> {
   return (await q.all<{ code: string }>('SELECT code FROM payment_methods WHERE active = 1 ORDER BY sort')).map((r) => r.code);
 }
 
-export async function allBuckets(q: Queryable): Promise<Bucket[]> {
-  return (await activeMethods(q)).flatMap((method) => CURRENCIES.map((currency) => ({ method, currency })));
+async function bucketsHeldBy(q: Queryable, holder: Holder): Promise<Bucket[]> {
+  const methods = await q.all<{ code: string }>('SELECT code FROM payment_methods WHERE active = 1 AND holder = ? ORDER BY sort', [holder]);
+  return methods.flatMap((m) => CURRENCIES.map((currency) => ({ method: m.code, currency })));
+}
+
+/** The balances every register session tracks, one per method × currency: only the methods a till holds (cash). */
+export const tillBuckets = (q: Queryable): Promise<Bucket[]> => bucketsHeldBy(q, 'till');
+
+/** The balances the branch tracks once for all its tills, as a ledger (wallets.ts): the methods the branch holds (Whish, OMT). */
+export const walletBuckets = (q: Queryable): Promise<Bucket[]> => bucketsHeldBy(q, 'branch');
+
+export async function holderOf(q: Queryable, method: string): Promise<Holder> {
+  const row = await q.one<{ holder: Holder }>('SELECT holder FROM payment_methods WHERE code = ?', [method]);
+  if (!row) throw new Error(`Unknown payment method ${method}`);
+  return row.holder;
 }
 
 /** The open session of one terminal, if any. Each terminal has at most one (a unique index in the database says so). */
@@ -45,12 +62,18 @@ export function getSession(q: Queryable, id: number): Promise<SessionRow | undef
 }
 
 /**
- * Move a bucket's running "expected" balance. Called inside the same write transaction as the sale, payment, refund or
- * movement that causes it. The Z-report recomputes the figure from the rows (see computeBreakdown), so a drift here
- * can never reach the closing report.
+ * Move a bucket's running balance. Called inside the same write transaction as the sale, payment, refund or movement that causes it.
+ * A till's bucket (cash) moves that session's "expected" figure; the Z-report recomputes it from the rows (see computeBreakdown), so a
+ * drift here can never reach the closing report. A wallet bucket is the BRANCH's, not the till's: it becomes a row in the wallet ledger
+ * (wallets.ts), and `cause` says why (the sale, the refund...). A wallet movement without a cause is a programming error.
  */
-export async function bumpExpected(q: Queryable, sessionId: number, bucket: Bucket, delta: number): Promise<void> {
+export async function bumpExpected(q: Queryable, sessionId: number, bucket: Bucket, delta: number, cause?: WalletCause): Promise<void> {
   if (delta === 0) return;
+  if ((await holderOf(q, bucket.method)) === 'branch') {
+    if (!cause) throw new Error(`A change of the ${bucketKey(bucket)} wallet needs its cause`);
+    await addWalletEntry(q, sessionId, bucket, delta, cause);
+    return;
+  }
   const r = await q.run('UPDATE register_balances SET expected = expected + ? WHERE session_id = ? AND method = ? AND currency = ?', [
     delta,
     sessionId,
@@ -72,11 +95,11 @@ export async function recordCashOut(
   reason: string,
   userId: number,
 ): Promise<void> {
-  await q.run(
-    `INSERT INTO register_movements (session_id, type, from_method, from_currency, amount, reason, user_id) VALUES (?, 'out', ?, ?, ?, ?, ?)`,
+  const moved = await q.one<{ id: number }>(
+    `INSERT INTO register_movements (session_id, type, from_method, from_currency, amount, reason, user_id) VALUES (?, 'out', ?, ?, ?, ?, ?) RETURNING id`,
     [sessionId, from.method, from.currency, amount, reason.slice(0, 200), userId],
   );
-  await bumpExpected(q, sessionId, from, -amount);
+  await bumpExpected(q, sessionId, from, -amount, { kind: 'movement', refType: 'register_movement', refId: moved!.id, userId, reason });
 }
 
 /** Put money into one balance of an open session (a cash-in movement), e.g. a service paid for at the till. Same rules as recordCashOut. */
@@ -88,11 +111,11 @@ export async function recordCashIn(
   reason: string,
   userId: number,
 ): Promise<void> {
-  await q.run(
-    `INSERT INTO register_movements (session_id, type, to_method, to_currency, amount, reason, user_id) VALUES (?, 'in', ?, ?, ?, ?, ?)`,
+  const moved = await q.one<{ id: number }>(
+    `INSERT INTO register_movements (session_id, type, to_method, to_currency, amount, reason, user_id) VALUES (?, 'in', ?, ?, ?, ?, ?) RETURNING id`,
     [sessionId, to.method, to.currency, amount, reason.slice(0, 200), userId],
   );
-  await bumpExpected(q, sessionId, to, amount);
+  await bumpExpected(q, sessionId, to, amount, { kind: 'movement', refType: 'register_movement', refId: moved!.id, userId, reason });
 }
 
 // ------------------------------------------------------------------ breakdown (the Z-report's arithmetic)

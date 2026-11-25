@@ -19,10 +19,11 @@ export function seedReference(target: string | Db, store: { name?: string; addre
         store.phone ?? '71479893',
       );
 
-      const method = db.prepare('INSERT OR IGNORE INTO payment_methods (code, name, sort) VALUES (?, ?, ?)');
-      method.run('cash', 'Cash', 1);
-      method.run('whish', 'Whish Money', 2);
-      method.run('omt', 'OMT', 3);
+      // Who keeps the money: each till holds its cash, the branch holds its wallets (docs/13-branch-wallets.md).
+      const method = db.prepare('INSERT OR IGNORE INTO payment_methods (code, name, sort, holder) VALUES (?, ?, ?, ?)');
+      method.run('cash', 'Cash', 1, 'till');
+      method.run('whish', 'Whish Money', 2, 'branch');
+      method.run('omt', 'OMT', 3, 'branch');
 
       db.prepare(`INSERT OR IGNORE INTO customers (id, name, is_walk_in) VALUES (?, 'Walk-In', 1)`).run(WALK_IN_ID);
 

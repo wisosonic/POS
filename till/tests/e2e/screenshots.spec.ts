@@ -65,8 +65,6 @@ test('screens', async ({ page }) => {
   if (await open.isVisible()) {
     await page.getByLabel('Cash LBP').fill('3,000,000');
     await page.getByLabel('Cash USD').fill('70');
-    await page.getByLabel('Whish LBP').fill('500000');
-    await page.getByLabel('OMT LBP').fill('1000000');
     await shot(page, '02-open-register');
     await open.click();
   }

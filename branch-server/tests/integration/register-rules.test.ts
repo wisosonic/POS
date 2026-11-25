@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { startCtx, type TestCtx } from '../helpers/app';
+import { walletExpected } from '../helpers/wallets';
 
-// The register (US-11, US-12, US-13): opening balances per method and currency, movements between balances, and a
-// Z-report whose every figure can be derived by hand. One till, so one open session at a time.
+// The register (US-11, US-12, US-13): the till's cash per currency, movements between the till and the branch's wallets, and a
+// Z-report whose every figure can be derived by hand. One till, so one open session at a time. Whish and OMT belong to the
+// branch and live in the wallet ledger (docs/13-branch-wallets.md), so they are not in the register: the tests read them from there.
 let c: TestCtx;
 let cashier: string;
 let manager: string;
@@ -19,10 +21,6 @@ const find = <T extends { method: string; currency: string }>(list: T[], method:
 const OPENING = [
   { method: 'cash', currency: 'USD', amount: 7000 },
   { method: 'cash', currency: 'LBP', amount: 3_000_000 },
-  { method: 'whish', currency: 'USD', amount: 1000 },
-  { method: 'whish', currency: 'LBP', amount: 500_000 },
-  { method: 'omt', currency: 'USD', amount: 2000 },
-  { method: 'omt', currency: 'LBP', amount: 1_000_000 },
 ];
 const open = (token: string, body: Record<string, unknown> = { openingBalances: OPENING }) =>
   c.http.post(`${api}/registers/open`).set(auth(token)).send(body);
@@ -50,7 +48,7 @@ describe('before anything is open', () => {
     expect(res.body.code).toBe('NO_OPEN_REGISTER');
     const hint = await c.http.get(`${api}/registers/suggested-opening`).set(auth(cashier));
     expect(hint.body.source).toBe('default');
-    expect(hint.body.balances).toHaveLength(6);
+    expect(hint.body.balances).toHaveLength(2);
     expect(hint.body.balances.every((b: { amount: number }) => b.amount === 0)).toBe(true);
   });
 
@@ -62,6 +60,10 @@ describe('before anything is open', () => {
     ['a balance listed twice', () => ({ openingBalances: [...OPENING, OPENING[0]] })],
     ['a method that does not exist', () => ({ openingBalances: [...OPENING.slice(1), { method: 'paypal', currency: 'USD', amount: 1 }] })],
     ['one balance missing', () => ({ openingBalances: OPENING.slice(1) })],
+    [
+      'a wallet balance, which the branch holds and not the till',
+      () => ({ openingBalances: [...OPENING, { method: 'whish', currency: 'LBP', amount: 1 }] }),
+    ],
   ])('refuses %s', async (_n, body) => {
     const res = await open(cashier, body());
     expect(res.status).toBe(400);
@@ -99,7 +101,7 @@ describe('opening', () => {
 
   it('starts every expected balance at its opening amount', async () => {
     const res = await current();
-    expect(res.body.balances).toHaveLength(6);
+    expect(res.body.balances).toHaveLength(2);
     for (const b of res.body.balances as Bal[]) expect(b.expected).toBe(b.opening);
     expect(find(res.body.balances as Bal[], 'cash', 'LBP').opening).toBe(3_000_000);
   });
@@ -171,10 +173,12 @@ describe('a known day: every Z-report figure derived by hand', () => {
     // cash LBP: 3,000,000 + 100,000 - (25,000 + 45,000) - 75,000 - 200,000
     expect(find(live, 'cash', 'LBP').expected).toBe(2_755_000);
     expect(find(live, 'cash', 'USD').expected).toBe(7300);
-    expect(find(live, 'whish', 'LBP').expected).toBe(575_000);
-    expect(find(live, 'omt', 'LBP').expected).toBe(1_220_000); // + 20,000 account payment + 200,000 transfer
-    expect(find(live, 'whish', 'USD').expected).toBe(1000);
-    expect(find(live, 'omt', 'USD').expected).toBe(2000);
+    expect(live).toHaveLength(2); // the till holds cash only
+    // the branch's wallets, from the ledger (they started at nothing)
+    expect(await walletExpected(c, 'whish', 'LBP')).toBe(75_000);
+    expect(await walletExpected(c, 'omt', 'LBP')).toBe(220_000); // 20,000 account payment + 200,000 transfer
+    expect(await walletExpected(c, 'whish', 'USD')).toBe(0);
+    expect(await walletExpected(c, 'omt', 'USD')).toBe(0);
   });
 
   it('the Z-report shows where each figure came from', async () => {
@@ -189,13 +193,8 @@ describe('a known day: every Z-report figure derived by hand', () => {
       movementsNet: -200000,
       expected: 2_755_000,
     });
-    expect(find(z.body.balances as Z[], 'omt', 'LBP')).toMatchObject({
-      customerPaymentsIn: 20000,
-      movementsNet: 200000,
-      expected: 1_220_000,
-    });
     expect(find(z.body.balances as Z[], 'cash', 'USD')).toMatchObject({ salesIn: 300, changeOut: 0, expected: 7300 });
-    expect(find(z.body.balances as Z[], 'whish', 'LBP')).toMatchObject({ salesIn: 75000, expected: 575_000 });
+    expect(z.body.balances).toHaveLength(2); // cash only: the wallets are the branch's, not this till's
   });
 
   it('and the session totals', async () => {
@@ -213,7 +212,7 @@ describe('a known day: every Z-report figure derived by hand', () => {
   it('closing with a count that is over in one balance and short in another reports both variances', async () => {
     const live = (await current()).body.balances as Bal[];
     const counted = exactCount(live).map((b) => {
-      if (b.method === 'omt' && b.currency === 'LBP') return { ...b, amount: b.amount - 5000 }; // short
+      if (b.method === 'cash' && b.currency === 'LBP') return { ...b, amount: b.amount - 5000 }; // short
       if (b.method === 'cash' && b.currency === 'USD') return { ...b, amount: b.amount + 100 }; // over by $1
       return b;
     });
@@ -222,21 +221,20 @@ describe('a known day: every Z-report figure derived by hand', () => {
     expect(res.body).toMatchObject({ status: 'closed', closedBy: c.seed.users.cashier.id });
     expect(res.body.closedAt).toBeTruthy();
     const z = res.body.balances as Bal[];
-    expect(find(z, 'omt', 'LBP')).toMatchObject({ expected: 1_220_000, counted: 1_215_000, variance: -5000 });
+    expect(find(z, 'cash', 'LBP')).toMatchObject({ expected: 2_755_000, counted: 2_750_000, variance: -5000 });
     expect(find(z, 'cash', 'USD')).toMatchObject({ expected: 7300, counted: 7400, variance: 100 });
-    expect(find(z, 'cash', 'LBP').variance).toBe(0);
   });
 
   it('writes the variances to the audit log', async () => {
     const log = await c.http.get(`${api}/audit?action=register.close&entityId=${sessionId}`).set(auth(admin));
-    expect(log.body.data[0].after.variances).toEqual({ 'cash/USD': 100, 'omt/LBP': -5000 });
+    expect(log.body.data[0].after.variances).toEqual({ 'cash/USD': 100, 'cash/LBP': -5000 });
   });
 
   it('the closed Z-report is frozen: asking again gives the same figures', async () => {
     const a = await c.http.get(`${api}/reports/register/${sessionId}`).set(auth(manager));
     const b = await c.http.get(`${api}/reports/register/${sessionId}`).set(auth(manager));
     expect(b.body).toEqual(a.body);
-    expect(find(a.body.balances as Z[], 'omt', 'LBP')).toMatchObject({ counted: 1_215_000, variance: -5000 });
+    expect(find(a.body.balances as Z[], 'cash', 'LBP')).toMatchObject({ counted: 2_750_000, variance: -5000 });
   });
 
   it('after closing there is no current register and nothing can be added to it', async () => {
@@ -255,7 +253,7 @@ describe('the next day', () => {
   it('offers the last counts as the new opening, and a new session is a new session', async () => {
     const hint = await c.http.get(`${api}/registers/suggested-opening`).set(auth(cashier));
     expect(hint.body.source).toBe('last-close');
-    expect(find(hint.body.balances as { method: string; currency: string; amount: number }[], 'omt', 'LBP').amount).toBe(1_215_000);
+    expect(find(hint.body.balances as { method: string; currency: string; amount: number }[], 'cash', 'LBP').amount).toBe(2_750_000);
 
     const reopened = await open(cashier, { openingBalances: hint.body.balances });
     expect(reopened.status).toBe(201);
@@ -287,7 +285,9 @@ describe('cash movements (US-13)', () => {
   beforeAll(async () => {
     sessionId = (await current()).body.id;
   });
-  const bal = async (method: string, currency: string) => find((await current()).body.balances as Bal[], method, currency).expected;
+  // Cash is the till's own balance; a wallet is the branch's and is read from the wallet ledger.
+  const bal = async (method: string, currency: string) =>
+    method === 'cash' ? find((await current()).body.balances as Bal[], method, currency).expected : walletExpected(c, method, currency);
 
   it('money in raises one balance; money out lowers one', async () => {
     const cash0 = await bal('cash', 'LBP');

@@ -26,14 +26,7 @@ test.beforeEach(async ({ page }) => {
   if (await open.isVisible()) {
     await page.getByLabel('Cash LBP').fill('3000000');
     await page.getByLabel('Cash USD').fill('70');
-    for (const [label, v] of [
-      ['Whish USD', '10'],
-      ['Whish LBP', '500000'],
-      ['OMT USD', '20'],
-      ['OMT LBP', '1000000'],
-    ]) {
-      await page.getByLabel(label!).fill(v!); // opening wallet balances are set by the cashier at startup (Q6)
-    }
+    // Only cash belongs to a till: Whish and OMT are the branch's and are counted by a manager (docs/13-branch-wallets.md).
     await open.click();
     await expect(page.getByTestId('checkout')).toBeVisible();
   }
@@ -272,15 +265,16 @@ test('US-32: from a customer row, browse the sales behind what they owe', async 
   await expect(dialog).toHaveCount(0);
 });
 
-test('Q6: closing the register shows expected vs counted for cash, Whish and OMT', async ({ page }) => {
+test('Q6: closing the register shows expected vs counted for the cash of each currency, and no wallet', async ({ page }) => {
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('link', { name: 'Close register' }).click();
-  for (const m of ['Cash', 'Whish', 'OMT']) {
-    for (const cur of ['USD', 'LBP']) {
-      await expect(page.getByTestId(`expected-${m}-${cur}`)).toBeVisible();
-      await expect(page.getByLabel(`${m} ${cur} counted`)).toBeVisible();
-    }
+  for (const cur of ['USD', 'LBP']) {
+    await expect(page.getByTestId(`expected-Cash-${cur}`)).toBeVisible();
+    await expect(page.getByLabel(`Cash ${cur} counted`)).toBeVisible();
   }
+  // the wallets belong to the branch, not to this till
+  await expect(page.getByLabel('Whish LBP counted')).toHaveCount(0);
+  await expect(page.getByLabel('OMT LBP counted')).toHaveCount(0);
 });
 
 test('printer failure never blocks the sale', async ({ page }) => {

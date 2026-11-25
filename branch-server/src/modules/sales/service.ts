@@ -429,7 +429,7 @@ export function createSale(
         p.amount,
         rate,
       ]);
-      await bumpExpected(q, session.id, p, p.amount);
+      await bumpExpected(q, session.id, p, p.amount, { kind: 'sale', refType: 'sale', refId: saleId, userId: actor.id });
     }
     // Change is handed back in cash LBP.
     await bumpExpected(q, session.id, { method: 'cash', currency: 'LBP' }, -tender.changeLbp);

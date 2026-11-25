@@ -203,7 +203,7 @@ export const AR: Record<string, string> = {
   // ---- opening the register
   'Open register': 'فتح الصندوق',
   'Open the register': 'فتح الصندوق',
-  'Count the cash in the drawer and the balance of each wallet, then type them in.': 'عدّ النقد في الدرج ورصيد كل محفظة، ثم اكتبها هنا.',
+  'Count the cash in the drawer, then type it in.': 'عدّ النقد في الدرج ثم اكتبه هنا.',
   'Could not open the register': 'تعذّر فتح الصندوق',
 
   // ---- settings: appearance and language

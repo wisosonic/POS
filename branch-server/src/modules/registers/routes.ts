@@ -6,13 +6,14 @@ import { parse } from '../../util/validate';
 import { writeAuditQ } from '../audit/service';
 import {
   activeMethods,
-  allBuckets,
   bucketKey,
   bumpExpected,
   computeBreakdown,
   getOpenSession,
   getSession,
+  holderOf,
   sessionJson,
+  tillBuckets,
   zReport,
   type Bucket,
   type SessionRow,
@@ -76,7 +77,7 @@ export default async function registerRoutes(app: FastifyInstance) {
     const b = parse(openBody, req.body);
     if (b.terminalId !== undefined && b.terminalId !== req.terminal.code)
       throw E.validation(`This device is till "${req.terminal.code}", not "${b.terminalId}"`);
-    const buckets = await allBuckets(db);
+    const buckets = await tillBuckets(db); // cash only: the wallets belong to the branch, not to this till (docs/13-branch-wallets.md)
     const opening = completeBalances(b.openingBalances, buckets, 'openingBalances');
 
     const id = await db.tx(async (tx) => {
@@ -135,7 +136,7 @@ export default async function registerRoutes(app: FastifyInstance) {
     return {
       source: last ? 'last-close' : 'default',
       sessionId: last?.id ?? null,
-      balances: (await allBuckets(db)).map((b) => ({ ...b, amount: counted.get(bucketKey(b)) ?? 0 })),
+      balances: (await tillBuckets(db)).map((b) => ({ ...b, amount: counted.get(bucketKey(b)) ?? 0 })),
     };
   });
 
@@ -174,8 +175,10 @@ export default async function registerRoutes(app: FastifyInstance) {
           req.auth.id,
         ],
       );
-      if (b.from) await bumpExpected(tx, id, b.from, -b.amount);
-      if (b.to) await bumpExpected(tx, id, b.to, b.amount);
+      // A wallet side of the movement becomes a ledger entry of the BRANCH's wallet; the till's cash side moves this session.
+      const cause = { kind: 'movement' as const, refType: 'register_movement', refId: created!.id, userId: req.auth.id, reason: b.reason };
+      if (b.from) await bumpExpected(tx, id, b.from, -b.amount, cause);
+      if (b.to) await bumpExpected(tx, id, b.to, b.amount, cause);
       await writeAuditQ(tx, { userId: req.auth.id, action: 'register.cash-movement', entity: 'register', entityId: id, after: b });
       return created!.id;
     });
@@ -226,7 +229,7 @@ export default async function registerRoutes(app: FastifyInstance) {
     if (session.status === 'closed') throw E.conflict('REGISTER_ALREADY_CLOSED', 'This register session is already closed');
 
     const b = parse(closeBody, req.body);
-    const counted = completeBalances(b.countedBalances, await allBuckets(db), 'countedBalances');
+    const counted = completeBalances(b.countedBalances, await tillBuckets(db), 'countedBalances');
     const closedAt = new Date().toISOString();
 
     await db.tx(async (tx) => {
@@ -234,6 +237,8 @@ export default async function registerRoutes(app: FastifyInstance) {
       const breakdown = await computeBreakdown(tx, id);
       const variances: Record<string, number> = {};
       for (const bucket of breakdown) {
+        // A session opened before wallets became the branch's may still hold wallet rows: they are left as they are, never counted here.
+        if ((await holderOf(tx, bucket.method)) === 'branch') continue;
         const c = counted.get(bucketKey(bucket)) ?? 0;
         const variance = c - bucket.expected;
         await tx.run(

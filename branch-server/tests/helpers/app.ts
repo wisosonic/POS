@@ -85,10 +85,6 @@ export async function startCtx(
           openingBalances: [
             { method: 'cash', currency: 'USD', amount: 7000 },
             { method: 'cash', currency: 'LBP', amount: 3_000_000 },
-            { method: 'whish', currency: 'USD', amount: 1000 },
-            { method: 'whish', currency: 'LBP', amount: 500_000 },
-            { method: 'omt', currency: 'USD', amount: 2000 },
-            { method: 'omt', currency: 'LBP', amount: 1_000_000 },
           ],
         });
       return res.body;

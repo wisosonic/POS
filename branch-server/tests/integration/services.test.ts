@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startCtx, type TestCtx } from '../helpers/app';
+import { walletExpected } from '../helpers/wallets';
 
 // US-36: service income (IT support, a repair): what it cost, what the customer paid, and the money going into the register.
 let c: TestCtx;
@@ -16,10 +17,13 @@ const service = (over: Record<string, unknown> = {}, key = randomUUID(), token =
     .set(auth(token))
     .set('Idempotency-Key', key)
     .send({ costMinor: 0, feeMinor: 50000, currency: 'LBP', ...over });
+// Cash is the till's own balance; a wallet belongs to the branch and is read from its ledger (docs/13-branch-wallets.md).
 const bucket = async (method: string, currency: string) =>
-  (await c.http.get(`${api}/registers/current`).set(auth(cashier))).body.balances.find(
-    (b: { method: string; currency: string }) => b.method === method && b.currency === currency,
-  ).expected as number;
+  method !== 'cash'
+    ? walletExpected(c, method, currency)
+    : ((await c.http.get(`${api}/registers/current`).set(auth(cashier))).body.balances.find(
+        (b: { method: string; currency: string }) => b.method === method && b.currency === currency,
+      ).expected as number);
 
 beforeAll(async () => {
   c = await startCtx();

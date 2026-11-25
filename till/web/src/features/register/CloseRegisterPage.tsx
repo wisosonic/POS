@@ -31,7 +31,7 @@ type Closed = {
 };
 
 /**
- * End of the day: count each balance (cash, Whish and OMT, in dollars and in lira), see what the till expected, and close.
+ * End of the day: count the cash (in dollars and in lira), see what the till expected, and close.
  * A closed register can never be changed.
  */
 export function CloseRegisterPage() {
@@ -131,7 +131,8 @@ export function CloseRegisterPage() {
         Close the register
       </h1>
       <p className="muted">
-        Count the cash in the drawer and each wallet’s balance, and type what you counted. The till shows what it expected.
+        Count the cash in the drawer and type what you counted. The till shows what it expected. (Whish and OMT belong to the branch: a
+        manager counts them.)
       </p>
       {waiting > 0 && (
         <div className="warning" role="alert" style={{ marginBottom: 12 }}>

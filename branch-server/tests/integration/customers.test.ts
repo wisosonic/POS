@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { startCtx, type TestCtx } from '../helpers/app';
+import { walletExpected } from '../helpers/wallets';
 
 // Customers and their accounts (US-24, US-31 to US-33): who owes what, payments applied oldest sale first.
 let c: TestCtx;
@@ -151,13 +152,9 @@ describe('paying on account: oldest sale first (decision table #14)', () => {
   });
 
   it('a wallet payment is allowed and goes into that wallet', async () => {
-    const before = (await c.http.get(`${api}/registers/current`).set(auth(cashier))).body.balances.find(
-      (b: { method: string; currency: string }) => b.method === 'whish' && b.currency === 'LBP',
-    ).expected;
+    const before = await walletExpected(c, 'whish', 'LBP'); // the Whish wallet belongs to the branch (docs/13-branch-wallets.md)
     expect((await payOn(ali.id, { method: 'whish', currency: 'LBP', amount: 10000 })).status).toBe(201);
-    const after = (await c.http.get(`${api}/registers/current`).set(auth(cashier))).body.balances.find(
-      (b: { method: string; currency: string }) => b.method === 'whish' && b.currency === 'LBP',
-    ).expected;
+    const after = await walletExpected(c, 'whish', 'LBP');
     expect(after).toBe(before + 10000);
   });
 

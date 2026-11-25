@@ -85,7 +85,12 @@ export function receiveCustomerPayment(
       body.amount,
       rate,
     ]);
-    await bumpExpected(q, session.id, { method: body.method, currency: body.currency }, body.amount);
+    await bumpExpected(q, session.id, { method: body.method, currency: body.currency }, body.amount, {
+      kind: 'customer_payment',
+      refType: 'customer_payment',
+      refId: paymentId,
+      userId: actor.id,
+    });
 
     // Oldest open sale first.
     const open = await q.all<{ id: number; ref: number; rest_lbp: number }>(

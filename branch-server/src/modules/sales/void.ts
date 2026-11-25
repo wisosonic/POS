@@ -99,7 +99,14 @@ export function voidSale(db: Database, actor: Actor, saleId: number, body: VoidB
       'SELECT method, currency, amount FROM payments WHERE sale_id = ?',
       [sale.id],
     );
-    for (const p of payments) await bumpExpected(q, session.id, p, -p.amount);
+    for (const p of payments)
+      await bumpExpected(q, session.id, p, -p.amount, {
+        kind: 'correction',
+        refType: 'sale',
+        refId: sale.id,
+        userId: actor.id,
+        reason: 'Sale cancelled',
+      });
     await bumpExpected(q, session.id, { method: 'cash', currency: 'LBP' }, sale.change_lbp);
 
     if (sale.rest_lbp > 0)

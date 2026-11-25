@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startCtx, type TestCtx } from '../helpers/app';
+import { walletExpected } from '../helpers/wallets';
 
-// Q6: opening balances set per method × currency; closing reports expected vs counted for each,
-// including the Whish and OMT wallets. No third-party integration: balances are bookkeeping only. (US-11, US-12, US-13)
+// Opening balances are set per till and per currency, for the cash in the drawer; closing reports expected vs counted for each.
+// Whish and OMT belong to the BRANCH, not to a till: they are not in a register, they are in the wallet ledger
+// (docs/13-branch-wallets.md). No third-party integration: balances are bookkeeping only. (US-11, US-12, US-13)
 let c: TestCtx;
 let cashier: string;
 let manager: string;
@@ -19,7 +21,7 @@ beforeAll(async () => {
 afterAll(() => c.close());
 
 describe('opening the register', () => {
-  it('requires an opening balance for every method × currency (cash, whish, omt × USD, LBP)', async () => {
+  it('requires an opening balance for the cash of each currency (cash × USD, LBP)', async () => {
     const res = await c.http
       .post('/api/v1/registers/open')
       .set(auth(cashier))
@@ -28,13 +30,14 @@ describe('opening the register', () => {
     expect(res.body.code).toBe('VALIDATION');
   });
 
-  it('opens with all six balances and echoes them', async () => {
+  it('opens with the two cash balances and echoes them; the wallets are not part of a till', async () => {
     const reg = await c.openRegister(cashier);
     sessionId = reg.id;
     const cur = await c.http.get('/api/v1/registers/current').set(auth(cashier));
-    expect(cur.body.balances).toHaveLength(6);
-    expect(find(cur.body.balances, 'whish', 'USD').opening).toBe(1000);
-    expect(find(cur.body.balances, 'omt', 'LBP').opening).toBe(1_000_000);
+    expect(cur.body.balances).toHaveLength(2);
+    expect(find(cur.body.balances, 'cash', 'USD').opening).toBe(7000);
+    expect(find(cur.body.balances, 'cash', 'LBP').opening).toBe(3_000_000);
+    expect(cur.body.balances.some((b: Bal) => b.method !== 'cash')).toBe(false);
   });
 
   it('one till: refuses a second open session for the same terminal, whoever asks', async () => {
@@ -43,7 +46,7 @@ describe('opening the register', () => {
   });
 
   it('a manager can sell in the till session opened by the cashier; the sale records who sold it', async () => {
-    // paid in OMT USD so the LBP buckets asserted below stay untouched
+    // paid in OMT USD so the cash balances asserted below stay untouched
     const res = await c.http
       .post('/api/v1/sales')
       .set(auth(manager))
@@ -61,21 +64,23 @@ describe('opening the register', () => {
 });
 
 describe('expected balances during the day', () => {
-  it('a cash LBP sale increases cash LBP only', async () => {
+  it('a cash LBP sale increases cash LBP only, and the wallets stay as they were', async () => {
+    const whish = await walletExpected(c, 'whish', 'LBP');
     await c.http.post('/api/v1/sales').set(auth(cashier)).set('Idempotency-Key', 'rg-1').send(c.newSaleBody());
     const cur = await c.http.get('/api/v1/registers/current').set(auth(cashier));
     expect(find(cur.body.balances, 'cash', 'LBP').expected).toBe(3_000_000 + 75000);
-    expect(find(cur.body.balances, 'whish', 'LBP').expected).toBe(500_000);
+    expect(await walletExpected(c, 'whish', 'LBP')).toBe(whish);
   });
 
-  it('a Whish sale increases the Whish wallet only', async () => {
+  it('a Whish sale increases the branch Whish wallet only, not the till', async () => {
+    const whish = await walletExpected(c, 'whish', 'LBP');
     await c.http
       .post('/api/v1/sales')
       .set(auth(cashier))
       .set('Idempotency-Key', 'rg-2')
       .send(c.newSaleBody({ payments: [{ method: 'whish', currency: 'LBP', amount: 75000 }] }));
     const cur = await c.http.get('/api/v1/registers/current').set(auth(cashier));
-    expect(find(cur.body.balances, 'whish', 'LBP').expected).toBe(500_000 + 75000);
+    expect(await walletExpected(c, 'whish', 'LBP')).toBe(whish + 75000);
     expect(find(cur.body.balances, 'cash', 'LBP').expected).toBe(3_000_000 + 75000);
   });
 
@@ -89,7 +94,8 @@ describe('expected balances during the day', () => {
     expect(find(cur.body.balances, 'cash', 'LBP').expected).toBe(3_000_000 + 75000 + 75000);
   });
 
-  it('a manager cash-out (e.g. wallet top-up) moves money between buckets (US-13)', async () => {
+  it('a manager cash-out (e.g. wallet top-up) moves money from the till to the branch wallet (US-13)', async () => {
+    const omt = await walletExpected(c, 'omt', 'LBP');
     const res = await c.http
       .post(`/api/v1/registers/${sessionId}/cash-movements`)
       .set(auth(manager))
@@ -102,7 +108,7 @@ describe('expected balances during the day', () => {
       });
     expect(res.status).toBe(201);
     const cur = await c.http.get('/api/v1/registers/current').set(auth(cashier));
-    expect(find(cur.body.balances, 'omt', 'LBP').expected).toBe(1_000_000 + 200000);
+    expect(await walletExpected(c, 'omt', 'LBP')).toBe(omt + 200000);
     expect(find(cur.body.balances, 'cash', 'LBP').expected).toBe(3_000_000 + 150000 - 200000);
   });
 
@@ -121,26 +127,28 @@ describe('expected balances during the day', () => {
 });
 
 describe('closing the register (Z-report)', () => {
-  it('requires a counted amount for every bucket', async () => {
+  it('requires a counted amount for every cash balance', async () => {
     const res = await c.http.post(`/api/v1/registers/${sessionId}/close`).set(auth(cashier)).send({ countedBalances: [] });
     expect(res.status).toBe(400);
   });
 
-  it('returns expected, counted and variance for cash, Whish and OMT in each currency', async () => {
+  it('returns expected, counted and variance for the cash of each currency; the wallets are not counted here', async () => {
     const cur = await c.http.get('/api/v1/registers/current').set(auth(cashier));
     const counted = (cur.body.balances as Bal[]).map((b) => ({
       method: b.method,
       currency: b.currency,
       amount: b.method === 'cash' && b.currency === 'LBP' ? b.expected - 10000 : b.expected, // 10,000 short in cash LBP
     }));
+    const wallets = [await walletExpected(c, 'whish', 'LBP'), await walletExpected(c, 'omt', 'LBP')];
     const res = await c.http.post(`/api/v1/registers/${sessionId}/close`).set(auth(cashier)).send({ countedBalances: counted });
     expect(res.status).toBe(200);
     const z = res.body.balances as Bal[];
-    expect(z).toHaveLength(6);
+    expect(z).toHaveLength(2);
     expect(find(z, 'cash', 'LBP').variance).toBe(-10000);
-    expect(find(z, 'whish', 'LBP')).toMatchObject({ expected: 575000, counted: 575000, variance: 0 });
-    expect(find(z, 'omt', 'LBP')).toMatchObject({ expected: 1_200_000, variance: 0 });
+    expect(find(z, 'cash', 'USD')).toMatchObject({ expected: 7000, counted: 7000, variance: 0 });
     expect(res.body).toMatchObject({ status: 'closed' });
+    // closing a till never touches the branch's wallets
+    expect([await walletExpected(c, 'whish', 'LBP'), await walletExpected(c, 'omt', 'LBP')]).toEqual(wallets);
   });
 
   it('after closing, no more sales on that session (REGISTER_CLOSED)', async () => {
@@ -156,9 +164,10 @@ describe('closing the register (Z-report)', () => {
     expect(again.status).toBe(409);
   });
 
-  it('the next session can default its opening balances to the previous closing counts', async () => {
+  it('the next session can default its opening cash to what this till counted at its last closing', async () => {
     const res = await c.http.get('/api/v1/registers/suggested-opening').set(auth(cashier));
     expect(res.status).toBe(200);
-    expect(find(res.body.balances, 'whish', 'LBP').amount).toBe(575000);
+    expect(res.body.balances).toHaveLength(2);
+    expect(find(res.body.balances, 'cash', 'LBP').amount).toBe(3_000_000 + 150000 - 200000 - 10000);
   });
 });

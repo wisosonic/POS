@@ -6,6 +6,7 @@ import { AppError, E } from '../../errors';
 import { findReplayQ, rememberResponseQ } from '../../util/idempotency';
 import { writeAuditQ } from '../audit/service';
 import { computeBreakdown } from '../registers/service';
+import { addWalletEntry } from '../registers/wallets';
 import type { Actor } from './service';
 
 // Deleting a sale for good (docs/QUESTIONS.md #8, option C). Allowed for a cancelled sale, and for a sale that has had items taken back.
@@ -89,6 +90,24 @@ export function deleteSale(db: Database, actor: Actor, saleId: number, body: Del
 
     await q.run('INSERT INTO sale_delete_unlock (sale_id) VALUES (?)', [sale.id]);
 
+    // ---- the branch's wallets: what this sale (and its refunds) moved is taken back with correction rows, read BEFORE the rows go.
+    // The ledger is append-only, so nothing is removed from it. A cancelled sale was corrected when it was cancelled, so it adds nothing.
+    const walletPayments =
+      isVoid || sale.session_id === null
+        ? []
+        : await q.all<{ method: string; currency: 'USD' | 'LBP'; amount: number }>(
+            `SELECT p.method, p.currency, p.amount FROM payments p JOIN payment_methods m ON m.code = p.method WHERE p.sale_id = ? AND m.holder = 'branch'`,
+            [sale.id],
+          );
+    const walletRefunds = isVoid
+      ? []
+      : await q.all<{ session_id: number | null; method: string; currency: 'USD' | 'LBP'; amount: number }>(
+          `SELECT r.session_id, r.refund_method AS method, r.refund_currency AS currency, r.refund_amount AS amount
+             FROM returns r JOIN payment_methods m ON m.code = r.refund_method
+            WHERE r.sale_id = ? AND r.refund_amount IS NOT NULL AND m.holder = 'branch'`,
+          [sale.id],
+        );
+
     // ---- stock: take out the movements this sale, its cancellation and its returns made, and move the level by the opposite amount
     const movementWhere = `(ref_type IN ('sale', 'void') AND ref_id = ?)
        OR (ref_type = 'return' AND ref_id IN (SELECT id FROM returns WHERE sale_id = ?))`;
@@ -112,6 +131,23 @@ export function deleteSale(db: Database, actor: Actor, saleId: number, body: Del
     await q.run('DELETE FROM payments WHERE sale_id = ?', [sale.id]);
     await q.run('DELETE FROM sale_items WHERE sale_id = ?', [sale.id]);
     await q.run('DELETE FROM sales WHERE id = ?', [sale.id]);
+
+    for (const p of walletPayments)
+      await addWalletEntry(q, sale.session_id, p, -p.amount, {
+        kind: 'correction',
+        refType: 'sale',
+        refId: sale.id,
+        userId: actor.id,
+        reason: `Sale ${sale.ref} deleted`,
+      });
+    for (const r of walletRefunds)
+      await addWalletEntry(q, r.session_id, r, r.amount, {
+        kind: 'correction',
+        refType: 'sale',
+        refId: sale.id,
+        userId: actor.id,
+        reason: `Sale ${sale.ref} deleted: its refund is undone`,
+      });
 
     // ---- the customer no longer owes what this sale left owing (a cancelled sale already owed nothing)
     if (!isVoid && sale.rest_lbp > 0)

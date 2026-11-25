@@ -8,16 +8,13 @@ import { tNow, useT } from '../../store/lang';
 
 type Suggestion = { balances: { method: Method; currency: Currency; amount: number }[] };
 
-const METHODS: { method: Method; name: string }[] = [
-  { method: 'cash', name: 'Cash' },
-  { method: 'whish', name: 'Whish' },
-  { method: 'omt', name: 'OMT' },
-];
+// Only cash belongs to a till. Whish and OMT belong to the branch and are counted by a manager (docs/13-branch-wallets.md).
+const METHODS: { method: Method; name: string }[] = [{ method: 'cash', name: 'Cash' }];
 const keyOf = (m: Method, c: Currency) => `${m}/${c}`;
 
 /**
- * The cashier counts what is in the drawer and in each wallet and types it in. Opening balances are set for every method in
- * both currencies (decision Q6), pre-filled from what was counted when the register was last closed.
+ * The cashier counts the cash in the drawer, in both currencies, and types it in, pre-filled from what this till counted when it
+ * last closed.
  */
 export function OpenRegisterDialog() {
   const t = useT();
@@ -71,7 +68,7 @@ export function OpenRegisterDialog() {
       <form onSubmit={submit} className="dialog-body" style={{ padding: 0 }}>
         <h2>{t('Open the register')}</h2>
         <p className="muted" style={{ margin: 0 }}>
-          {t('Count the cash in the drawer and the balance of each wallet, then type them in.')}
+          {t('Count the cash in the drawer, then type it in.')}
         </p>
         {METHODS.map(({ method, name }) => (
           <div key={method} className="method">

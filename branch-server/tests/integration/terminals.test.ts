@@ -11,11 +11,11 @@ const api = '/api/v1';
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const till = (token: string) => ({ 'X-Terminal-Token': token });
 
-const opening = (cash = 3_000_000) =>
-  ['cash', 'whish', 'omt'].flatMap((method) => [
-    { method, currency: 'USD', amount: 0 },
-    { method, currency: 'LBP', amount: method === 'cash' ? cash : 0 },
-  ]);
+// A till holds cash only: Whish and OMT belong to the branch (docs/13-branch-wallets.md).
+const opening = (cash = 3_000_000) => [
+  { method: 'cash', currency: 'USD', amount: 0 },
+  { method: 'cash', currency: 'LBP', amount: cash },
+];
 const sell = (userToken: string, deviceToken: string) =>
   c.http.post(`${api}/sales`).set(auth(userToken)).set(till(deviceToken)).set('Idempotency-Key', randomUUID()).send(c.newSaleBody());
 const current = (userToken: string, deviceToken: string) =>

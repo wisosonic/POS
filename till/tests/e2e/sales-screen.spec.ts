@@ -71,9 +71,8 @@ async function closeRegister(request: APIRequestContext) {
 }
 async function openRegister(request: APIRequestContext) {
   const api = await apiAs(request, 'cashier');
-  const openingBalances = ['cash', 'whish', 'omt'].flatMap((method) =>
-    (['USD', 'LBP'] as const).map((currency) => ({ method, currency, amount: 0 })),
-  );
+  // a till holds cash only (docs/13-branch-wallets.md)
+  const openingBalances = (['USD', 'LBP'] as const).map((currency) => ({ method: 'cash', currency, amount: 0 }));
   expect((await api.post('/registers/open', { terminalId: 'T1', openingBalances })).status()).toBe(201);
 }
 

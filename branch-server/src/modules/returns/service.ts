@@ -180,7 +180,13 @@ export function createReturn(db: Database, actor: Actor, terminal: Terminal, bod
       }
     }
 
-    if (body.refund) await bumpExpected(q, session.id, { method: body.refund.method, currency: body.refund.currency }, -body.refund.amount);
+    if (body.refund)
+      await bumpExpected(q, session.id, { method: body.refund.method, currency: body.refund.currency }, -body.refund.amount, {
+        kind: 'refund',
+        refType: 'return',
+        refId: returnId,
+        userId: actor.id,
+      });
 
     if (balanceReducedLbp > 0) {
       // The sale counts the credited value as settled, so paid + rest still equals its total and the customer's

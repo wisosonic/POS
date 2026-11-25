@@ -265,7 +265,8 @@ async function main() {
   });
 
   let saleA1;
-  const openingBalances = ['cash', 'whish', 'omt'].flatMap((method) => ['LBP', 'USD'].map((currency) => ({ method, currency, amount: method === 'cash' ? (currency === 'LBP' ? 3_000_000 : 7000) : 100_000 })));
+  // A till holds cash only: Whish and OMT are the branch's wallets (docs/13-branch-wallets.md).
+  const openingBalances = ['LBP', 'USD'].map((currency) => ({ method: 'cash', currency, amount: currency === 'LBP' ? 3_000_000 : 7000 }));
   const saleBody = (productId) => ({ clientSaleId: randomUUID(), customerId: 1, items: [{ productId, qty: '1', unitPriceLbp: 75000 }], payments: [{ method: 'cash', currency: 'LBP', amount: 75000 }] });
   await step('through the till: the cashier opens the register and sells; the same sale sent twice is one sale', async () => {
     cashierA = await login(url.till, 'sara', CASHIER_PW);

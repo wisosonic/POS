@@ -162,9 +162,12 @@ async function loadContext(): Promise<Ctx> {
     const closed = await api('POST', `/registers/${current.json.id}/close`, { countedBalances: counted });
     if (closed.status !== 200) throw new Error(`Could not close the old register: ${closed.text}`);
   }
-  const opening = ['cash', 'whish', 'omt'].flatMap((method) =>
-    (['USD', 'LBP'] as const).map((currency) => ({ method, currency, amount: currency === 'USD' ? 100_000 : 50_000_000 })),
-  );
+  // A till holds cash only: Whish and OMT are the branch's wallets (docs/13-branch-wallets.md).
+  const opening = (['USD', 'LBP'] as const).map((currency) => ({
+    method: 'cash',
+    currency,
+    amount: currency === 'USD' ? 100_000 : 50_000_000,
+  }));
   const opened = await api('POST', '/registers/open', { terminalId: 'LOAD', openingBalances: opening });
   if (opened.status !== 201) throw new Error(`Could not open the register: ${opened.status} ${opened.text}`);
 

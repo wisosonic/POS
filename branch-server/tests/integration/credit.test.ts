@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startCtx, type TestCtx } from '../helpers/app';
+import { walletExpected } from '../helpers/wallets';
 
 // Q4: customers may pay part of a bill or pay later, only if registered. (US-31..US-33)
 let c: TestCtx;
@@ -89,10 +90,8 @@ describe('settling a customer account (US-32)', () => {
     expect(b.body.id).toBe(a.body.id);
   });
 
-  it('the payment appears in the register totals for its method', async () => {
-    const z = await c.http.get('/api/v1/registers/current').set(auth(cashier));
-    const omt = z.body.balances.find((b: { method: string; currency: string }) => b.method === 'omt' && b.currency === 'LBP');
-    expect(omt.expected).toBeGreaterThanOrEqual(1_000_000 + 60000);
+  it('the payment appears in the branch wallet of its method', async () => {
+    expect(await walletExpected(c, 'omt', 'LBP')).toBeGreaterThanOrEqual(60000); // the OMT wallet belongs to the branch, not to the register
   });
 
   it('cannot take a payment for Walk-In', async () => {
