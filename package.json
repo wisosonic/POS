@@ -25,6 +25,7 @@
     "format": "npm --prefix branch-server run format && npm --prefix cloud-hq run format && npm --prefix till run format",
     "format:check": "npm --prefix branch-server run format:check && npm --prefix cloud-hq run format:check && npm --prefix till run format:check",
     "dev": "node scripts/dev.mjs",
-    "dev:chain": "node scripts/dev-chain.mjs"
+    "dev:chain": "node scripts/dev-chain.mjs",
+    "test:sandbox": "node scripts/sandbox-chain.mjs"
   }
 }

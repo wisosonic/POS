@@ -25,7 +25,7 @@ legacy/          the old Darwish data and tools (POSDB.sql, Uploads/, old data/)
 - **Code style is per project too:** each project has its own `eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `.editorconfig` and its own `lint`, `format`, `format:check` scripts (the shared part is copied, like `shared/`: change one, change all three). The adapter lint rules are in `branch-server/eslint.config.js`. `scripts/` is not linted.
 - **No project imports another project.** The one exception, for now: `cloud-hq/tests/system` and `till/agent/tests/system` import the branch server's code; they become process-based later.
 - **Copies:** `till/shared` is copied from `branch-server/shared` (the master): change the master, copy the files, run both projects' tests. `cloud-hq/core` is HQ's own copy of the database layer and may diverge. `till/agent/src/printer.ts` is the agent's copy of `branch-server/core/src/printer.ts`. The check that copies match is not written yet.
-- `node scripts/check-alone.mjs` starts each server alone from its own folder and checks it answers.
+- `node scripts/check-alone.mjs` starts each server alone from its own folder and checks it answers. `npm run test:sandbox` (`scripts/sandbox-chain.mjs`) goes further: each project is copied alone into its own temp folder, installed and run there, and the whole chain (HQ, two branches, a till) is driven over HTTP (docs/11 §8.5). It needs the internet and about two minutes; run it after changing anything a project shares with another (sync format, `shared/`, the till server).
 
 ## Commands
 
