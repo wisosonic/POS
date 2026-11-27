@@ -12,6 +12,7 @@ import syncRoutes from './modules/sync/routes';
 import rateRoutes from './modules/rates/routes';
 import catalogListRoutes from './modules/catalog/routes';
 import productRoutes from './modules/catalog/productRoutes';
+import priceRoutes from './modules/catalog/priceRoutes';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -127,6 +128,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
       await api.register(rateRoutes);
       await api.register(catalogListRoutes);
       await api.register(productRoutes);
+      await api.register(priceRoutes);
     },
     { prefix: '/api/v1' },
   );

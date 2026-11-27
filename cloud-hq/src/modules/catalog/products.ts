@@ -146,6 +146,17 @@ export async function updateProduct(q: Queryable, id: number, b: ProductInput): 
   const before = await getProduct(q, id);
   if (!before) throw new AppError(404, 'NOT_FOUND', 'No such product');
   await checkLinks(q, b);
+  // A branch's own price is in the product's currency: changing the currency under it would silently change what it means.
+  if (
+    b.currency !== undefined &&
+    b.currency !== before.currency &&
+    (await q.one('SELECT 1 AS x FROM branch_prices WHERE product_id = ? LIMIT 1', [id]))
+  )
+    throw new AppError(
+      409,
+      'PRICE_OVERRIDES_EXIST',
+      'Some branches have their own price for this product in the current currency. Remove those first, then change the currency.',
+    );
   const barcode = b.barcode ?? before.barcode;
   const active = b.active === undefined ? before.active === 1 : b.active;
   if (b.barcode !== undefined || b.active !== undefined) await checkBarcode(q, barcode, active, id);

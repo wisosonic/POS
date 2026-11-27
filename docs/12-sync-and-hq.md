@@ -187,6 +187,18 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **Not covered yet:** the HQ screens themselves (the API is all there is), picture resizing, and cleaning pictures nothing points at any more (they stay in the folder, as at a branch).
 
+## 20. What P3c built (2026-11-27): a branch's own price for a product
+
+**The idea.** A branch may sell a product at its own price. HQ keeps the override; **the branch is never told "there is an override"**. It receives the product with the price it should sell at (the override if there is one, else the base price), and stores that in its ordinary `price_minor`. So selling needs **no new rule at the branch**: `createSale`, the till catalog feed, receipts and reports all already read `products.price_minor`. The rule "price from the override first, the base price second" lives in one place, HQ's change feed.
+
+**At HQ (migration 0007).** `branch_prices (branch_id, product_id, price_minor)`, one row per branch and product, the price in the **product's own currency** (a cost and a price in two currencies would make a profit meaningless). `PUT /branches/:id/prices/:productId { priceMinor }`, `DELETE` the same (back to the base price), `GET /branches/:id/prices` (with the product name, its base price and the override), `GET /products/:id/prices` (which branches have their own). HQ staff only. Setting the price a branch already has, or removing one that is not there, **writes nothing**. A product's currency cannot be changed while any branch has an override for it (`409 PRICE_OVERRIDES_EXIST`).
+
+**The change log can be meant for one branch.** `change_log.branch_id` (NULL = every branch, as before). An override writes a line for THAT branch only (with the row, the line and an audit row in one transaction). When a branch reads the log (`changesAfter`), it sees the lines for everyone and for itself, and each product row is built **for that branch**: `COALESCE(its override, the base price)`. So a change of the BASE price (a line for everyone) reaches every branch at the right price for each, and an override stays where it is. A branch that connects later gets its own price from the start (rows are read as they are now).
+
+**Another branch's override must not make a branch ask again and again.** The ping's `changeSeq` and the page's `next` are both computed over only the lines this branch can see (`branch_id IS NULL OR = its id`), so branch B's cursor never falls behind a line it will never receive. `catalog-prices.test.ts` proves B's "news" number and cursor do not move when A's price changes.
+
+**Not covered yet:** a screen at HQ (API only), an import of overrides from a CSV, a price per branch GROUP, a cost per branch from HQ, and a scheduled start (an override takes effect when it reaches the branch; a price change in the middle of a sale does not touch the sale, which is priced once on the server).
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.
