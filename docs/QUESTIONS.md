@@ -18,6 +18,34 @@ Answer:
 
 ## Answered
 
+### Branch kinds and requests (P5; owner's idea, answered 2026-11-27)
+
+The owner proposed splitting branches into two kinds. Four details were asked one by one.
+
+- **#28 A branch has a kind: sale or stock.** A *sale branch* has tills and sells to customers. A *stock branch* is a warehouse: **it has no tills** (the server refuses adding tills, opening a register and selling there). Both are ordinary branch servers with their own database and stock ledger, so a stock branch works offline too. HQ stores the kind and the branch learns it when it connects. Supersedes #25.
+- **#29 HQ buys centrally and delivers to stock branches ONLY.** HQ makes the purchase orders and splits the quantities between the stock branches; a sale branch never receives from a supplier and has no purchasing at all (refines #26 and #27).
+- **#30 A sale branch makes a stock request; HQ routes it.** HQ sends it to the nearest stock branch (**nearest = an ordered list of stock branches per sale branch, set at HQ**: first choice, second choice, and so on; this reading was stated to the owner, who did not object). **The stock branch tells HQ what it cannot supply:** it ships what it has and marks the rest *cannot supply*; HQ then sends the remainder to the next stock branch in the list, and so on. **When every stock branch in the list is out of an item, the line is closed as "not available"** (the sale branch sees it and can ask again); HQ keeps the unmet demand as a report so central buying can see what to order. No backorders. Stock leaves the stock branch when shipped and enters the sale branch when it is received (HQ shows what is in transit); a short or damaged count at receiving becomes an adjustment with a reason (#24).
+- **#31 Directions: stock to sale, and stock to stock** (to rebalance warehouses). **Sale to stock is allowed too, see #32.** Sale to sale is not allowed: the stock branch is the hub.
+
+- **#32 A sale branch may send surplus stock back to a stock branch (the owner's idea, to move stock from a slow branch to a busy one through the hub).** It is the shipment cycle in reverse: the sale branch's manager ships, the stock branch's manager **just confirms what arrived** (no approval before shipping; the warehouse cannot refuse goods already on the way), and a difference at receiving is an adjustment at the receiver with a reason. **Only the branch manager starts a return; HQ shows suggestions** (slow here, fast at another branch) **but never forces or orders one.** Only sellable stock goes back: damaged or expired stock is an adjustment (a write-off) at the branch, and every return needs a reason. Rebalancing then needs no special rule: the next request of the busy branch is filled from the stock branch.
+
+**Assumptions, to confirm when this is built:** requests are made by a branch manager (not a cashier), and HQ routes a request at once with no approval step; a returned item carries its cost and the receiving branch blends it into its own cost by quantity.
+
+**P5 order of work:** (1) branch kind and its enforcement; (2) the request, ship and receive cycle with HQ routing and fallback; (3) central purchasing delivering to stock branches; (4) shared customers by phone (independent of the others); (5) the central stock view with reorder suggestions, **rebalancing suggestions (slow at one branch, fast at another)** and the unmet-demand report. The request/ship/receive cycle (2) works in both directions from the start (stock to sale, stock to stock, sale to stock).
+
+### Shared customers, transfers and buying (P5; answered 2026-11-27)
+
+Asked one by one. All as recommended, except buying (#26), which the owner decided the other way.
+
+- **#22 How a customer is recognised across branches: the phone number.** The same phone at two branches is one customer with one balance. A customer with no phone stays branch-only and cannot buy on account (a shared balance needs an identity).
+- **#23 One company, one cash pool.** No settlement between branches. A sale is reported under the branch that made it and cash under the branch that received it; a customer payment at branch B on a debt from branch A needs no transfer between them.
+- **#24 Transfers: the shipping branch's manager ships, the receiving branch's manager confirms (refined by #28 to #31: shipping is by stock branches).** HQ sees everything and approves nothing. A short or damaged count at receiving is recorded as an adjustment at the receiving branch with a reason.
+- **#25 No central warehouse for now. SUPERSEDED by #28:** a warehouse is a stock branch, a first-class kind.
+- **#26 HQ buys centrally.** HQ makes the purchase orders and splits the delivery between the branches (different from the recommendation, which was branches buying for themselves). This puts central purchasing INTO P5.
+- **#27 (follow-up to #26) A connected branch cannot make its own purchases: HQ only (refined by #29: deliveries go to stock branches only).** A branch only receives what HQ ordered for it. The branch's own purchase screens and routes are switched off while it is connected (like the catalog, `HQ_OWNS_...`); a branch that is not connected works as before. HQ pays the suppliers.
+
+**What this changes in the plan:** P5 is now four things, not three: (1) shared customers and one balance (payments applied oldest-sale-first at HQ), (2) stock transfers, (3) **central purchasing** (HQ purchase orders, delivery split per branch, branch receiving, supplier payments at HQ), (4) the central stock view with low-stock alerts. The branch's `purchases`, `purchase_items` and `purchase_payments` (sent up since P4a) become receiving records of an HQ order rather than the branch's own orders; the design is written before any code.
+
 ### Connection and the till's backend (answered 2026-11-27)
 Design note: `docs/14-connection-and-till-backend.md`. (1) **A till stops taking sales while the branch server is unreachable**, shows a message, keeps checking and resumes by itself (no offline selling, no queue). (2) **No WebSocket:** a ping every few seconds, whose answer carries the latest version of each topic, is the heartbeat and the change detector (branch to HQ the same way). (3) **The till's Node backend keeps a copy of the items and prices on disk.** (4) **Users stay on the branch server; sign-in is a JWT there** (as built). Proposed and adopted with them: the branch server never calls a till (no till IP, no push), and the enrolment wizard has no IP field (a till is its device token).
 
