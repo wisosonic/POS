@@ -293,6 +293,8 @@ export type PublicSettings = {
   printerConfigured: boolean;
   /** Connected to HQ: products, categories, brands, units and suppliers are changed there (docs/12 §17). */
   hqOwnsCatalog?: boolean;
+  /** A stock branch is a warehouse with no tills (docs/15 §3). */
+  branchKind?: 'sale' | 'stock';
 };
 
 export type HoldSummary = {

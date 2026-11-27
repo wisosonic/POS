@@ -7,6 +7,7 @@ import { HoldsDialog } from '../features/checkout/HoldsDialog';
 import { OpenRegisterDialog } from '../features/register/OpenRegisterDialog';
 import { isNotATill, useAlerts, useDeviceToken, useHolds, useRate, useRegister, useSettings, useTerminal } from '../hooks/useTillData';
 import { DeviceNotATill } from '../features/terminals/DeviceNotATill';
+import { StockBranchPage } from '../features/stock/StockBranchPage';
 import { useLiveUpdates } from '../hooks/useLiveUpdates';
 import { get } from '../lib/api';
 import type { BackupStatus } from '../lib/types';
@@ -262,6 +263,8 @@ export function TillLayout() {
 
       {!needsRegister ? (
         outlet
+      ) : settings.data?.branchKind === 'stock' ? (
+        <StockBranchPage />
       ) : isNotATill(register.error) || isNotATill(terminal.error) ? (
         <DeviceNotATill />
       ) : register.isLoading ? (

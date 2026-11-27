@@ -265,6 +265,16 @@ HQ staff sign in with their own accounts (§21: name, password, role). Everythin
 
 **Not covered yet:** a differing day is shown, but nothing alerts anyone (no mail or push: P7 monitoring); a difference older than the 7 days the branch sends is not re-checked (an admin can ask for a longer one by resync and a later control); the comparison is of counts and sums, not of every field (`GET /sync/verify` still does the full fingerprint); and a screen at HQ.
 
+## 25. What P5a built (2026-11-27): the branch kind
+
+The design of all of P5 is in `docs/15-stock-flow-and-customers.md` (read it before touching transfers, purchasing or customers). This is its first slice.
+
+**HQ (migration 0011).** `branches.kind`: `'sale'` (the default) or `'stock'`, given in `POST /branches`, changeable only **until the branch has connected** (`409 BRANCH_KIND_LOCKED`: a branch that may have traded cannot become a warehouse). The kind travels in the enrol answer and the ping (`branch: { id, code, name, kind }`), and in the list and the overview.
+
+**Branch (migration 0024, `modules/branch/kind.ts`).** `branches.kind`, set when the branch connects (`saveLink`; an HQ that does not say means a sale branch) and kept when it disconnects. A **stock branch refuses `409 NOT_A_SALE_BRANCH`** for adding or enrolling a till and for every route that needs a till (`withTerminal`: sales, holds, returns, registers, customer payments, expenses, services). Stock work stays open: products arrive from HQ, a manager can count and adjust, and what it does goes up to HQ like any branch's records. **A branch can only be connected as a stock branch from a fresh install** (no sale, no register session, no enrolled till): otherwise `409 BRANCH_HAS_SALES`, and nothing changes. `GET /settings/public` says `branchKind`; the till's home shows *This is a stock branch* instead of asking for a register, with links to products, low stock and stocktake for a manager (`features/stock/StockBranchPage.tsx`).
+
+**Not yet:** the warehouse's own screens (receiving, shipping: P5b), live updates for a browser at a stock branch (it has no till, so no device token, so no `/ping`; P5b decides how it follows changes), and the sale-only menu entries are not hidden.
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

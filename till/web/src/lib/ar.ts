@@ -419,4 +419,8 @@ export const AR: Record<string, string> = {
   'the products': 'المنتجات',
   'categories, brands, units and suppliers': 'الفئات والعلامات التجارية والوحدات والموردون',
   'the barcode rule': 'قاعدة الباركود',
+  'This is a stock branch': 'هذا فرع مخزون',
+  'A stock branch is a warehouse: it has no tills, so nothing is sold here and no register is opened.':
+    'فرع المخزون مستودع: ليس فيه صناديق، لذلك لا يُباع شيء هنا ولا يُفتح صندوق.',
+  'Stock work': 'أعمال المخزون',
 };

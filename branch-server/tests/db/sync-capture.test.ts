@@ -20,7 +20,7 @@ let seed: Seed;
 type Out = { seq: number; tbl: string; pk: number; op: string };
 const outbox = () => raw.prepare('SELECT seq, tbl, pk, op FROM sync_outbox ORDER BY seq').all() as Out[];
 const control = () => raw.prepare('SELECT capture FROM sync_control WHERE id = 1').get() as { capture: number };
-const connect = () => saveLink(db, seed.users.admin.id, 'http://hq.test', 'a-token', { id: 1, code: 'B2', name: 'Hamra' });
+const connect = () => saveLink(db, seed.users.admin.id, 'http://hq.test', 'a-token', { id: 1, code: 'B2', name: 'Hamra', kind: 'sale' });
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'pos-capture-'));

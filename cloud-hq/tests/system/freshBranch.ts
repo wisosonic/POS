@@ -18,7 +18,7 @@ export type FreshBranch = {
   cashier: string;
   databasePath: string;
   /** Add the branch at HQ and connect it with the one-time code. Resolves to the connect answer. */
-  connect: (hq: Hq, code: string) => Promise<request.Response>;
+  connect: (hq: Hq, code: string, kind?: 'sale' | 'stock') => Promise<request.Response>;
   close: () => Promise<void>;
 };
 
@@ -54,8 +54,8 @@ export async function startFreshBranch(): Promise<FreshBranch> {
     admin,
     cashier,
     databasePath,
-    async connect(hq, code) {
-      const enrol = (await hq.http.post(`${api}/branches`).set(adminAuth).send({ code, name: code })).body.enrolCode as string;
+    async connect(hq, code, kind = 'sale') {
+      const enrol = (await hq.http.post(`${api}/branches`).set(adminAuth).send({ code, name: code, kind })).body.enrolCode as string;
       return http.post(`${api}/sync/connect`).set(auth(admin)).send({ url: hq.url, code: enrol });
     },
     async close() {

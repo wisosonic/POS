@@ -9,8 +9,14 @@ const createBody = z.object({
     .trim()
     .regex(/^[A-Za-z0-9]{1,8}$/, 'Use 1 to 8 letters or digits'),
   name: z.string().trim().min(1).max(100),
+  // a sale branch has tills and sells; a stock branch is a warehouse with no tills (docs/15 §3)
+  kind: z.enum(['sale', 'stock']).default('sale'),
 });
-const patchBody = z.object({ name: z.string().trim().min(1).max(100).optional(), active: z.boolean().optional() });
+const patchBody = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  active: z.boolean().optional(),
+  kind: z.enum(['sale', 'stock']).optional(),
+});
 
 /** Managing branches: HQ staff only (interim: the HQ admin token; HQ users come with P3). */
 export default async function branchRoutes(app: FastifyInstance) {

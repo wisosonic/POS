@@ -3,7 +3,7 @@ import { AppError } from '../../errors';
 // The branch server's calls to HQ (docs/12-sync-and-hq.md §6-7). Over a bad connection every one of them can fail in the ordinary way;
 // none of them throws for that: they answer with what happened, and the caller decides what it means.
 
-export type HqBranch = { id: number; code: string; name: string };
+export type HqBranch = { id: number; code: string; name: string; kind: 'sale' | 'stock' };
 
 /** Accept an HQ address like `https://hq.example.com` or `http://127.0.0.1:4000`. Only the address itself: no sign-in in the URL, no path. */
 export function normaliseHqUrl(input: string): string {
@@ -35,7 +35,8 @@ export async function enrolAtHq(hqUrl: string, code: string, fetchImpl: Fetch = 
     throw new AppError(502, 'HQ_UNREACHABLE', 'Cannot reach HQ at that address. Check the address and the internet connection.');
   }
   const body = (await res.json().catch(() => ({}))) as { token?: string; branch?: HqBranch; code?: string; detail?: string };
-  if (res.ok && body.token && body.branch) return { token: body.token, branch: body.branch };
+  // An HQ older than the branch kinds does not say: every branch was a sale branch then.
+  if (res.ok && body.token && body.branch) return { token: body.token, branch: { ...body.branch, kind: body.branch.kind ?? 'sale' } };
   if (res.status === 422)
     throw new AppError(422, 'ENROL_CODE_INVALID', body.detail ?? 'That code is wrong, already used or has expired. Ask HQ for a new one.');
   throw new AppError(502, 'HQ_REFUSED', `HQ did not accept the connection (${res.status}).`);

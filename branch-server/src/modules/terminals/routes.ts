@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../../util/validate';
+import { assertSaleBranch } from '../branch/kind';
 import { getOpenSession } from '../registers/service';
 import {
   createTerminal,
@@ -55,6 +56,7 @@ export default async function terminalRoutes(app: FastifyInstance) {
   });
 
   app.post('/terminals', admin, async (req, reply) => {
+    await assertSaleBranch(db); // a stock branch (a warehouse) has no tills
     const b = parse(createBody, req.body);
     const created = await db.tx((tx) => createTerminal(tx, req.auth.id, b));
     return reply.status(201).send({ terminal: created.terminal, enrolCode: created.enrolCode, expiresAt: created.expiresAt });
@@ -74,6 +76,7 @@ export default async function terminalRoutes(app: FastifyInstance) {
 
   // The admin, signed in on the till itself, types the code the screen showed. The answer carries the device token, once.
   app.post('/terminals/enrol', { ...admin, config: { rateLimit: LIMIT } }, async (req) => {
+    await assertSaleBranch(db);
     const b = parse(enrolBody, req.body);
     const done = await db.tx((tx) => enrolTerminal(tx, req.auth.id, b.code));
     return { token: done.token, terminal: done.terminal };

@@ -3,6 +3,7 @@ import { AppError } from '@pos/core/errors';
 import type { Queryable } from '../../db/adapter';
 import { nowIso } from '../../util/time';
 import { writeAuditQ } from '../audit/service';
+import { assertCanBecomeStock, getBranchKind } from '../branch/kind';
 import type { HqBranch } from './hqClient';
 
 // The branch's link to HQ (migration 0017). The token never leaves this module except to the HQ client, which sends it to HQ.
@@ -33,7 +34,7 @@ export async function getLink(q: Queryable): Promise<Link | null> {
     ? {
         hqUrl: r.hq_url,
         token: r.branch_token,
-        branch: { id: r.hq_branch_id, code: r.hq_branch_code, name: r.hq_branch_name },
+        branch: { id: r.hq_branch_id, code: r.hq_branch_code, name: r.hq_branch_name, kind: await getBranchKind(q) },
         connectedAt: r.connected_at,
         lastOkAt: r.last_ok_at,
         lastError: r.last_error,
@@ -66,6 +67,9 @@ export async function assertCatalogCanConnect(q: Queryable, hqUrl: string): Prom
 
 /** Connect (or connect again, replacing the old link). The local branch takes HQ's code and name, which receipts will print. */
 export async function saveLink(q: Queryable, actorId: number, hqUrl: string, token: string, branch: HqBranch): Promise<void> {
+  // HQ says what kind of branch this is. A warehouse can only be connected from a fresh install (docs/15 §3).
+  const kind = branch.kind === 'stock' ? 'stock' : 'sale'; // an HQ that does not say means a sale branch
+  if (kind === 'stock') await assertCanBecomeStock(q);
   await q.run('UPDATE sync_control SET catalog_hq_url = ? WHERE id = 1', [hqUrl]);
   const now = nowIso();
   await q.run(
@@ -76,7 +80,7 @@ export async function saveLink(q: Queryable, actorId: number, hqUrl: string, tok
        last_ok_at = excluded.last_ok_at, last_error = NULL`,
     [hqUrl, token, branch.id, branch.code, branch.name, now, now],
   );
-  await q.run('UPDATE branches SET code = ?, name = ? WHERE id = 1', [branch.code, branch.name]);
+  await q.run('UPDATE branches SET code = ?, name = ?, kind = ? WHERE id = 1', [branch.code, branch.name, kind]);
   await startCapture(q);
   await writeAuditQ(q, {
     userId: actorId,

@@ -404,7 +404,9 @@ export async function overview(q: Queryable, range: Range, staleMinutes: number)
       `SELECT branch_id, currency, SUM(amount_minor) AS amount FROM expenses WHERE created_at >= ? AND created_at <= ? GROUP BY branch_id, currency`,
       [range.from, range.to],
     ),
-    q.all<{ id: number; active: number; last_seen_at: string | null }>('SELECT id, active, last_seen_at FROM branches ORDER BY id'),
+    q.all<{ id: number; active: number; kind: string; last_seen_at: string | null }>(
+      'SELECT id, active, kind, last_seen_at FROM branches ORDER BY id',
+    ),
     q.all<{ branch_id: number; last: string; bad: number }>(
       `SELECT branch_id, MAX(checked_at) AS last, SUM(CASE WHEN status = 'mismatch' THEN 1 ELSE 0 END) AS bad FROM reconciliations WHERE day >= ? GROUP BY branch_id`,
       [since],
@@ -421,6 +423,7 @@ export async function overview(q: Queryable, range: Range, staleMinutes: number)
       branchId: b.id,
       code: names.get(b.id)?.code ?? '',
       name: nameOf(names, b.id),
+      kind: b.kind,
       active: b.active === 1,
       ...t,
       openRegisters: open.find((o) => o.branch_id === b.id)?.n ?? 0,

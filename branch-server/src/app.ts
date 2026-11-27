@@ -37,6 +37,7 @@ import { TopicVersions } from './events/versions';
 import pingRoutes from './modules/ping/routes';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
+import { assertSaleBranch } from './modules/branch/kind';
 import { runControl } from './modules/sync/control';
 import { fetchMissingImages } from './modules/sync/images';
 import { pullOnce } from './modules/sync/down';
@@ -234,6 +235,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     req.terminal = await resolveAgent(app.database, typeof raw === 'string' && raw ? raw : undefined);
   });
   app.decorate('withTerminal', async (req: FastifyRequest) => {
+    await assertSaleBranch(app.database); // a stock branch (a warehouse) has no tills
     const raw = req.headers[TERMINAL_HEADER];
     req.terminal = await resolveTerminal(app.database, typeof raw === 'string' && raw ? raw : undefined);
   });

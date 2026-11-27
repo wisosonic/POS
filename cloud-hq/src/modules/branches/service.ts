@@ -17,6 +17,7 @@ type BranchRow = {
   id: number;
   code: string;
   name: string;
+  kind: BranchKind;
   active: number;
   token_hash: string | null;
   enrol_hash: string | null;
@@ -26,9 +27,12 @@ type BranchRow = {
   created_at: string;
 };
 
+/** A sale branch has tills and sells; a stock branch is a warehouse with no tills (docs/15 §3). */
+export type BranchKind = 'sale' | 'stock';
+
 /** What HQ's code needs to know about the branch a request came from. */
-export type Branch = { id: number; code: string; name: string };
-const toBranch = (r: BranchRow): Branch => ({ id: r.id, code: r.code, name: r.name });
+export type Branch = { id: number; code: string; name: string; kind: BranchKind };
+const toBranch = (r: BranchRow): Branch => ({ id: r.id, code: r.code, name: r.name, kind: r.kind });
 
 /** The audit log (staff/context.ts): the actor of the transaction is recorded with each row. */
 export const hqAudit = writeAudit;
@@ -37,6 +41,7 @@ export type BranchListItem = {
   id: number;
   code: string;
   name: string;
+  kind: BranchKind;
   active: boolean;
   connected: boolean;
   enrolPending: boolean;
@@ -51,6 +56,7 @@ export async function listBranches(q: Queryable): Promise<BranchListItem[]> {
     id: r.id,
     code: r.code,
     name: r.name,
+    kind: r.kind,
     active: r.active === 1,
     connected: r.token_hash !== null,
     enrolPending: r.enrol_hash !== null && r.enrol_expires_at !== null && r.enrol_expires_at > now,
@@ -68,19 +74,21 @@ async function issueCode(q: Queryable, id: number): Promise<{ code: string; expi
 
 export async function createBranch(
   q: Queryable,
-  input: { code: string; name: string },
+  input: { code: string; name: string; kind?: BranchKind },
 ): Promise<{ branch: Branch; enrolCode: string; expiresAt: string }> {
+  const kind = input.kind ?? 'sale';
   const code = input.code.trim().toUpperCase();
   if (await q.one('SELECT 1 FROM branches WHERE code = ?', [code]))
     throw E.conflict('BRANCH_CODE_TAKEN', `A branch with the code "${code}" already exists`);
-  const created = await q.one<{ id: number }>('INSERT INTO branches (code, name, created_at) VALUES (?, ?, ?) RETURNING id', [
+  const created = await q.one<{ id: number }>('INSERT INTO branches (code, name, kind, created_at) VALUES (?, ?, ?, ?) RETURNING id', [
     code,
     input.name,
+    kind,
     nowIso(),
   ]);
   const issued = await issueCode(q, created!.id);
-  await hqAudit(q, 'branch.create', 'branch', created!.id, { code, name: input.name });
-  return { branch: { id: created!.id, code, name: input.name }, enrolCode: issued.code, expiresAt: issued.expiresAt };
+  await hqAudit(q, 'branch.create', 'branch', created!.id, { code, name: input.name, kind });
+  return { branch: { id: created!.id, code, name: input.name, kind }, enrolCode: issued.code, expiresAt: issued.expiresAt };
 }
 
 export async function newEnrolCodeFor(q: Queryable, id: number): Promise<{ code: string; expiresAt: string }> {
@@ -112,12 +120,21 @@ export async function revokeBranch(q: Queryable, id: number): Promise<void> {
   await hqAudit(q, 'branch.revoke', 'branch', id);
 }
 
-export async function updateBranch(q: Queryable, id: number, patch: { name?: string; active?: boolean }): Promise<void> {
+export async function updateBranch(q: Queryable, id: number, patch: { name?: string; active?: boolean; kind?: BranchKind }): Promise<void> {
   const b = await q.one<BranchRow>('SELECT * FROM branches WHERE id = ?', [id]);
   if (!b) throw E.notFound('Branch');
+  // A branch that has connected may have sold (or received stock): it cannot become the other kind. Add a new branch instead.
+  if (patch.kind !== undefined && patch.kind !== b.kind) {
+    if (b.enrolled_at !== null)
+      throw E.conflict(
+        'BRANCH_KIND_LOCKED',
+        'This branch has already connected, so its kind cannot change. Add a new branch of the other kind.',
+      );
+    await q.run('UPDATE branches SET kind = ? WHERE id = ?', [patch.kind, id]);
+  }
   if (patch.name !== undefined) await q.run('UPDATE branches SET name = ? WHERE id = ?', [patch.name, id]);
   if (patch.active !== undefined) await q.run('UPDATE branches SET active = ? WHERE id = ?', [patch.active ? 1 : 0, id]);
-  await hqAudit(q, 'branch.update', 'branch', id, { before: { name: b.name, active: b.active === 1 }, after: patch });
+  await hqAudit(q, 'branch.update', 'branch', id, { before: { name: b.name, active: b.active === 1, kind: b.kind }, after: patch });
 }
 
 /** Which branch does this token belong to? An unknown token, or one of a switched-off branch, is refused. */
