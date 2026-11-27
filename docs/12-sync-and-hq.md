@@ -159,7 +159,21 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 - The screens are told with `catalog.changed` (the `catalog` number of the ping).
 - Tests that connect the seeded test branch (it has a catalog) switch the check off with `sync: { catalogGate: false }`; `startCtx` does that by default. `cloud-hq/tests/system/catalog-lists.test.ts` leaves it on.
 
-**Next:** P3b, the products themselves (prices, barcodes, pictures, a paged first sync of about 8,000, the CSV import at HQ, and the branch's product screens read-only while connected: `docs/QUESTIONS.md` #15).
+**Next:** P3b2 (pictures and the CSV import at HQ), then P3c.
+
+## 18. What P3b built (2026-11-27): the products go down
+
+**At HQ (migration 0005, `cloud-hq/src/modules/catalog/products.ts`, `productRoutes.ts`).** `products` with the same columns as a branch's (no picture yet). `GET/POST /products`, `GET/PATCH /products/:id`, `DELETE /products/:id` (HQ staff). **There is no real delete**: `DELETE` retires (`active = 0`); a retired product still goes down so the branches hide it, and its history stays whole. **One active product per barcode, from the start** (a partial unique index, plus a clear `409 DUPLICATE_BARCODE` first): a new chain has no legacy duplicates, so unlike a branch (rule 18) HQ does not start with the rule off. A link (category, brand, unit, supplier) must exist at HQ (`422`). The receipt name is made from the name as at a branch (`cloud-hq/shared`, a copy of `branch-server/shared`, the master), and a manual one sticks. A patch changes only the fields it names, and **a patch that changes nothing writes nothing** (no log line, `updated_at` unchanged). Each change writes the product, its `change_log` line and an `hq_audit` row in one transaction.
+
+**At the branch (`modules/sync/down.ts` `applyProduct`).** An upsert on HQ's id, with two deliberate differences from the lists:
+- **`cost_minor` is HQ's starting cost only.** It is taken when the product first arrives and never overwritten after, because the branch's own purchases set the cost (`purchases/service.ts`) and an HQ change would otherwise erase it. (A cost that HQ should push is a later decision, P3c.)
+- **`updated_at` is the branch's own clock and moves only when something really changed** (`WHERE ... IS DISTINCT FROM`). The till's catalog feed (`/products/sync`, `/terminal/catalog`) follows `updated_at`: an HQ timestamp older than the till's last sync would be skipped for ever, and moving it on a repeated page would make every till download all its products again.
+
+**Read-only at a connected branch.** `POST /products`, `PATCH` and `DELETE /products/:id`, `POST /products/import`, `POST /products/merge` and `POST /barcodes/enforce` answer `409 HQ_OWNS_CATALOG` while the branch is connected (`modules/catalog/hqOwned.ts`, shared with the four lists). Product **pictures** are not covered yet: they stay a branch matter until P3b2 brings them down. Stock, purchases (and so cost) and everything else are untouched.
+
+**First sync:** the existing paged log does it: about 8,000 products are 16 pages of 500, each applied in one transaction. `cloud-hq/tests/system/catalog-products.test.ts` connects a fresh branch to an HQ holding 1,200 products and checks the two end with the same count, sum of prices, ids and name lengths.
+
+**Not covered yet:** pictures, the CSV import at HQ (P3b2), the HQ screens (everything is API only), HQ-side stock alerts per branch.
 
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 

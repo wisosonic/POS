@@ -4,6 +4,7 @@ import { E } from '../../errors';
 import { inWriteTransaction } from '../../db/open';
 import { parse } from '../../util/validate';
 import { writeAudit } from '../audit/service';
+import { refuseIfHqOwnsCatalog } from './hqOwned';
 
 // Categories, brands, units and suppliers: small lists a manager edits and the product form picks from.
 // No delete: a product may still point at one, and renaming covers the real need.
@@ -85,11 +86,7 @@ export default async function lookupRoutes(app: FastifyInstance) {
     // Once connected, these four lists are HQ's (docs/12 §15, P3a): a second source would fight the one that comes down.
     const hqOwned = ['categories', 'brands', 'units', 'suppliers'].includes(kind.table);
     const refuseIfConnected = () => {
-      if (hqOwned && db.prepare('SELECT 1 FROM hq_link WHERE id = 1').get())
-        throw E.conflict(
-          'HQ_OWNS_CATALOG',
-          'This branch is connected to HQ: categories, brands, units and suppliers are changed at HQ and arrive here by themselves.',
-        );
+      if (hqOwned) refuseIfHqOwnsCatalog(db, 'categories, brands, units and suppliers');
     };
 
     app.post(kind.path, write, async (req, reply) => {

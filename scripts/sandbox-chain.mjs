@@ -255,11 +255,16 @@ async function main() {
     terminalToken = enrol.token;
     check(typeof terminalToken === 'string' && terminalToken.length > 20, 'no device token came back');
     must(await http('POST', url.till, '/api/v1/users', { token: admin, terminal: terminalToken, body: { username: 'sara', name: 'Sara', role: 'cashier', password: CASHIER_PW } }), 201, 'add the cashier');
+    // Products are HQ's (docs/12 §17): added at HQ, they reach both branches with HQ's id.
     productA = must(
-      await http('POST', url.till, '/api/v1/products', { token: admin, terminal: terminalToken, body: { name: 'Sandbox towel', barcode: '5287000107945', priceMinor: 75000, currency: 'LBP' } }),
+      await http('POST', url.hq, '/api/v1/products', { token: HQ_TOKEN, body: { name: 'Sandbox towel', barcode: '5287000107945', priceMinor: 75000, currency: 'LBP' } }),
       201,
-      'add the product',
+      'HQ adds the product',
     );
+    await until('the product reaches branch A, through the till', async () => (await http('GET', url.till, `/api/v1/products/${productA.id}`, { token: admin, terminal: terminalToken })).status === 200, 45_000);
+    await until('the product reaches branch B', async () => (await http('GET', url.b, `/api/v1/products/${productA.id}`, { token: adminB })).status === 200, 45_000);
+    const refused = await http('POST', url.till, '/api/v1/products', { token: admin, terminal: terminalToken, body: { name: 'Local towel', priceMinor: 1 } });
+    check(refused.status === 409 && refused.body.code === 'HQ_OWNS_CATALOG', `a connected branch must not add its own product (answered ${refused.status})`);
     const me = must(await http('GET', url.till, '/api/v1/terminals/me', { token: admin, terminal: terminalToken }), 200, 'who is this till');
     check(me.code === 'A1', `the till says it is ${me.code}`);
   });
@@ -337,7 +342,7 @@ async function main() {
 
   let productB;
   await step('branch B sells too: both branches have a sale with the same id, and HQ keeps them apart and agrees with both', async () => {
-    productB = must(await http('POST', url.b, '/api/v1/products', { token: adminB, body: { name: 'Sandbox towel', barcode: '5287000107945', priceMinor: 75000, currency: 'LBP' } }), 201, 'B adds the product');
+    productB = productA; // the same product, under HQ's id, already at branch B
     must(await http('POST', url.b, '/api/v1/users', { token: adminB, body: { username: 'omar', name: 'Omar', role: 'cashier', password: CASHIER_PW } }), 201, 'B adds the cashier');
     const cashierB = await login(url.b, 'omar', CASHIER_PW);
     // Branch B has one till and none enrolled: the legacy single-till mode, so no device token is needed.
@@ -362,7 +367,7 @@ async function main() {
     check(await inSync(url.b, adminB), 'branch B disagrees with HQ after the outage');
   });
 
-  await step('the till copies the catalog onto its own disk by itself and follows a price changed at the branch (docs/14 step 3)', async () => {
+  await step('the till copies the catalog onto its own disk by itself and follows a price changed at HQ (docs/14 step 3, docs/12 §17)', async () => {
     const catalogOf = async () => (await http('GET', url.till, '/till/catalog', {})).body;
     await until('the till reports a complete catalog copy', async () => (await catalogOf()).ready === true, 30_000);
     const feed = async () => (await http('GET', url.till, '/api/v1/products/sync?limit=500', { terminal: terminalToken })).body;
@@ -370,9 +375,9 @@ async function main() {
     const first = await towel();
     check(first && first.priceMinor === 75000, `the till's copy should hold the towel at 75000, got ${JSON.stringify(first)}`);
     check(first.costMinor === 0 && first.qty === '0', 'the till copy must not carry the cost or the stock');
-    must(await http('PATCH', url.a, `/api/v1/products/${productA.id}`, { token: adminA, body: { priceMinor: 76000 } }), 200, 'the branch changes the price');
+    must(await http('PATCH', url.hq, `/api/v1/products/${productA.id}`, { token: HQ_TOKEN, body: { priceMinor: 76000 } }), 200, 'HQ changes the price');
     await until('the till copy follows the price change', async () => (await towel())?.priceMinor === 76000, 30_000);
-    must(await http('PATCH', url.a, `/api/v1/products/${productA.id}`, { token: adminA, body: { priceMinor: 75000 } }), 200, 'the branch puts the price back');
+    must(await http('PATCH', url.hq, `/api/v1/products/${productA.id}`, { token: HQ_TOKEN, body: { priceMinor: 75000 } }), 200, 'HQ puts the price back');
     await until('the till copy follows the price back', async () => (await towel())?.priceMinor === 75000, 30_000);
   });
 

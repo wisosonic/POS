@@ -1,5 +1,6 @@
 import { downTable, validateRow, type Change } from '@pos/core/sync';
 import type { Database, Queryable } from '../../db/adapter';
+import { nowIso } from '../../util/time';
 import type { Link } from './service';
 
 // Receiving what HQ owns (docs/12-sync-and-hq.md §5, §15). One call to `pullOnce` asks for the next page of HQ's change log after the number
@@ -65,8 +66,29 @@ async function applySameId(q: Queryable, c: Change): Promise<void> {
   );
 }
 
+// A product (P3b) is an upsert on HQ's id with two differences. `cost_minor` is HQ's STARTING cost: taken when the product first arrives, never
+// overwritten after (the branch's own purchases set it). `updated_at` is THIS branch's clock, and moves only when something really changed:
+// the till's catalog feed follows it, and an HQ timestamp older than the till's last sync would be skipped, while moving it on a repeat of the
+// same page (or on a change the branch does not show) would make every till download all its products again. HQ never deletes a product; a
+// delete line (not sent today) retires it here rather than break the history that points at it.
+async function applyProduct(q: Queryable, c: Change): Promise<void> {
+  if (c.op === 'd') {
+    await q.run('UPDATE products SET active = 0, updated_at = ? WHERE id = ? AND active = 1', [nowIso(), c.pk]);
+    return;
+  }
+  const cols = downTable('products')!.columns.map((x) => x.name);
+  const overwritten = cols.filter((x) => x !== 'id' && x !== 'cost_minor');
+  await q.run(
+    `INSERT INTO products (${cols.join(', ')}, updated_at) VALUES (${cols.map(() => '?').join(', ')}, ?)
+     ON CONFLICT (id) DO UPDATE SET ${[...overwritten.map((x) => `${x} = excluded.${x}`), 'updated_at = excluded.updated_at'].join(', ')}
+     WHERE ${overwritten.map((x) => `products.${x} IS DISTINCT FROM excluded.${x}`).join(' OR ')}`,
+    [...cols.map((x) => c.row![x] ?? null), nowIso()],
+  );
+}
+
 async function applyChange(q: Queryable, c: Change): Promise<void> {
   // A new table adds itself to DOWN_TABLES; `ids: 'same'` ones are handled above, `mapped` ones need their own case here and an hq_id column.
+  if (c.tbl === 'products') return applyProduct(q, c);
   if (downTable(c.tbl)?.ids === 'same') return applySameId(q, c);
   if (c.tbl === 'exchange_rates') {
     if (c.op === 'd') {

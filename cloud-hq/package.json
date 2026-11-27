@@ -20,6 +20,7 @@
   "dependencies": {
     "@fastify/rate-limit": "^11.2.1",
     "@pos/core": "*",
+    "@pos/shared": "*",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.7",
     "tsx": "^4.23.15",
@@ -39,6 +40,7 @@
     "vitest": "^5.0.5"
   },
   "workspaces": [
-    "core"
+    "core",
+    "shared"
   ]
 }

@@ -164,6 +164,30 @@ export const DOWN_TABLES: readonly DownTable[] = [
   { name: 'brands', ids: 'same', columns: [int('id'), text('name')] },
   { name: 'units', ids: 'same', columns: [int('id'), text('name'), int('fractional')] },
   { name: 'suppliers', ids: 'same', columns: [int('id'), text('name'), text('address', true), text('phone', true), text('email', true)] },
+  {
+    // The products themselves (P3b). `cost_minor` is HQ's starting cost: a branch takes it when it first receives the product and then keeps
+    // its own (a purchase received at the branch sets it). `updated_at` is the branch's own (the till's catalog feed follows it). So neither
+    // overwrites what the branch has. Pictures are added with their own migration (P3b2).
+    name: 'products',
+    ids: 'same',
+    columns: [
+      int('id'),
+      text('name'),
+      text('receipt_name', true),
+      int('receipt_name_manual'),
+      text('barcode'),
+      int('cost_minor'),
+      int('price_minor'),
+      text('currency'),
+      int('category_id', true),
+      int('brand_id', true),
+      int('unit_id', true),
+      int('supplier_id', true),
+      int('stock_alert_milli', true),
+      text('expiry_date', true),
+      int('active'),
+    ],
+  },
 ];
 export const downTable = (name: string): DownTable | undefined => DOWN_TABLES.find((t) => t.name === name);
 

@@ -198,7 +198,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     pull: (link, signal) => pullOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, signal }),
     onPulled: (tables) => {
       if (tables.includes('exchange_rates')) events.publish('rate.changed');
-      if (tables.some((t) => ['categories', 'brands', 'units', 'suppliers'].includes(t))) events.publish('catalog.changed');
+      if (tables.some((t) => ['categories', 'brands', 'units', 'suppliers', 'products'].includes(t))) events.publish('catalog.changed');
     },
     push: (link, signal) =>
       pushOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, batchSize: options.sync?.batchSize, signal }),

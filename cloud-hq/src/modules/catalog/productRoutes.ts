@@ -1,0 +1,85 @@
+import { AppError } from '@pos/core/errors';
+import { parse } from '@pos/core/validate';
+import { normalizeBarcode } from '@pos/shared/barcode';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { qtyNumberToMilli } from '../../util/qty';
+import { createProduct, getProduct, listProducts, productJson, updateProduct } from './products';
+
+// A threshold in whole units (up to 3 decimals); null = never alert.
+const stockAlert = z
+  .number()
+  .min(0)
+  .refine((v) => qtyNumberToMilli(v) !== null, 'At most 3 decimals')
+  .nullable();
+
+// No defaults in the shared fields: Zod applies `.default()` even inside `.partial()`, so a patch built from defaulted fields would reset
+// cost, barcode and currency on every edit. Defaults belong to create only (and to the model, which fills what is left out).
+const fields = {
+  name: z.string().trim().min(1).max(200),
+  receiptName: z.string().trim().max(200).nullish(),
+  barcode: z.string().max(64).transform(normalizeBarcode),
+  priceMinor: z.number().int().min(0),
+  costMinor: z.number().int().min(0),
+  currency: z.enum(['USD', 'LBP']),
+  categoryId: z.number().int().positive().nullish(),
+  brandId: z.number().int().positive().nullish(),
+  unitId: z.number().int().positive().nullish(),
+  supplierId: z.number().int().positive().nullish(),
+  stockAlert: stockAlert.optional(),
+  expiryDate: z.string().max(40).nullish(),
+};
+const createBody = z.object({ ...fields, active: z.boolean().optional() }).partial({
+  barcode: true,
+  priceMinor: true,
+  costMinor: true,
+  currency: true,
+});
+const patchBody = z.object(fields).partial().extend({ active: z.boolean().optional() });
+const listQuery = z.object({
+  q: z.string().max(100).optional(),
+  categoryId: z.coerce.number().int().positive().optional(),
+  brandId: z.coerce.number().int().positive().optional(),
+  supplierId: z.coerce.number().int().positive().optional(),
+  active: z.enum(['true', 'false', 'all']).default('true'),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  cursor: z.coerce.number().int().positive().optional(),
+});
+const idParam = z.object({ id: z.coerce.number().int().min(1) });
+
+/** The chain's products (docs/12 §17): set here, every connected branch receives them. HQ staff only. */
+export default async function productRoutes(app: FastifyInstance) {
+  const db = app.database;
+  const admin = { preHandler: app.adminOnly };
+
+  app.get('/products', admin, async (req) => {
+    const r = await listProducts(db, parse(listQuery, req.query));
+    return { data: r.data.map(productJson), nextCursor: r.nextCursor };
+  });
+
+  app.get('/products/:id', admin, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const row = await getProduct(db, id);
+    if (!row) throw new AppError(404, 'NOT_FOUND', 'No such product');
+    return productJson(row);
+  });
+
+  app.post('/products', admin, async (req, reply) => {
+    const b = parse(createBody, req.body);
+    const row = await db.tx((tx) => createProduct(tx, b));
+    return reply.status(201).send(productJson(row));
+  });
+
+  app.patch('/products/:id', admin, async (req) => {
+    const { id } = parse(idParam, req.params);
+    const b = parse(patchBody, req.body);
+    return productJson(await db.tx((tx) => updateProduct(tx, id, b)));
+  });
+
+  // Retire, never delete: a retired product still goes down to the branches (they hide it), and its history stays whole.
+  app.delete('/products/:id', admin, async (req, reply) => {
+    const { id } = parse(idParam, req.params);
+    await db.tx((tx) => updateProduct(tx, id, { active: false }));
+    return reply.status(204).send();
+  });
+}

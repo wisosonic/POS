@@ -8,6 +8,7 @@ import { milliToQty } from '../../util/qty';
 import { nowIso } from '../../util/time';
 import { parse } from '../../util/validate';
 import { writeAudit } from '../audit/service';
+import { refuseIfHqOwnsCatalog } from './hqOwned';
 
 // Duplicate barcodes (US-34, the last milestone). The old data shares some barcodes between products, so the rule starts off.
 // This is how they are cleaned up: a report of every shared barcode, re-coding a product (the product screen), merging
@@ -76,6 +77,7 @@ export default async function barcodeRoutes(app: FastifyInstance) {
 
   // Turn the rule on (once nothing is shared) or off. Off is for an admin only: it weakens a guarantee.
   app.post('/barcodes/enforce', manager, async (req) => {
+    refuseIfHqOwnsCatalog(db, 'the barcode rule (HQ keeps every barcode unique)');
     const { enabled } = parse(z.object({ enabled: z.boolean() }), req.body);
     if (!enabled && !hasRole(req.auth.role, 'admin')) throw E.forbidden();
     return inWriteTransaction(db, () => {
@@ -105,6 +107,7 @@ export default async function barcodeRoutes(app: FastifyInstance) {
   // Fold products that share a barcode into one. History is never rewritten (old sales keep pointing at the product they sold), so
   // the retired products are hidden, their stock is moved across as transfers, and their barcode is freed.
   app.post('/products/merge', manager, async (req, reply) => {
+    refuseIfHqOwnsCatalog(db, 'the product list');
     const key = requireIdempotencyKey(req);
     const b = parse(mergeBody, req.body);
     if (new Set(b.retireIds).size !== b.retireIds.length || b.retireIds.includes(b.keepId))

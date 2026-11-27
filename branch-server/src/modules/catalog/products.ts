@@ -8,6 +8,7 @@ import { nowIso } from '../../util/time';
 import { parse } from '../../util/validate';
 import { writeAudit } from '../audit/service';
 import { MAX_IMAGE_BYTES, storeImage } from './images';
+import { refuseIfHqOwnsCatalog } from './hqOwned';
 import { importBody, importProducts, MAX_IMPORT_BYTES } from './import';
 
 // ------------------------------------------------------------------ shapes
@@ -215,11 +216,13 @@ export default async function productRoutes(app: FastifyInstance) {
 
   // Products from a spreadsheet's CSV. dryRun (the default) only says what would happen; a file with any error writes nothing.
   app.post('/products/import', { ...write, bodyLimit: MAX_IMPORT_BYTES + 4096 }, async (req) => {
+    refuseIfHqOwnsCatalog(db, 'the product list');
     const body = parse(importBody, req.body);
     return importProducts(db, req.auth.id, body);
   });
 
   app.post('/products', write, async (req, reply) => {
+    refuseIfHqOwnsCatalog(db, 'the product list');
     const b = parse(createBody, req.body);
     const manual = !!b.receiptName;
     const receiptName = toReceiptName({ name: b.name, receiptName: b.receiptName });
@@ -262,6 +265,7 @@ export default async function productRoutes(app: FastifyInstance) {
   });
 
   app.patch('/products/:id', write, async (req) => {
+    refuseIfHqOwnsCatalog(db, 'a product');
     const id = Number((req.params as { id: string }).id);
     const b = parse(patchBody, req.body);
     const before = getRow(db, id);
@@ -395,6 +399,7 @@ export default async function productRoutes(app: FastifyInstance) {
 
   // Soft delete: sales history keeps pointing at the product.
   app.delete('/products/:id', write, async (req, reply) => {
+    refuseIfHqOwnsCatalog(db, 'a product');
     const id = Number((req.params as { id: string }).id);
     const before = getRow(db, id);
     if (!before) throw E.notFound('Product');
