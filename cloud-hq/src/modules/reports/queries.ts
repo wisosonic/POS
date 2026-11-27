@@ -535,3 +535,93 @@ export async function overview(q: Queryable, range: Range, staleMinutes: number)
   });
   return { from: range.from, to: range.to, branches: rows, totals: totalOf(rows) };
 }
+
+export type RequestLine = {
+  productId: number;
+  name: string;
+  wantedMilli: number;
+  shippedMilli: number;
+  unavailableMilli: number;
+  status: 'waiting' | 'picking' | 'done';
+};
+export type RequestRow = {
+  branchId: number;
+  branch: string;
+  requestId: number;
+  createdAt: string;
+  note: string | null;
+  /** `routing`: HQ has not sent it anywhere yet. `open`: some line is still waiting or being picked. `closed`: every line is shipped or not available. */
+  status: 'routing' | 'open' | 'closed';
+  lines: RequestLine[];
+};
+
+/** Requests made by shops in the range, with where each line stands (docs/15 §5). */
+export async function requestsReport(
+  q: Queryable,
+  opts: { from: string; to: string; branchId?: number; status: 'all' | RequestRow['status'] },
+): Promise<RequestRow[]> {
+  const b = branchClause('r', opts.branchId);
+  const reqs = await q.all<{ branch_id: number; id: number; created_at: string; note: string | null }>(
+    `SELECT r.branch_id, r.id, r.created_at, r.note FROM stock_requests r WHERE r.created_at >= ? AND r.created_at <= ?${b.sql}
+     ORDER BY r.created_at DESC, r.branch_id, r.id DESC LIMIT 500`,
+    [opts.from, opts.to, ...b.params],
+  );
+  if (reqs.length === 0) return [];
+  const lines = await q.all<{
+    for_branch_id: number;
+    request_id: number;
+    product_id: number;
+    name: string | null;
+    wanted_milli: number;
+    shipped_milli: number;
+    unavailable_milli: number;
+    status: RequestLine['status'];
+  }>(
+    `SELECT s.for_branch_id, s.request_id, s.product_id, p.name, s.wanted_milli, s.shipped_milli, s.unavailable_milli, s.status
+     FROM request_status s JOIN stock_requests r ON r.branch_id = s.for_branch_id AND r.id = s.request_id LEFT JOIN products p ON p.id = s.product_id
+     WHERE r.created_at >= ? AND r.created_at <= ?${b.sql} ORDER BY s.id`,
+    [opts.from, opts.to, ...b.params],
+  );
+  const names = await branchNames(q);
+  const out = reqs.map((r): RequestRow => {
+    const mine = lines
+      .filter((l) => l.for_branch_id === r.branch_id && l.request_id === r.id)
+      .map((l): RequestLine => ({
+        productId: l.product_id,
+        name: l.name ?? `Product ${l.product_id}`,
+        wantedMilli: l.wanted_milli,
+        shippedMilli: l.shipped_milli,
+        unavailableMilli: l.unavailable_milli,
+        status: l.status,
+      }));
+    return {
+      branchId: r.branch_id,
+      branch: nameOf(names, r.branch_id),
+      requestId: r.id,
+      createdAt: r.created_at,
+      note: r.note,
+      status: mine.length === 0 ? 'routing' : mine.every((l) => l.status === 'done') ? 'closed' : 'open',
+      lines: mine,
+    };
+  });
+  return opts.status === 'all' ? out : out.filter((r) => r.status === opts.status);
+}
+
+/** What shops asked for that no stock branch could supply, by product (docs/15 §5): the demand central buying can see. */
+export async function unmetDemand(q: Queryable, opts: { from: string; to: string; branchId?: number }) {
+  const b = branchClause('r', opts.branchId);
+  const rows = await q.all<{ product_id: number; name: string | null; unavailable: number; wanted: number; lines: number }>(
+    `SELECT s.product_id, MAX(p.name) AS name, SUM(s.unavailable_milli) AS unavailable, SUM(s.wanted_milli) AS wanted, COUNT(*) AS lines
+     FROM request_status s JOIN stock_requests r ON r.branch_id = s.for_branch_id AND r.id = s.request_id LEFT JOIN products p ON p.id = s.product_id
+     WHERE s.unavailable_milli > 0 AND r.created_at >= ? AND r.created_at <= ?${b.sql}
+     GROUP BY s.product_id ORDER BY unavailable DESC, name`,
+    [opts.from, opts.to, ...b.params],
+  );
+  return rows.map((r) => ({
+    productId: r.product_id,
+    name: r.name ?? `Product ${r.product_id}`,
+    unavailableMilli: r.unavailable,
+    wantedMilli: r.wanted,
+    lines: r.lines,
+  }));
+}

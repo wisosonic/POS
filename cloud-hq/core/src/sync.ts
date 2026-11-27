@@ -308,6 +308,22 @@ export const SYNC_TABLES: readonly SyncTable[] = [
     name: 'receipt_items',
     columns: [int('id'), int('receipt_id'), int('product_id'), int('qty_expected_milli'), int('qty_counted_milli'), text('reason', true)],
   },
+  {
+    name: 'stock_requests',
+    columns: [int('id'), text('note', true), int('item_count'), int('user_id', true), text('created_at')],
+  },
+  {
+    name: 'stock_request_items',
+    columns: [int('id'), int('request_id'), int('product_id'), int('qty_milli')],
+  },
+  {
+    name: 'pick_results',
+    columns: [int('id'), int('pick_list_id'), int('shipment_id', true), int('item_count'), int('user_id', true), text('created_at')],
+  },
+  {
+    name: 'pick_result_items',
+    columns: [int('id'), int('result_id'), int('product_id'), int('qty_asked_milli'), int('qty_shipped_milli')],
+  },
 ];
 
 export const syncTable = (name: string): SyncTable | undefined => SYNC_TABLES.find((t) => t.name === name);
@@ -345,6 +361,10 @@ export const CONTROLS: readonly ControlSpec[] = [
   { name: 'shipment_items', day: 'created_at', amount: 'x.qty_milli', parent: { table: 'shipments', fk: 'shipment_id' } },
   { name: 'receipts', day: 'created_at', amount: '0' },
   { name: 'receipt_items', day: 'created_at', amount: 'x.qty_counted_milli', parent: { table: 'receipts', fk: 'receipt_id' } },
+  { name: 'stock_requests', day: 'created_at', amount: 'x.item_count' },
+  { name: 'stock_request_items', day: 'created_at', amount: 'x.qty_milli', parent: { table: 'stock_requests', fk: 'request_id' } },
+  { name: 'pick_results', day: 'created_at', amount: 'x.item_count' },
+  { name: 'pick_result_items', day: 'created_at', amount: 'x.qty_shipped_milli', parent: { table: 'pick_results', fk: 'result_id' } },
 ];
 
 /** One number pair: rows and their summed amount. */
@@ -502,6 +522,34 @@ export const DOWN_TABLES: readonly DownTable[] = [
     name: 'incoming_shipment_items',
     ids: 'same',
     columns: [int('id'), int('incoming_id'), int('product_id'), int('qty_milli'), int('unit_cost')],
+  },
+  {
+    name: 'pick_lists',
+    ids: 'same',
+    columns: [
+      int('id'),
+      int('for_branch_id'),
+      int('stock_branch_id'),
+      int('request_id'),
+      text('status'),
+      text('note', true),
+      text('opened_at'),
+    ],
+  },
+  { name: 'pick_list_items', ids: 'same', columns: [int('id'), int('pick_list_id'), int('product_id'), int('qty_milli')] },
+  {
+    name: 'request_status',
+    ids: 'same',
+    columns: [
+      int('id'),
+      int('for_branch_id'),
+      int('request_id'),
+      int('product_id'),
+      int('wanted_milli'),
+      int('shipped_milli'),
+      int('unavailable_milli'),
+      text('status'),
+    ],
   },
 ];
 export const downTable = (name: string): DownTable | undefined => DOWN_TABLES.find((t) => t.name === name);

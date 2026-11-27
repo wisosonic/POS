@@ -48,8 +48,8 @@ export const receiptBody = z.object({
     .default([]),
 });
 
-type Result = { statusCode: number; body: unknown; replay: boolean };
-type Reason = 'supply' | 'rebalance' | 'return';
+export type Result = { statusCode: number; body: unknown; replay: boolean };
+export type Reason = 'supply' | 'rebalance' | 'return';
 
 /** What the stock movement is called, from the two kinds. A sale branch can only send to a stock branch. */
 export function reasonFor(from: BranchKind, to: BranchKind): Reason {
@@ -62,13 +62,13 @@ export function reasonFor(from: BranchKind, to: BranchKind): Reason {
   return from === 'stock' ? (to === 'sale' ? 'supply' : 'rebalance') : 'return';
 }
 
-async function me(q: Queryable): Promise<{ hqId: number; kind: BranchKind }> {
+export async function me(q: Queryable): Promise<{ hqId: number; kind: BranchKind }> {
   const link = await q.one<{ hq_branch_id: number }>('SELECT hq_branch_id FROM hq_link WHERE id = 1');
   if (!link) throw E.conflict('NOT_CONNECTED', 'Moving stock between branches needs this branch to be connected to HQ');
   return { hqId: link.hq_branch_id, kind: await getBranchKind(q) };
 }
 
-type DirectoryRow = { id: number; code: string; name: string; kind: BranchKind; active: number };
+export type DirectoryRow = { id: number; code: string; name: string; kind: BranchKind; active: number };
 
 /** Where this branch may send stock: every other active branch, with whether the direction is allowed. */
 export async function destinations(q: Queryable) {
@@ -124,6 +124,50 @@ export async function shipmentJson(q: Queryable, id: number) {
   };
 }
 
+/**
+ * Write a shipment and take its stock out, inside the caller's transaction (docs/15 §4). Shared by `createShipment` and by filling a pick list
+ * (modules/requests). The caller has already checked the direction and the destination.
+ */
+export async function shipInTx(
+  q: Queryable,
+  actor: Actor,
+  to: { id: number; name: string },
+  reason: Reason,
+  note: string | null,
+  items: { productId: number; qtyMilli: number }[],
+): Promise<number> {
+  const now = nowIso();
+  const shipment = (await q.one<{ id: number }>(
+    'INSERT INTO shipments (to_branch_id, reason, note, item_count, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
+    [to.id, reason, note, items.length, actor.id, now],
+  ))!;
+  const warehouseId = await defaultWarehouseIdQ(q);
+  for (const item of items) {
+    const product = await q.one<{ cost_minor: number }>('SELECT cost_minor FROM products WHERE id = ?', [item.productId]);
+    if (!product) throw E.notFound('Product');
+    await q.run('INSERT INTO shipment_items (shipment_id, product_id, qty_milli, unit_cost) VALUES (?, ?, ?, ?)', [
+      shipment.id,
+      item.productId,
+      item.qtyMilli,
+      product.cost_minor,
+    ]);
+    await q.run(
+      `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id, note)
+       VALUES (?, ?, ?, 'transfer', 'shipment', ?, ?, ?)`,
+      [item.productId, warehouseId, -item.qtyMilli, shipment.id, actor.id, `to ${to.name}`],
+    );
+    await putStock(q, item.productId, warehouseId, -item.qtyMilli);
+  }
+  await writeAuditQ(q, {
+    userId: actor.id,
+    action: 'shipment.create',
+    entity: 'shipment',
+    entityId: shipment.id,
+    after: { toBranch: to.name, reason, lines: items.length },
+  });
+  return shipment.id;
+}
+
 /** Send stock to another branch. Stock leaves this branch now; HQ relays the shipment to its receiver. Idempotent. */
 export async function createShipment(
   db: Database,
@@ -147,36 +191,15 @@ export async function createShipment(
     if (reason === 'return' && !note)
       throw new AppError(422, 'RETURN_NEEDS_REASON', 'Say why the stock is going back (slow selling, a surplus, a wrong order)');
 
-    const now = nowIso();
-    const shipment = (await q.one<{ id: number }>(
-      'INSERT INTO shipments (to_branch_id, reason, note, item_count, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
-      [to.id, reason, note, body.items.length, actor.id, now],
-    ))!;
-    const warehouseId = await defaultWarehouseIdQ(q);
-    for (const [i, item] of body.items.entries()) {
-      const product = await q.one<{ cost_minor: number }>('SELECT cost_minor FROM products WHERE id = ?', [item.productId]);
-      if (!product) throw E.notFound('Product');
-      await q.run('INSERT INTO shipment_items (shipment_id, product_id, qty_milli, unit_cost) VALUES (?, ?, ?, ?)', [
-        shipment.id,
-        item.productId,
-        quantities[i]!,
-        product.cost_minor,
-      ]);
-      await q.run(
-        `INSERT INTO stock_movements (product_id, warehouse_id, qty_milli_delta, reason, ref_type, ref_id, user_id, note)
-         VALUES (?, ?, ?, 'transfer', 'shipment', ?, ?, ?)`,
-        [item.productId, warehouseId, -quantities[i]!, shipment.id, actor.id, `to ${to.name}`],
-      );
-      await putStock(q, item.productId, warehouseId, -quantities[i]!);
-    }
-    await writeAuditQ(q, {
-      userId: actor.id,
-      action: 'shipment.create',
-      entity: 'shipment',
-      entityId: shipment.id,
-      after: { toBranch: to.name, reason, lines: body.items.length },
-    });
-    const response = await shipmentJson(q, shipment.id);
+    const shipmentId = await shipInTx(
+      q,
+      actor,
+      to,
+      reason,
+      note,
+      body.items.map((it, i) => ({ productId: it.productId, qtyMilli: quantities[i]! })),
+    );
+    const response = await shipmentJson(q, shipmentId);
     await rememberResponseQ(q, SHIPMENT_SCOPE, idem.key, idem.hash, 201, response);
     return { statusCode: 201, body: response as unknown, replay: false };
   });

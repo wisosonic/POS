@@ -279,6 +279,10 @@ The design of all of P5 is in `docs/15-stock-flow-and-customers.md` (read it bef
 
 The detail is in `docs/15` §4.1. In sync terms: four more tables go UP (`shipments`, `shipment_items`, `receipts`, `receipt_items`: 23 in all, each in the daily control), and three go DOWN under HQ's own ids (`branch_directory` to every branch; `incoming_shipments` and `incoming_shipment_items` to the **receiving branch only**). The branch-scoped change log of P3c (`change_log.branch_id`) is what makes "only the receiver" possible; HQ writes those lines in `relayShipments`, in the same transaction that stores the sender's facts, once the shipment's lines are all there.
 
+## 27. What P5c built (2026-11-28): requests and routing
+
+The detail is in `docs/15` §5.1. In sync terms: four more tables go UP (`stock_requests`, `stock_request_items`, `pick_results`, `pick_result_items`: 27 in all, each in the daily control) and three go DOWN, each to ONE branch under HQ's own ids (`pick_lists` and `pick_list_items` to the stock branch asked; `request_status` to the shop that asked). HQ's routing runs inside `applyFacts` (like the shipment relay), so a stock branch's answer and the next pick list are written in the same transaction that stores the answer; HQ's own state is `request_status` (the line's progress, also what the shop is told) and `supply_routes`.
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

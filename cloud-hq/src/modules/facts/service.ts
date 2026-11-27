@@ -1,6 +1,7 @@
 import type { Queryable } from '@pos/core/adapter';
 import { AppError } from '@pos/core/errors';
 import { relayShipments } from './relay';
+import { processResults, routeNewRequests } from './routing';
 import {
   digestRows,
   downTable,
@@ -61,6 +62,9 @@ export async function applyFacts(q: Queryable, branchId: number, facts: Fact[]):
   }
   // Shipments written by this branch go to their receivers once complete (docs/15 §4).
   if (facts.some((f) => f.tbl === 'shipments' || f.tbl === 'shipment_items')) await relayShipments(q, branchId);
+  // Requests from a shop are routed once complete, and a stock branch's answer is taken in (docs/15 §5).
+  if (facts.some((f) => f.tbl === 'pick_results' || f.tbl === 'pick_result_items')) await processResults(q, branchId);
+  if (facts.some((f) => f.tbl === 'stock_requests' || f.tbl === 'stock_request_items')) await routeNewRequests(q, branchId);
   return facts.length;
 }
 

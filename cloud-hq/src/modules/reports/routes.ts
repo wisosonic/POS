@@ -13,7 +13,9 @@ import {
   registersReport,
   salesReport,
   stockReport,
+  requestsReport,
   transfersReport,
+  unmetDemand,
 } from './queries';
 
 const iso = z
@@ -105,6 +107,20 @@ export default async function reportRoutes(app: FastifyInstance) {
     const q = parse(range.extend({ onlyVariance: z.enum(['true', 'false']).default('false') }), req.query);
     const r = resolve(q);
     return { ...r, ...(await registersReport(db, r, { branchId: q.branchId, onlyVariance: q.onlyVariance === 'true' })) };
+  });
+
+  // Requests made by shops, and where each line stands: routing, open or closed (docs/15 §5).
+  app.get('/reports/requests', view, async (req) => {
+    const q = parse(range.extend({ status: z.enum(['all', 'routing', 'open', 'closed']).default('all') }), req.query);
+    const r = resolve(q);
+    return { ...r, data: await requestsReport(db, { ...r, branchId: q.branchId, status: q.status }) };
+  });
+
+  // What shops asked for that no stock branch could supply: the demand central buying can see (docs/15 §5).
+  app.get('/reports/unmet-demand', view, async (req) => {
+    const q = parse(range, req.query);
+    const r = resolve(q);
+    return { ...r, data: await unmetDemand(db, { ...r, branchId: q.branchId }) };
   });
 
   // Shipments between branches: in transit, received (with the difference) or undeliverable (docs/15 §4). `branchId` = sent or received by it.

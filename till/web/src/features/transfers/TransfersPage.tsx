@@ -5,6 +5,9 @@ import { Modal } from '../../components/Modal';
 import { ApiError, get, post } from '../../lib/api';
 import type { Product } from '../../lib/types';
 import { useT } from '../../store/lang';
+import { useSettings } from '../../hooks/useTillData';
+import { PickTab, RequestsTab } from './RequestTabs';
+import { ProductPicker } from './ProductPicker';
 import { toast } from '../../store/toast';
 
 // Moving stock between branches (docs/15 §4, P5b). A manager confirms what HQ says is on its way, sends stock to another branch, and looks back.
@@ -39,15 +42,24 @@ const reasonLabel = (t: ReturnType<typeof useT>, r: Reason) =>
   r === 'supply' ? t('Supply') : r === 'rebalance' ? t('Rebalance') : t('Return');
 const reasonText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
-/** Stock on its way to this branch, stock to send, and what was done. */
+/** What this branch does with stock between branches: a shop asks and gets sent stock; a stock branch picks and ships. */
 export function TransfersPage() {
   const t = useT();
-  const [tab, setTab] = useState<'incoming' | 'send' | 'history'>('incoming');
+  const isStock = useSettings().data?.branchKind === 'stock';
+  type Tab = 'requests' | 'pick' | 'incoming' | 'send' | 'history';
+  const [tab, setTab] = useState<Tab>(isStock ? 'pick' : 'requests');
   const incoming = useQuery({
     queryKey: ['incoming', 'on_the_way'],
     queryFn: () => get<{ data: Incoming[] }>('/incoming?status=on_the_way').then((r) => r.data),
   });
+  const picking = useQuery({
+    queryKey: ['pick-lists'],
+    enabled: isStock,
+    queryFn: () => get<{ data: unknown[] }>('/pick-lists?status=open').then((r) => r.data),
+  });
   const waiting = incoming.data?.length ?? 0;
+  const toPick = picking.data?.length ?? 0;
+  const first: Tab = isStock ? 'pick' : 'requests';
 
   return (
     <main className="page" data-testid="transfers">
@@ -55,17 +67,27 @@ export function TransfersPage() {
         <Icon name="transfer" size={26} />
         {t('Transfers')}
       </h1>
-      <div className="tabs" role="tablist" aria-label={t('Transfers')} style={{ maxWidth: 560 }}>
+      <div className="tabs" role="tablist" aria-label={t('Transfers')} style={{ maxWidth: 720 }}>
+        {isStock ? (
+          <button role="tab" aria-selected={tab === 'pick'} onClick={() => setTab('pick')}>
+            {toPick > 0 ? t('To pick ({n})', { n: toPick }) : t('To pick')}
+          </button>
+        ) : (
+          <button role="tab" aria-selected={tab === 'requests'} onClick={() => setTab('requests')}>
+            {t('Requests')}
+          </button>
+        )}
         <button role="tab" aria-selected={tab === 'incoming'} onClick={() => setTab('incoming')}>
           {waiting > 0 ? t('Coming in ({n})', { n: waiting }) : t('Coming in')}
         </button>
         <button role="tab" aria-selected={tab === 'send'} onClick={() => setTab('send')}>
-          {t('Send stock')}
+          {isStock ? t('Send stock') : t('Send back')}
         </button>
         <button role="tab" aria-selected={tab === 'history'} onClick={() => setTab('history')}>
           {t('History')}
         </button>
       </div>
+      {tab === first && (isStock ? <PickTab /> : <RequestsTab />)}
       {tab === 'incoming' && <IncomingTab rows={incoming.data} loading={incoming.isLoading} />}
       {tab === 'send' && <SendTab />}
       {tab === 'history' && <HistoryTab />}
@@ -324,48 +346,6 @@ function SendTab() {
         </button>
       </div>
     </section>
-  );
-}
-
-/** Type part of a name or scan a barcode, then pick the product. Stock is never checked. */
-function ProductPicker({ onPick }: { onPick: (p: Product) => void }) {
-  const t = useT();
-  const [q, setQ] = useState('');
-  const text = q.trim();
-  const results = useQuery({
-    queryKey: ['picker', text],
-    enabled: text.length >= 2,
-    queryFn: () => get<{ data: Product[] }>(`/products?limit=8&q=${encodeURIComponent(text)}`).then((r) => r.data),
-  });
-  return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      <label className="field">
-        {t('Add a product')}
-        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Name or barcode')} autoComplete="off" />
-      </label>
-      {text.length >= 2 && (results.data ?? []).length > 0 && (
-        <div role="listbox" aria-label={t('Matching products')} style={{ display: 'grid', gap: 4 }}>
-          {(results.data ?? []).map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              role="option"
-              aria-selected={false}
-              className="btn"
-              style={{ justifyContent: 'space-between', textAlign: 'start' }}
-              onClick={() => {
-                onPick(r);
-                setQ('');
-              }}
-            >
-              <span>{r.name.trim()}</span>
-              <span className="muted">{r.barcode}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {text.length >= 2 && results.data?.length === 0 && <span className="muted">{t('No product matches.')}</span>}
-    </div>
   );
 }
 
