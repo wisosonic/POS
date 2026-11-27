@@ -154,6 +154,36 @@ describe('everything a branch records reaches HQ (US-HQ-records)', () => {
       expect(n(name), name).toBeGreaterThan(0);
   });
 
+  it('HQ’s reports for a branch give the same figures as the branch’s own (P4b)', async () => {
+    const branchId = (await hq.app.database.one<{ id: number }>("SELECT id FROM branches WHERE code = 'REC'"))!.id;
+    const range = `from=${encodeURIComponent(new Date(Date.now() - 2 * 86_400_000).toISOString())}&to=${encodeURIComponent(new Date(Date.now() + 3_600_000).toISOString())}`;
+    const own = (await c.http.get(`${api}/reports/sales?${range}&groupBy=day`).set(auth(manager))).body;
+    const atHq = (await hq.http.get(`${api}/reports/sales?${range}&groupBy=day&branchId=${branchId}`).set(adminAuth)).body;
+    expect(own.totals.count).toBeGreaterThan(0);
+    expect(own.totals.returnedLbp).toBeGreaterThan(0); // the day had returns, so the net figures are really tested
+    const pick = (t: { count: number; grossLbp: number; returnedLbp: number; netLbp: number; profitLbp: number }) => ({
+      count: t.count,
+      grossLbp: t.grossLbp,
+      returnedLbp: t.returnedLbp,
+      netLbp: t.netLbp,
+      profitLbp: t.profitLbp,
+    });
+    expect(pick(atHq.totals)).toEqual(pick(own.totals));
+    expect(atHq.data.map((r: { key: string } & typeof own.totals) => [r.key, ...Object.values(pick(r))])).toEqual(
+      own.data.map((r: { key: string } & typeof own.totals) => [r.key, ...Object.values(pick(r))]),
+    );
+    // the best sellers agree too (revenue and profit per product, net of returns)
+    const ownProducts = (await c.http.get(`${api}/reports/products?${range}&limit=500`).set(auth(manager))).body.data as {
+      productId: number;
+      revenueLbp: number;
+      profitLbp: number;
+    }[];
+    const hqProducts = (await hq.http.get(`${api}/reports/products?${range}&branchId=${branchId}&limit=500`).set(adminAuth)).body
+      .data as typeof ownProducts;
+    const key = (r: (typeof ownProducts)[number]) => [r.productId, r.revenueLbp, r.profitLbp];
+    expect(hqProducts.map(key).sort()).toEqual(ownProducts.map(key).sort());
+  });
+
   it('a register session arrives with its final figures: counted, variance and the closed state', async () => {
     const rows = hq.app.database;
     const s = await rows.one<{ status: string; n: number }>(`SELECT status, COUNT(*) AS n FROM register_sessions GROUP BY status`);

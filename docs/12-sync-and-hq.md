@@ -225,7 +225,29 @@ HQ staff sign in with their own accounts (§21: name, password, role). Everythin
 
 **Adding a table later** (P5 customers, P6 attendance): an entry in `SYNC_TABLES` (copied to `cloud-hq/core`), a mirror table in a new HQ migration, three triggers and a snapshot row in a new branch migration. A table with no single integer key needs a surrogate first.
 
-**Next:** P4b, the reports at HQ over these tables, and P4c, the daily reconciliation.
+**Next:** P4b (§23), the reports at HQ over these tables, and P4c, the daily reconciliation.
+
+## 23. What P4b built (2026-11-27): the chain's reports
+
+**What.** `GET /reports/...` at HQ (`cloud-hq/src/modules/reports/`), for any signed-in HQ staff (a viewer reads everything), over what the branches have sent and HQ's own catalog. `from` and `to` (inclusive; default today's shop day until now; at most 400 days), `branchId` narrows to one branch.
+
+| Report | Answers |
+|---|---|
+| `/reports/overview` | The chain at a glance: per branch, takings, returns, net, profit, spending, open tills, **when it was last heard from** (`stale` after 10 minutes), and the chain total |
+| `/reports/sales?groupBy=day\|branch\|category` | Takings net of returns, by shop day, by branch, or by product category (HQ's category names) |
+| `/reports/products` | Best and slowest sellers across the chain (or one branch): quantity, revenue, cost, profit, net of returns |
+| `/reports/payments` | What was received, per branch, method and currency |
+| `/reports/expenses` | Spending per branch, category and currency |
+| `/reports/registers` | Till shifts with each bucket's opening, expected, counted and variance; over and short per branch and bucket; `onlyVariance=true` keeps the shifts that are off |
+| `/reports/stock` | Stock per product at every branch, **derived from the movements the branches sent**; `lowOnly=true`: at or under the product's alert at some branch |
+
+**The rules are the branch's own** (docs/04 and `branch-server/src/modules/reports`): a sale counts on the day it was made and a return on the day it was taken back, voided sales never count, everything is in lira at the rate each sale was made at (nothing depends on today's rate). **A real branch's own sales and products reports and HQ's for that branch give identical figures** (`sync-records.test.ts`, with returns in the day).
+
+**Built as SQL aggregates, not loops.** The database groups; the code only folds. A shop **day** is a time-zone matter (Beirut is UTC+2 or +3), so the database groups by `(branch, UTC hour)` and the code folds those few rows into shop days with `localDay` (`cloud-hq/src/util/time.ts`, a copy of the branch's): exact, because the offset is a whole number of hours. **Every join between two mirror tables also joins on `branch_id`**, because ids belong to a branch: sale 1 at two branches are two sales, and expense category 1 is "Rent" at one and "Fuel" at the other (`reports.test.ts` uses the same ids at both branches on purpose). A product is the same product everywhere (HQ's id), so products and categories join HQ's own catalog.
+
+**Honest about what it shows.** These are the figures the branches have SENT. A branch that is away (or has a backlog) shows less than it has done; `overview` says when each was last heard from, and P4c will say whether the two sides agree.
+
+**Not covered yet:** the heavy reports run on HQ's own connection (a range over years, or ten branches of history, should run in a read-only worker as at a branch: capped at 400 days until then), a report by cashier (a person is a number until HR: users are not sent), customers owed (P5), stock value, and any screen at HQ (API only).
 
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 

@@ -14,6 +14,7 @@ import rateRoutes from './modules/rates/routes';
 import catalogListRoutes from './modules/catalog/routes';
 import productRoutes from './modules/catalog/productRoutes';
 import priceRoutes from './modules/catalog/priceRoutes';
+import reportRoutes from './modules/reports/routes';
 import { asStaff, hasRole, type Staff, type StaffRole } from './modules/staff/context';
 import staffRoutes from './modules/staff/routes';
 import { staffOfToken } from './modules/staff/users';
@@ -158,6 +159,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
       await api.register(productRoutes);
       await api.register(priceRoutes);
       await api.register(staffRoutes);
+      await api.register(reportRoutes);
     },
     { prefix: '/api/v1' },
   );
