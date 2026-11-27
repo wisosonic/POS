@@ -5,6 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { BackupService } from '../backup/service';
 import type { Database } from '../db/adapter';
 import type { EventBus } from '../events/bus';
+import type { TopicVersions } from '../events/versions';
 import type { ReportRunner } from '../modules/reports/runner';
 import type { SyncAgent } from '../modules/sync/agent';
 import type { Db } from '../db/open';
@@ -20,6 +21,7 @@ declare module 'fastify' {
     db: Db;
     /** Live updates for the tills (events/bus.ts). */
     events: EventBus;
+    versions: TopicVersions;
     /** Runs the heavy reports away from the thread that sells (modules/reports/runner.ts). */
     reports: ReportRunner;
     /** The loop that keeps this branch in touch with HQ (modules/sync/agent.ts). */

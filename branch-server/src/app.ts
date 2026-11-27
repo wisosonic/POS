@@ -33,6 +33,8 @@ import rateRoutes from './modules/settings/rates';
 import terminalRoutes from './modules/terminals/routes';
 import agentRoutes from './modules/printing/agentRoutes';
 import { EventBus, eventsFor } from './events/bus';
+import { TopicVersions } from './events/versions';
+import pingRoutes from './modules/ping/routes';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
 import { pullOnce } from './modules/sync/down';
@@ -180,6 +182,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   // This happens after the answer has gone, so it can never delay or fail a sale.
   const events = new EventBus();
   app.decorate('events', events);
+  app.decorate('versions', new TopicVersions(events)); // what `GET /ping` reports (docs/14)
   const reports = new ReportRunner({ databasePath: options.databasePath, db, ...options.reports });
   app.decorate('reports', reports);
   const sync = new SyncAgent({
@@ -267,6 +270,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(agentRoutes);
       await api.register(syncRoutes);
       await api.register(eventRoutes, { bus: events });
+      await api.register(pingRoutes);
       await api.register(registerRoutes);
       await api.register(walletRoutes);
       await api.register(saleRoutes);

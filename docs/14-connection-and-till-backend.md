@@ -1,6 +1,6 @@
 # 14 · Connection, ping and the till's own backend
 
-**Status:** design note, 2026-11-27, **nothing built yet**. Decided by the product owner on 2026-11-27 (see §1). It changes how a till behaves when the branch server is unreachable, replaces the live-update stream with a ping, and gives the till a real Node backend that keeps its own copy of the items. Read `docs/11-multi-branch.md` §8.4 (the till's own server today) and `docs/12-sync-and-hq.md` first.
+**Status:** design note, 2026-11-27. **Step 1 of §9 is built (the ping on the branch server); the rest is not**. Decided by the product owner on 2026-11-27 (see §1). It changes how a till behaves when the branch server is unreachable, replaces the live-update stream with a ping, and gives the till a real Node backend that keeps its own copy of the items. Read `docs/11-multi-branch.md` §8.4 (the till's own server today) and `docs/12-sync-and-hq.md` first.
 
 ## 1. What the owner decided (2026-11-27)
 
@@ -35,7 +35,7 @@ Not taken from the owner's first sketch, and why:
 { "ok": true, "serverTime": "2026-11-27T09:00:00.000Z", "epoch": "b7e1c0…", "versions": { "catalog": 4812, "rate": 7, "settings": 3, "register": 912, "wallets": 40 } }
 ```
 
-- **A version is a number that only goes up, not a timestamp.** Two edits in one millisecond, or a clock that moves, would fool a timestamp. The branch server keeps one counter per topic (a small `topic_versions` table) and raises it in the place that already knows what a request changed: the `eventsFor` hook in `app.ts` that publishes live events today. `epoch` is a random id made when the server starts; if it differs from the one the till last saw, the till refetches everything, whatever the numbers say (a restored backup can make a counter go backwards).
+- **A version is a number that only goes up, not a timestamp.** Two edits in one millisecond, or a clock that moves, would fool a timestamp. The branch server keeps one counter per topic **in memory** (`events/versions.ts`, no table and no migration) and raises it every time the live-update bus publishes the matching event, from whatever source (a request through the `eventsFor` hook in `app.ts`, or the sync loop applying an HQ change). `epoch` is a random id made when the server starts; if it differs from the one the till last saw, the till refetches everything, whatever the numbers say (a restored backup can make a counter go backwards).
 - **The till compares for *different*, not *greater*,** and fetches only the topics that differ: the catalog by its existing cursor feed (`/products/sync`), the rate, the settings, the register, the wallets.
 - **Cost:** 50 tills every 3 seconds is about 17 tiny requests a second. A price change reaches a till within one interval (3 to 5 seconds), which is fine for prices.
 
@@ -78,7 +78,7 @@ Built from what exists (*Settings → Tills* enrols a device; the connection pag
 
 ## 9. Build order (each step ends green and updates this note and the plan's Progress)
 
-1. **`GET /api/v1/ping`** on the branch server: the `topic_versions` table (migration), the counters raised from the `eventsFor` hook, the `epoch`, the device-token guard (in the RBAC and anonymous-door tests); tests for versions that only rise, a restart that changes the epoch, and an unknown token.
+1. **`GET /api/v1/ping`** on the branch server. **Built (2026-11-27):** `events/versions.ts` (`TopicVersions`, in memory, fed by `bus.tap`), `modules/ping/routes.ts` (device-token guard, no legacy no-token shortcut), `docs/06`; tests `unit/versions` (4) and `integration/ping` (12: who may ping, the shape, the epoch, numbers that only rise and only for a real change); the existing anonymous and garbage-token security tests cover the new route without an edit. **Decision while building:** the counters are in memory with the `epoch`, not a table, because a restart already forces a refetch through the epoch (and a restore happens at a restart), so a table would add a migration and nothing else. **Consequence for step 2:** the till backend must be enrolled (it needs a device token to ping); a shop still in legacy single-till mode (no token) is "not enrolled" to the link monitor and the wizard (§7) is how it gets enrolled.
 2. **The link monitor** in the till backend and its `GET /till/link`; the screens block selling and show the message while it is down (cart kept, sign-in and checkout buttons explain why); heartbeat tests with a fake server (two misses, recovery, no flicker). `docs/02`, `docs/03` updated.
 3. **The disk catalog** in the till backend, filled by the ping and served on `/api/v1/products/sync`; the browser's IndexedDB copy removed; tests with 8,000 products and a restart in the middle of a sync.
 4. **The sale-in-doubt journal**, then removal of the outbox and `queued-discard` (with the safe upgrade step).

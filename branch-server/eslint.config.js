@@ -56,6 +56,7 @@ export default tseslint.config(
       'src/modules/services/**/*.ts',
       'src/modules/registers/**/*.ts',
       'src/modules/wallets/**/*.ts',
+      'src/modules/ping/**/*.ts',
       'src/modules/purchases/**/*.ts',
       'src/modules/inventory/**/*.ts',
       'src/modules/terminals/**/*.ts',
