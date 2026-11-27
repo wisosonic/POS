@@ -140,9 +140,9 @@ describe('the loop notices an outage and a recovery by itself', () => {
     expect((await status()).lastError).toBeNull();
   });
 
-  it('tells the screens when the state changes (a hint on the live-updates stream)', async () => {
+  it('tells the ping counters when the state changes (the sync topic)', async () => {
     const heard: string[] = [];
-    const stop = c.app.events.subscribe((e) => heard.push(e.type));
+    const stop = c.app.events.tap((e) => heard.push(e.type));
     await c.http
       .post(`${api}/sync/connect`)
       .set(auth(admin))

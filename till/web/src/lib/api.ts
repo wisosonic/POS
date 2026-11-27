@@ -98,20 +98,6 @@ async function refusedAsTerminal(res: Response): Promise<boolean> {
   }
 }
 
-/**
- * Open a long-lived GET (the live-updates stream) with the sign-in and the till's token. If the sign-in has expired it is renewed once,
- * like any other call. The caller reads `res.body` and decides what a refusal means.
- */
-export async function openStream(path: string, signal: AbortSignal): Promise<Response> {
-  let res = await send('GET', path, undefined, { signal });
-  if (res.status === 401 && (await refusedAsTerminal(res))) {
-    clearTerminalToken();
-    return res;
-  }
-  if (res.status === 401 && (await refreshSession())) res = await send('GET', path, undefined, { signal });
-  return res;
-}
-
 export async function api<T = unknown>(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,

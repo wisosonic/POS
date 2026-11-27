@@ -4,6 +4,7 @@ import { ApiError } from '../../lib/api';
 import { Icon } from '../../components/Icon';
 import { LanguageSwitch } from '../../components/LanguageSwitch';
 import { tNow, useT } from '../../store/lang';
+import { getTerminalToken } from '../../lib/terminal';
 import { useSession } from '../../store/session';
 
 export function LoginPage() {
@@ -60,6 +61,7 @@ export function LoginPage() {
           </div>
         )}
         {unreachable && <Link to="/connection">{t('Check the branch server address')}</Link>}
+        {!getTerminalToken() && <Link to="/setup">{t('Set up this computer as a till')}</Link>}
         <button className="btn primary big" type="submit" disabled={busy}>
           {t('Sign in')}
         </button>

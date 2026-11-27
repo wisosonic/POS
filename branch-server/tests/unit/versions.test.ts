@@ -28,10 +28,9 @@ describe('topic versions (the numbers the till ping reports)', () => {
     expect(Object.values(v.snapshot()).every((n) => n === 0)).toBe(true);
   });
 
-  it('is not a listening screen (the stream count stays 0), and a snapshot cannot be edited from outside', () => {
+  it('a snapshot cannot be edited from outside', () => {
     const bus = new EventBus();
     const v = new TopicVersions(bus);
-    expect(bus.size).toBe(0);
     const s = v.snapshot();
     s.catalog = 99;
     expect(v.snapshot().catalog).toBe(0);

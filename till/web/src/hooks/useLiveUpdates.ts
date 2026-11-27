@@ -1,13 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { openStream } from '../lib/api';
-import { startEvents, type LiveEvent } from '../lib/events';
+import { get } from '../lib/api';
+import { getTerminalToken } from '../lib/terminal';
+import { watchTopics, type PingAnswer, type Topic } from '../lib/topics';
 import { useUi } from '../store/ui';
 
 /**
- * Listen for the server's live updates while the till is open, and refresh only what the event says is stale:
- * a changed catalog is synced (after a short pause, so a burst of edits is fetched once), stock changes refresh the low-stock list,
- * and so on. After a dropped connection comes back, everything is refreshed, because events may have been missed.
+ * Keep the screens current (docs/14 §3): ask the branch server's ping every few seconds and refresh only the topics whose number moved.
+ * A changed catalog is synced (after a short pause, so a burst of edits is fetched once); stock refreshes the low-stock list, and so on.
+ * After a missed answer or a server restart everything is refreshed. A device that is not an enrolled till has no device token, so the
+ * ping would refuse it: it simply gets no live refresh (its screens still load fresh when opened).
  */
 export function useLiveUpdates(): void {
   const queryClient = useQueryClient();
@@ -19,24 +21,24 @@ export function useLiveUpdates(): void {
       timer = window.setTimeout(() => void useUi.getState().loadCatalog(), 800);
     };
 
-    const handle: Record<LiveEvent, () => void> = {
-      'catalog.changed': syncCatalog,
-      'stock.changed': () => invalidate('alerts'),
-      'rate.changed': () => invalidate('rate'),
-      'settings.changed': () => invalidate('settings'),
-      'register.updated': () => invalidate('register'),
-      'sale.completed': () => undefined, // the stock event that comes with it does the work
-      'sync.changed': () => invalidate('sync'),
-      'wallet.updated': () => invalidate('wallets'), // a manager counted a wallet or moved money in or out of one
+    const handle: Record<Topic, () => void> = {
+      catalog: syncCatalog,
+      stock: () => invalidate('alerts'),
+      rate: () => invalidate('rate'),
+      settings: () => invalidate('settings'),
+      register: () => invalidate('register'),
+      wallets: () => invalidate('wallets'), // a manager counted a wallet or moved money in or out of one
+      sync: () => invalidate('sync'),
     };
 
-    const stop = startEvents({
-      open: (signal) => openStream('/events', signal),
-      onEvent: (type) => handle[type](),
-      onConnected: (again) => {
-        if (!again) return; // the till has just loaded all of this itself
-        syncCatalog();
-        invalidate('alerts', 'rate', 'settings', 'register', 'terminal', 'wallets');
+    const stop = watchTopics({
+      ask: async () => {
+        if (!getTerminalToken()) return null;
+        return get<PingAnswer>('/ping', { noRefresh: true });
+      },
+      onChange: (topics) => {
+        topics.forEach((t) => handle[t]());
+        if (topics.length === Object.keys(handle).length) invalidate('terminal'); // everything: a restart, or answers were missed
       },
     });
     return () => {

@@ -30,6 +30,7 @@ export function DeviceNotATill() {
           </p>
           <EnrolForm />
           <Link to="/settings/terminals">{t('Go to the list of tills')}</Link>
+          <Link to="/setup">{t('Set up this computer as a till')}</Link>
         </div>
       ) : (
         <p className="muted">{t('Ask the admin to set it up (Settings → Tills), or sign in as the admin on this computer.')}</p>

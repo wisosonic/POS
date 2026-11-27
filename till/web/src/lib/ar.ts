@@ -277,6 +277,16 @@ export const AR: Record<string, string> = {
   'An admin has to be signed in on this computer to set it up as a till.':
     'يجب أن يكون المدير مسجّلاً الدخول على هذا الجهاز لإعداده كصندوق بيع.',
   'Enrolment code': 'رمز الإعداد',
+  'Set up this computer as a till': 'إعداد هذا الجهاز كنقطة بيع',
+  'Step {n} of {total}': 'الخطوة {n} من {total}',
+  Next: 'التالي',
+  Back: 'رجوع',
+  'Only an admin can set up a till.': 'المدير وحده يستطيع إعداد نقطة بيع.',
+  'Cannot reach the branch server. Check the address and try again.': 'تعذّر الوصول إلى خادم الفرع. تحقق من العنوان وحاول مرة أخرى.',
+  'On a computer that already works, open Settings → Tills, add this till and copy its code. Then type the admin’s sign-in and the code here.':
+    'على جهاز يعمل، افتح الإعدادات ← نقاط البيع، أضف هذه النقطة وانسخ رمزها. ثم اكتب هنا اسم المدير وكلمة مروره والرمز.',
+  'It is ready. Sign in to start selling.': 'الجهاز جاهز. سجّل الدخول لبدء البيع.',
+  'Go to sign in': 'الانتقال إلى تسجيل الدخول',
   'Set up this computer': 'إعداد هذا الجهاز',
   'This computer is not set up as a till': 'هذا الجهاز غير مُعدّ كصندوق بيع',
   'The shop has more than one till, and this computer has not been told which one it is. Selling is switched off here until it is.':

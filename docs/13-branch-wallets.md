@@ -91,7 +91,7 @@ New (all manager or admin; every route has a sign-in guard, rule 19, and goes in
 - `POST /wallets/counts` `{ purpose, note?, balances: [{method,currency,amount}] }`: every wallet bucket exactly once; one transaction; audited; answers the new state.
 - `GET /wallets/counts`: the history. `GET /wallets/entries?bucket&from&to&cursor`: the ledger.
 - `POST /wallets/movements` `{ bucket, type: 'in'|'out', amount, reason }`: a branch-only movement.
-- `GET /events`: `register.updated` also fires for wallet changes, and a new hint `wallet.updated` for the dashboard tile.
+- Events: `register.updated` also fires for wallet changes, and a new hint `wallet.updated` for the dashboard tile (the `wallets` topic of `GET /ping`).
 
 ## 6. Screens (`till/web`, later the branch dashboard)
 

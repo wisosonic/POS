@@ -19,6 +19,7 @@ const CustomersPage = page(() => import('./features/customers/CustomersPage'), '
 const DebtsPage = page(() => import('./features/customers/DebtsPage'), 'DebtsPage');
 const BackupsPage = page(() => import('./features/backups/BackupsPage'), 'BackupsPage');
 const ConnectionPage = page(() => import('./features/settings/ConnectionPage'), 'ConnectionPage');
+const SetupPage = page(() => import('./features/settings/SetupPage'), 'SetupPage');
 const RatePage = page(() => import('./features/settings/RatePage'), 'RatePage');
 const SettingsLayout = page(() => import('./features/settings/SettingsLayout'), 'SettingsLayout');
 const LanguagePage = page(() => import('./features/settings/LanguagePage'), 'LanguagePage');
@@ -74,6 +75,8 @@ export function App() {
           <Route path="/login" element={<LoginPage />} />
           {/* Where the branch server is: reachable without signing in, because it is what a till needs when it cannot sign in. */}
           <Route path="/connection" element={<ConnectionPage />} />
+          {/* Setting up a new till in one flow: the address, an admin's sign-in with the one-time code, done (docs/14 §7). */}
+          <Route path="/setup" element={<SetupPage />} />
           <Route element={<Protected />}>
             <Route path="/" element={<CheckoutPage />} />
             <Route path="/sales" element={<SalesPage />} />

@@ -19,7 +19,7 @@ export type AuthUser = { id: number; username: string; name: string; role: Role 
 declare module 'fastify' {
   interface FastifyInstance {
     db: Db;
-    /** Live updates for the tills (events/bus.ts). */
+    /** What changed, inside the server (events/bus.ts): feeds the ping's counters and the sync loop. */
     events: EventBus;
     versions: TopicVersions;
     /** Runs the heavy reports away from the thread that sells (modules/reports/runner.ts). */

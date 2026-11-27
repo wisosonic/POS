@@ -238,7 +238,7 @@ async function main() {
       await until(`branch ${code} is connected`, async () => (await http('GET', base, '/api/v1/sync/status', { token })).body.state === 'online', 60_000);
   });
 
-  await step('a rate set at HQ reaches both branches by itself (they pull every 10 s) and the till shows it', async () => {
+  await step('a rate set at HQ reaches both branches by itself (the branches ping HQ every 5 s) and the till shows it', async () => {
     must(await http('POST', url.hq, '/api/v1/exchange-rates', { token: HQ_TOKEN, body: { rateLbpPerUsd: 91000 } }), 201, 'HQ sets the rate');
     for (const [code, base, token] of [['A', url.a, adminA], ['B', url.b, adminB]])
       await until(`branch ${code} has the new rate`, async () => (await http('GET', base, '/api/v1/exchange-rates/current', { token })).body.rateLbpPerUsd === 91000, 45_000);
@@ -411,28 +411,22 @@ async function main() {
     check((await put([])).status === 200 && (await get()).length === 0, 'the journal should be empty again');
   });
 
-  await step('the till still serves its screens and the live-update stream reaches a screen through it', async () => {
+  await step('the till still serves its screens, and a sale at the branch shows in the ping that reaches a screen through it', async () => {
     const page = await fetch(`${url.till}/`, { headers: { Accept: 'text/html' } });
     check(page.status === 200 && (await page.text()).includes('<div id="root">'), 'the till did not serve its screens');
-    const ctl = new AbortController();
-    const stream = await fetch(`${url.till}/api/v1/events`, { headers: { Authorization: `Bearer ${cashierA}`, 'X-Terminal-Token': terminalToken }, signal: ctl.signal });
-    check(stream.status === 200 && (stream.headers.get('content-type') ?? '').includes('text/event-stream'), `the stream answered ${stream.status}`);
-    // A sale made at branch A must reach a screen listening through the till.
-    const reader = stream.body.getReader();
-    const got = (async () => {
-      let text = '';
-      for (let i = 0; i < 40 && !text.includes('sale.completed'); i++) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        text += new TextDecoder().decode(value);
-      }
-      return text;
-    })();
-    await sleep(500);
+    const ping = async () => {
+      const res = await fetch(`${url.till}/api/v1/ping`, { headers: { 'X-Terminal-Token': terminalToken } });
+      check(res.status === 200, `the ping answered ${res.status}`);
+      return res.json();
+    };
+    const before = await ping();
     must(await http('POST', url.till, '/api/v1/sales', { token: cashierA, terminal: terminalToken, body: saleBody(productA.id), headers: { 'Idempotency-Key': randomUUID() } }), 201, 'sell');
-    const text = await Promise.race([got, sleep(15_000).then(() => '')]);
-    ctl.abort();
-    check(text.includes('sale.completed'), 'no live update arrived through the till');
+    const after = await ping();
+    check(after.epoch === before.epoch, 'the epoch must not change while the server runs');
+    check(after.versions.stock > before.versions.stock, 'the stock number in the ping should have gone up after a sale');
+    // The live-update stream is gone (docs/14 step 6): nothing answers at its old address.
+    const gone = await fetch(`${url.till}/api/v1/events`, { headers: { Authorization: `Bearer ${cashierA}`, 'X-Terminal-Token': terminalToken } });
+    check(gone.status === 404, `GET /events should not exist any more (answered ${gone.status})`);
   });
 }
 

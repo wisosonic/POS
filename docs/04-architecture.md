@@ -2,7 +2,7 @@
 
 ## 1. Context
 
-A **branch** is one server and one or more **tills**. The simplest shop, and the shop as it was first built, is one Windows PC with the server, the browser and the printer together (the diagram below). With several tills, the server runs on one PC and each till is a browser on a PC or tablet with its own device token, its own register session and its own warehouse (`docs/11-multi-branch.md` §3.4). A till whose receipt printer is not on the server's PC runs a small **print agent** that connects out to the server (`docs/06-api-spec.md`, "Print agent"). Every till hears about price, stock, rate and register changes at once over the live-updates stream (§ below), and heavy reports run in a worker thread so they never hold up a sale. A central **HQ** server for many branches is designed in `docs/11-multi-branch.md` and **not built yet**.
+A **branch** is one server and one or more **tills**. The simplest shop, and the shop as it was first built, is one Windows PC with the server, the browser and the printer together (the diagram below). With several tills, the server runs on one PC and each till is a browser on a PC or tablet with its own device token, its own register session and its own warehouse (`docs/11-multi-branch.md` §3.4). A till whose receipt printer is not on the server's PC runs a small **print agent** that connects out to the server (`docs/06-api-spec.md`, "Print agent"). Every till learns of price, stock, rate and register changes within a few seconds from the branch server's ping (§ below), and heavy reports run in a worker thread so they never hold up a sale. A central **HQ** server for many branches is designed in `docs/11-multi-branch.md` and **not built yet**.
 
 **The single-PC shop:**
 
@@ -91,7 +91,7 @@ Receipt: POST /api/v1/sales/{id}/print (server sends ASCII ESC/POS to the USB pr
 
 ### 4.3 Real-time
 
-SSE endpoint `/api/v1/events` streams `sale.completed`, `stock.changed`, `catalog.changed`, `register.updated`, `rate.changed`, `settings.changed` (built; `docs/06-api-spec.md`). The events are only hints with no data in them: a till that hears one asks for the real thing through the normal authorised calls, and one that missed some refreshes everything on reconnect. With several tills in a branch (`docs/11-multi-branch.md` §3.4) it is what keeps every till's prices, low-stock list, rate and register current without a timer, and it is how a price changed at HQ will reach the tills later.
+There is no live stream any more (the SSE endpoint `/api/v1/events` was removed, `docs/14` step 6). The server publishes an event inside itself when something changes (`sale.completed`, `stock.changed`, `catalog.changed`, `register.updated`, `rate.changed`, `settings.changed`, `wallet.updated`, `sync.changed`), and `GET /ping` reports one number per topic that only rises, plus an `epoch` (`docs/06-api-spec.md`). A till asks the ping every few seconds, refreshes only the topics whose number moved, and refreshes everything after a missed answer or a restart. It is what keeps every till's prices, low-stock list, rate and register current without a timer of its own per screen, and how a price changed at HQ reaches the tills.
 The PWA invalidates the matching TanStack Query keys. Heartbeat every 20 s, and `Last-Event-ID` resume.
 
 ## 5. Data model (SQLite)

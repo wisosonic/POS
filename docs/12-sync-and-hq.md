@@ -45,7 +45,7 @@ HQ has its own tables for each branch-owned table, with the same columns plus a 
 HQ-owned tables get the same trigger capture into a `change_log` on HQ. A branch asks `GET /sync/changes?cursor=<last seq>&limit=500`, applies the page in one transaction (upsert or delete by id), stores the new cursor, and asks again until there is nothing left. The first sync of 8,000 products is about 16 pages and is resumable.
 
 - **Ids are HQ's.** A branch stores HQ-owned rows under the id HQ gave them (no local auto-numbering), so "product 4711" means the same thing everywhere. The first branch's existing catalog is adopted by HQ **with its current ids**, so nothing already sold is renumbered.
-- When a batch changes the catalog, the branch publishes `catalog.changed` on its live-updates stream, so every till refreshes within a second or two.
+- When a batch changes the catalog, the branch publishes `catalog.changed` inside the server, which moves the `catalog` number in its ping, so every till refreshes within a few seconds.
 
 ## 6. Connecting a branch (enrolment)
 
@@ -109,7 +109,7 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 | POST | `/api/v1/sync/connect` | admin | `{ url, code }`; `400` for an address that is not `http(s)://host`, `422 ENROL_CODE_INVALID`, `502 HQ_UNREACHABLE` |
 | POST | `/api/v1/sync/disconnect` | admin | back to working alone |
 
-**The loop** (`modules/sync/agent.ts`, inside the branch server, never on the sale path): while HQ answers it pings every 5 s and pulls changes only when the ping's `changeSeq` is ahead of what it applied (or every 60 s as a safety net); when a call fails the state becomes `offline` and it asks again after 3 s, 6 s, 12 s ... up to 30 s; **the first answer after an outage starts the catch-up** (`onReconnect`, where P2b/P2c plug in); if HQ says the branch is no longer accepted the state is `refused` and it only checks once a minute. Each state change publishes `sync.changed` on the live-updates stream. The loop stops at once when the server closes (`preClose`).
+**The loop** (`modules/sync/agent.ts`, inside the branch server, never on the sale path): while HQ answers it pings every 5 s and pulls changes only when the ping's `changeSeq` is ahead of what it applied (or every 60 s as a safety net); when a call fails the state becomes `offline` and it asks again after 3 s, 6 s, 12 s ... up to 30 s; **the first answer after an outage starts the catch-up** (`onReconnect`, where P2b/P2c plug in); if HQ says the branch is no longer accepted the state is `refused` and it only checks once a minute. Each state change publishes `sync.changed` (the `sync` number of the ping). The loop stops at once when the server closes (`preClose`).
 
 **Run the whole thing on one machine:** `npm run dev:chain` starts HQ (:4000) and branches A (:3000) and B (:3001), each with its own data folder under `data/chain/`. With `CHAIN_ADMIN_PASSWORD=<any password for this throw-away data>` set it also creates an `admin` in each branch, adds the branches at HQ and connects them. It was run for real: both branches online, HQ saw both, no secret reached the output. To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev --prefix till/web`.
 

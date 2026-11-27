@@ -40,7 +40,6 @@ import { SyncAgent } from './modules/sync/agent';
 import { pullOnce } from './modules/sync/down';
 import { pushOnce } from './modules/sync/up';
 import syncRoutes from './modules/sync/routes';
-import eventRoutes from './events/routes';
 import { AGENT_HEADER, TERMINAL_HEADER, resolveAgent, resolveTerminal, type Terminal } from './modules/terminals/service';
 import settingsRoutes from './modules/settings/routes';
 import userRoutes from './modules/users/routes';
@@ -180,7 +179,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
   await app.register(authPlugin, { db, jwtSecret: config.jwtSecret });
   app.decorate('dbPath', resolve(options.databasePath));
   app.decorate('database', createSqliteDatabase(db));
-  // Live updates (docs/06 `GET /events`): when a request that changed something succeeds, the tills that are listening are told.
+  // What changed (docs/14 §3): when a request that changed something succeeds, an event is published; the ping's counters and the sync loop read them.
   // This happens after the answer has gone, so it can never delay or fail a sale.
   const events = new EventBus();
   app.decorate('events', events);
@@ -271,7 +270,6 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(terminalRoutes);
       await api.register(agentRoutes);
       await api.register(syncRoutes);
-      await api.register(eventRoutes, { bus: events });
       await api.register(pingRoutes);
       await api.register(registerRoutes);
       await api.register(walletRoutes);

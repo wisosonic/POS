@@ -70,38 +70,36 @@ describe('which requests cause which events', () => {
 });
 
 describe('the event bus', () => {
-  it('tells every listener, with the type and a time and nothing else', () => {
+  it('tells every watcher, with the type and a time and nothing else', () => {
     const bus = new EventBus();
     const a: unknown[] = [];
     const b: unknown[] = [];
-    bus.subscribe((e) => a.push(e));
-    bus.subscribe((e) => b.push(e));
+    bus.tap((e) => a.push(e));
+    bus.tap((e) => b.push(e));
     bus.publish('rate.changed');
     expect(a).toHaveLength(1);
     expect(a[0]).toEqual(b[0]);
     expect(Object.keys(a[0] as object).sort()).toEqual(['at', 'type']);
   });
 
-  it('stops telling a listener that has unsubscribed', () => {
+  it('stops telling a watcher that has stopped', () => {
     const bus = new EventBus();
     const seen: unknown[] = [];
-    const stop = bus.subscribe((e) => seen.push(e));
+    const stop = bus.tap((e) => seen.push(e));
     bus.publish('stock.changed');
     stop();
     bus.publish('stock.changed');
     expect(seen).toHaveLength(1);
-    expect(bus.size).toBe(0);
   });
 
-  it('a listener that throws (a dead connection) is dropped and never stops the others or the caller', () => {
+  it('a watcher that throws never stops the others or the caller', () => {
     const bus = new EventBus();
     const seen: unknown[] = [];
-    bus.subscribe(() => {
-      throw new Error('socket closed');
+    bus.tap(() => {
+      throw new Error('broken');
     });
-    bus.subscribe((e) => seen.push(e));
+    bus.tap((e) => seen.push(e));
     expect(() => bus.publish('catalog.changed')).not.toThrow();
     expect(seen).toHaveLength(1);
-    expect(bus.size).toBe(1);
   });
 });

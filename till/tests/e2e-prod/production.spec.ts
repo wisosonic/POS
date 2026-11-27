@@ -248,3 +248,52 @@ test('a till whose branch server is gone says so and links to the page that fixe
   await page.getByRole('link', { name: 'Check the branch server address' }).click();
   await expect(page).toHaveURL(/\/connection$/);
 });
+
+// docs/14 §7: setting up a new till is one flow: the address (tested before going on), an admin's sign-in with the one-time code, done.
+// The address step runs against the real till program and branch server. The sign-in and the enrolment are answered by the test, because
+// really enrolling would take this shop out of single-till mode for every other test.
+test('a new till is set up in one flow: address tested, admin and code, done; nobody is left signed in', async ({ page, context }) => {
+  const calls: string[] = [];
+  await context.route('**/api/v1/auth/login', (route) => {
+    calls.push('login');
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accessToken: 'stub-access', user: { id: 1, username: 'admin', role: 'admin', name: 'Admin' } }),
+    });
+  });
+  await context.route('**/api/v1/terminals/enrol', (route) => {
+    calls.push('enrol:' + (route.request().postDataJSON() as { code: string }).code);
+    return route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ token: 'device-token-for-test', terminal: { id: 2, code: 'T2', name: 'Till 2' } }),
+    });
+  });
+  await context.route('**/api/v1/auth/logout', (route) => {
+    calls.push('logout');
+    return route.fulfill({ status: 204 });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Set up this computer as a till' }).click();
+  await expect(page.getByTestId('setup-step')).toContainText('Step 1 of 3');
+  // A wrong address does not let the person go on.
+  await page.getByTestId('setup-address').fill('127.0.0.1:3399');
+  await page.getByTestId('setup-next').click();
+  await expect(page.getByRole('status').filter({ hasText: 'no branch server' })).toBeVisible();
+  await expect(page.getByTestId('setup-step')).toContainText('Step 1 of 3');
+  // The real one does.
+  const saved = (await (await page.request.get('/till/config')).json()) as { branchServer: string };
+  await page.getByTestId('setup-address').fill(saved.branchServer);
+  await page.getByTestId('setup-next').click();
+  await expect(page.getByTestId('setup-step')).toContainText('Step 2 of 3');
+  await page.getByTestId('setup-username').fill('admin');
+  await page.getByTestId('setup-password').fill('whatever-the-admin-has');
+  await page.getByTestId('setup-code').fill('ABCDE-FGHIJ');
+  await page.getByTestId('setup-enrol').click();
+  await expect(page.getByTestId('setup-done')).toContainText('This computer is now Till 2');
+  expect(calls).toEqual(['login', 'enrol:ABCDE-FGHIJ', 'logout']); // the admin is signed out again at once
+  expect(await page.evaluate(() => localStorage.getItem('pos.terminalToken'))).toBe('device-token-for-test');
+  await page.evaluate(() => localStorage.removeItem('pos.terminalToken')); // leave the shared shop as it was
+});

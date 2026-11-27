@@ -1,7 +1,7 @@
-// Live updates for the tills (docs/04-architecture.md, docs/06-api-spec.md `GET /events`). When something changes that other screens show
-// (a price, the stock, the exchange rate, a register), the server says so over a stream the tills keep open, so they refresh at once
-// instead of on a timer. The events are HINTS ("the catalog changed"), never data: a till that hears one asks the server for the real
-// thing through the normal, authorised calls, and a till that missed any (it was offline) simply refreshes everything when it reconnects.
+// What changed, inside the server (docs/14-connection-and-till-backend.md §3). When something changes that other screens show (a price, the
+// stock, the exchange rate, a register), the server publishes an event here. Nothing streams to a screen any more: the till's ping reads
+// the per-topic counters that `TopicVersions` keeps from these events, and the sync loop watches them to send a sale up. An event is a
+// HINT ("the catalog changed"), never data.
 
 export type EventType =
   | 'catalog.changed'
@@ -16,22 +16,14 @@ export type EventType =
 export type PosEvent = { type: EventType; at: string };
 
 export class EventBus {
-  private readonly listeners = new Set<(e: PosEvent) => void>();
-
-  /** Listen to every event. Returns the function that stops listening. */
-  subscribe(fn: (e: PosEvent) => void): () => void {
-    this.listeners.add(fn);
-    return () => void this.listeners.delete(fn);
-  }
-
-  /** Server-side watchers (the sync loop): like `subscribe`, but not a screen, so `size` (the listening screens) does not count them. */
+  /** Server-side watchers (the ping's counters, the sync loop). Returns the function that stops watching. */
   private readonly taps = new Set<(e: PosEvent) => void>();
   tap(fn: (e: PosEvent) => void): () => void {
     this.taps.add(fn);
     return () => void this.taps.delete(fn);
   }
 
-  /** Tell everyone. A listener that throws (a dead connection) never stops the others, and never affects the request that caused it. */
+  /** Tell every watcher. A watcher that throws never stops the others, and never affects the request that caused it. */
   publish(type: EventType): void {
     const event: PosEvent = { type, at: new Date().toISOString() };
     for (const fn of [...this.taps]) {
@@ -41,17 +33,6 @@ export class EventBus {
         /* a watcher must never affect the request */
       }
     }
-    for (const fn of [...this.listeners]) {
-      try {
-        fn(event);
-      } catch {
-        this.listeners.delete(fn);
-      }
-    }
-  }
-
-  get size(): number {
-    return this.listeners.size;
   }
 }
 
