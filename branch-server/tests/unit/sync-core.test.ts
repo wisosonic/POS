@@ -30,8 +30,24 @@ const goodSale = (over: Partial<FactRow> = {}): FactRow => ({
 });
 
 describe('what is synced', () => {
-  it('lists the sale cluster, each table starting with its id', () => {
-    expect(SYNC_TABLES.map((t) => t.name)).toEqual(['sales', 'sale_items', 'payments', 'stock_movements']);
+  it('lists the sale cluster first, then what P4a added, each table starting with its id', () => {
+    const names = SYNC_TABLES.map((t) => t.name);
+    expect(names.slice(0, 4)).toEqual(['sales', 'sale_items', 'payments', 'stock_movements']);
+    expect(new Set(names).size).toBe(names.length); // no table twice
+    for (const t of [
+      'returns',
+      'return_items',
+      'customer_payments',
+      'register_sessions',
+      'register_balances',
+      'register_movements',
+      'expenses',
+      'purchases',
+      'wallet_entries',
+      'wallet_counts',
+      'service_sales',
+    ])
+      expect(names).toContain(t);
     for (const t of SYNC_TABLES) {
       expect(t.columns[0]).toEqual({ name: 'id', kind: 'int', nullable: false });
       expect(new Set(t.columns.map((c) => c.name)).size).toBe(t.columns.length); // no column twice

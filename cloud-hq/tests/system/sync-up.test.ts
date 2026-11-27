@@ -78,7 +78,10 @@ describe('sales travel to HQ by themselves', () => {
     await sell();
     expect(await until(inSync)).toBe(true);
     const v = await verify();
-    expect(v.tables.map((t: { table: string }) => t.table)).toEqual(['sales', 'sale_items', 'payments', 'stock_movements']);
+    const names = v.tables.map((t: { table: string }) => t.table);
+    expect(names.slice(0, 4)).toEqual(['sales', 'sale_items', 'payments', 'stock_movements']); // the sale cluster first (P2b), then what P4a added
+    for (const t of ['returns', 'register_sessions', 'register_balances', 'expenses', 'purchases', 'wallet_entries'])
+      expect(names).toContain(t);
     for (const t of v.tables) expect(t.match, t.table).toBe(true);
     expect(v.tables[0].hq.count).toBeGreaterThanOrEqual(6);
   });
