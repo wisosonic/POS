@@ -2,6 +2,7 @@ import { createReadStream, mkdirSync, readFileSync, renameSync, statSync, writeF
 import http, { type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import https from 'node:https';
 import { extname, join, normalize, resolve, sep } from 'node:path';
+import { createCatalogCopy, type CatalogCopy } from './catalogCopy';
 import { createLinkMonitor, type LinkMonitor, type LinkSnapshot } from './link';
 
 // The till's own small server (docs/11-multi-branch.md §8.4). It runs on the till PC and does three things:
@@ -10,7 +11,8 @@ import { createLinkMonitor, type LinkMonitor, type LinkSnapshot } from './link';
 //      this till's settings, and gives the answer back unchanged. It decides nothing: totals, prices, stock and sign-in stay the
 //      branch server's job;
 //   3. keeps the one setting a till needs, the branch server's address, and can test it (`/till/...`, this PC only).
-// It has no database and imports nothing from the other projects. Rule 19 (every route needs a sign-in) is about the branch
+// It imports nothing from the other projects and holds no business data except a read-only copy of the products and their prices
+// on disk (catalogCopy.ts, docs/14 §4). Rule 19 (every route needs a sign-in) is about the branch
 // server; this server holds no data and has no sign-in of its own, so its protection is: it listens on this PC only by default, it
 // answers only to this PC's own names (so a web page on the internet cannot reach it through DNS rebinding), and the settings
 // routes refuse anyone who is not on this PC.
@@ -30,6 +32,8 @@ export type TillServerOptions = {
   connectTimeoutMs?: number;
   /** How the heartbeat to the branch server runs (docs/14). The defaults are right for a shop; tests use short times. */
   link?: { intervalMs?: number; timeoutMs?: number; missesToFail?: number; enabled?: boolean };
+  /** The catalog copy kept on disk (docs/14 §4). `enabled: false` turns it off (everything is then passed to the branch server). */
+  catalog?: { enabled?: boolean; pageSize?: number; safetyMs?: number; pageTimeoutMs?: number };
   log?: (message: string) => void;
 };
 
@@ -159,7 +163,18 @@ export function createTillServer(opts: TillServerOptions): TillServer {
   const connectTimeout = opts.connectTimeoutMs ?? 5_000;
   let selfPort = opts.port;
   const linkOpts = opts.link ?? {};
-  const link = createLinkMonitor({ branchServer: () => currentBranchServer().url, ...linkOpts, log });
+  // The catalog copy on this PC's disk (docs/14 §4), kept current by the heartbeat.
+  const catalogOpts = opts.catalog ?? {};
+  const catalogCopy: CatalogCopy | null =
+    catalogOpts.enabled === false
+      ? null
+      : createCatalogCopy({ dataDir: opts.dataDir, branchServer: () => currentBranchServer().url, ...catalogOpts, log });
+  const link = createLinkMonitor({
+    branchServer: () => currentBranchServer().url,
+    ...linkOpts,
+    onPing: (info) => catalogCopy?.onPing(info),
+    log,
+  });
 
   function loadSaved(): Saved {
     try {
@@ -208,6 +223,13 @@ export function createTillServer(opts: TillServerOptions): TillServer {
       const snap: LinkSnapshot = link.snapshot();
       return json(res, 200, snap);
     }
+    // How the copy of the catalog on this PC is doing (this PC only; no product data, no token).
+    if (path === '/till/catalog' && req.method === 'GET')
+      return json(
+        res,
+        200,
+        catalogCopy?.status() ?? { ready: false, products: 0, watermark: null, pulling: false, lastPullAt: null, lastError: null },
+      );
     if (path === '/till/config' && req.method === 'GET') {
       const { url, source } = currentBranchServer();
       return json(res, 200, { branchServer: url, source });
@@ -286,6 +308,30 @@ export function createTillServer(opts: TillServerOptions): TillServer {
         return { ok: false, url, reason: 'REFUSED', detail: 'The PC answered but no branch server is running on that port' };
       return { ok: false, url, reason: 'UNREACHABLE', detail: 'Cannot reach that address' };
     }
+  }
+
+  // ---- the catalog, answered from this PC's own copy (docs/14 §4)
+  // The screens ask `GET /api/v1/products/sync` (paged, `since`/`afterId`/`limit`). When the copy holds a whole catalog, came from THIS
+  // branch server and was filled by THIS till's token (the screen must send the same token), it answers from disk, so a scan works at
+  // once and a price list is not fetched across the network on every page load. In every other case the call goes to the branch server
+  // as before. Returns true when it answered.
+  function serveCatalog(req: IncomingMessage, res: ServerResponse): boolean {
+    if (!catalogCopy || req.method !== 'GET') return false;
+    const token = req.headers['x-terminal-token'];
+    if (!catalogCopy.canServe(typeof token === 'string' ? token : undefined)) return false;
+    const q = new URL(req.url ?? '/', 'http://till.invalid').searchParams;
+    const since = q.get('since') ?? '';
+    const afterRaw = q.get('afterId');
+    const limitRaw = q.get('limit');
+    const afterId = afterRaw === null ? undefined : Number(afterRaw);
+    const limit = limitRaw === null ? undefined : Number(limitRaw);
+    const bad =
+      since.length > 40 ||
+      (afterId !== undefined && (!Number.isInteger(afterId) || afterId < 0)) ||
+      (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 2000));
+    if (bad) return false; // let the branch server say what is wrong, in its own words
+    json(res, 200, catalogCopy.store.readFeed(since, afterId, limit));
+    return true;
   }
 
   // ---- the pass-through to the branch server
@@ -382,6 +428,7 @@ export function createTillServer(opts: TillServerOptions): TillServer {
       }
       const path = (req.url ?? '/').split('?')[0] ?? '/';
       if (path.startsWith('/till/')) return await tillRoute(req, res, path);
+      if (path === '/api/v1/products/sync' && serveCatalog(req, res)) return;
       if (path.startsWith('/api/') || path.startsWith('/uploads/')) return proxy(req, res);
       if (req.method === 'GET' || req.method === 'HEAD') return serveWeb(req, res, path);
       return problem(res, 405, 'METHOD_NOT_ALLOWED', 'Not allowed');
@@ -410,7 +457,7 @@ export function createTillServer(opts: TillServerOptions): TillServer {
         link.stop();
         // Held connections (the live-update stream) would keep the server open for ever: end them first.
         server.closeAllConnections();
-        server.close(() => resolveClose());
+        server.close(() => void (catalogCopy?.close() ?? Promise.resolve()).finally(() => resolveClose()));
       }),
   };
 }

@@ -362,6 +362,20 @@ async function main() {
     check(await inSync(url.b, adminB), 'branch B disagrees with HQ after the outage');
   });
 
+  await step('the till copies the catalog onto its own disk by itself and follows a price changed at the branch (docs/14 step 3)', async () => {
+    const catalogOf = async () => (await http('GET', url.till, '/till/catalog', {})).body;
+    await until('the till reports a complete catalog copy', async () => (await catalogOf()).ready === true, 30_000);
+    const feed = async () => (await http('GET', url.till, '/api/v1/products/sync?limit=500', { terminal: terminalToken })).body;
+    const towel = async () => (await feed()).data.find((p) => p.id === productA.id);
+    const first = await towel();
+    check(first && first.priceMinor === 75000, `the till's copy should hold the towel at 75000, got ${JSON.stringify(first)}`);
+    check(first.costMinor === 0 && first.qty === '0', 'the till copy must not carry the cost or the stock');
+    must(await http('PATCH', url.a, `/api/v1/products/${productA.id}`, { token: adminA, body: { priceMinor: 76000 } }), 200, 'the branch changes the price');
+    await until('the till copy follows the price change', async () => (await towel())?.priceMinor === 76000, 30_000);
+    must(await http('PATCH', url.a, `/api/v1/products/${productA.id}`, { token: adminA, body: { priceMinor: 75000 } }), 200, 'the branch puts the price back');
+    await until('the till copy follows the price back', async () => (await towel())?.priceMinor === 75000, 30_000);
+  });
+
   await step('the branch server goes away: the till says so in a way the screens treat as offline; when it is back the till works again', async () => {
     // The till watches its branch server by itself (docs/14): with its device token it pings, and the answer is what stops selling.
     const linkOf = async () => (await http('GET', url.till, '/till/link', { terminal: terminalToken })).body;
@@ -373,6 +387,9 @@ async function main() {
     await until('the till reports selling blocked once the branch server stops answering', async () => (await linkOf()).blocked === true, 20_000);
     const r = await http('POST', url.till, '/api/v1/sales', { token: cashierA, terminal: terminalToken, body: saleBody(productA.id), headers: { 'Idempotency-Key': randomUUID() } });
     check(r.status === 502 && r.headers.get('x-till-proxy-error') === 'BRANCH_UNREACHABLE', `expected the till's own 502 mark, got ${r.status}`);
+    // The catalog copy is on the till's own disk: scanning and searching still have their prices while the branch server is away.
+    const copy = await http('GET', url.till, '/api/v1/products/sync?limit=500', { terminal: terminalToken });
+    check(copy.status === 200 && copy.body.data.some((p) => p.id === productA.id), `the till should answer the catalog from its disk, got ${copy.status}`);
     const test = must(await http('POST', url.till, '/till/test', { body: {} }), 200, 'test the address');
     check(test.ok === false && test.reason === 'REFUSED', `the till should report a refused connection, got ${JSON.stringify(test)}`);
     restart('branch-a');

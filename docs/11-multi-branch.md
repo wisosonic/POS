@@ -194,7 +194,7 @@ Step (b) is done, see §8.4. Still to do, and known to be short of the goal: (1)
 
 ### 8.4 The till's own server (step b, 2026-11-24)
 
-The till PC runs one small Node program, `till/agent/src/tillServer.ts` (`npm run serve --prefix till`; it listens on `127.0.0.1:8080`, `PORT` and `HOST` change that). It has no database and imports nothing from another project. It does three things:
+The till PC runs one small Node program, `till/agent/src/tillServer.ts` (`npm run serve --prefix till`; it listens on `127.0.0.1:8080`, `PORT` and `HOST` change that). It imports nothing from another project, and holds no business data except a **read-only copy of the products and their prices** in its own SQLite file (`catalog.db`, docs/14 §4). It does these things:
 
 1. **Serves the till screens** (`till/web/dist`, or `WEB_DIST`) with the same security headers as the branch server (`script-src 'self'`), hashed files cached for good, the page never cached, and a page address answered with the app. Nothing outside the built folder can be read, however the address is written.
 2. **Passes the screens' calls to the branch server** (`/api/...`, `/uploads/...`, and so the live-update stream and the agent's long waits) at the address saved in this till's settings, and gives the answer back unchanged: status, body, cookie. It decides nothing, so totals, prices, stock and sign-in remain the branch server's job. It strips the browser's `Origin` and `Referer` (they name the till; the till server has already checked them) and sends the branch server's own name in `Host`. A screen that closes (or a stream that ends) makes it let go of the branch server at once. A branch server that does not answer the connection within 5 seconds (`connectTimeoutMs`) is reported, not waited for.

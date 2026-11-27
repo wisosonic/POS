@@ -35,6 +35,8 @@ export type LinkOptions = {
   intervalMs?: number;
   timeoutMs?: number;
   missesToFail?: number;
+  /** Called after every good ping with the till's token (in memory) and what the answer said, so the catalog copy can follow it. */
+  onPing?: (info: { token: string; epoch: string | null; versions: Record<string, number> | null }) => void;
   log?: (message: string) => void;
 };
 
@@ -134,12 +136,18 @@ export function createLinkMonitor(opts: LinkOptions): LinkMonitor {
       if (res.ok) {
         if (usingToken) {
           if (body.ok !== true) return miss('BAD_ANSWER');
-          return good({
+          good({
             watching,
             serverTime: typeof body.serverTime === 'string' ? body.serverTime : null,
             epoch: typeof body.epoch === 'string' ? body.epoch : null,
             versions: (body.versions as Record<string, number> | undefined) ?? null,
           });
+          try {
+            opts.onPing?.({ token: usingToken, epoch: snap.epoch, versions: snap.versions });
+          } catch (e) {
+            log(`The ping listener failed: ${(e as Error).message}`); // never let a listener stop the heartbeat
+          }
+          return;
         }
         return good({ watching, serverTime: null, epoch: null, versions: null });
       }

@@ -1,10 +1,10 @@
 import { normalizeBarcode } from '@pos/shared';
 import { get } from './api';
-import { indexedDbKV, type KV } from './kv';
+import { memoryKV, type KV } from './kv';
 import type { Product } from './types';
 
-// The till keeps its own copy of the catalog, so a scan is a map lookup (instant) and still works if the server is briefly
-// unreachable. It is refreshed with the server's delta feed (/products/sync), which also delivers deactivated products.
+// The till screen holds the catalog in memory, so a scan is a map lookup (instant). It is filled and refreshed with the delta feed
+// (/products/sync), which also delivers deactivated products. On a till PC that feed comes from the till's own disk copy (docs/14 §4).
 
 /** One page of the feed. `next` says where the following page starts; it is null (or missing, for an older server) on the last. */
 type Feed = { data: Product[]; serverTime: string; next?: { since: string; afterId: number } | null };
@@ -128,7 +128,18 @@ export class Catalog {
   }
 }
 
-/** The till's catalog, kept on this computer. */
-export const catalog = new Catalog(indexedDbKV('till'), (since, afterId) =>
+/**
+ * The till screen's working catalog, in memory only. The copy that survives a restart is on the till PC's disk, kept by the till's own
+ * server, which answers this same feed from it (docs/14 §4); a screen served straight by the branch server asks the branch server. Either
+ * way a reload costs a few small local answers, not a copy in the browser to keep in step.
+ */
+export const catalog = new Catalog(memoryKV(), (since, afterId) =>
   get<Feed>(`/products/sync?since=${encodeURIComponent(since)}&limit=${PAGE_SIZE}${afterId === undefined ? '' : `&afterId=${afterId}`}`),
 );
+
+// Older versions of the till kept the catalog in the browser (IndexedDB database "till"). It is not used any more: remove it once.
+try {
+  if (typeof indexedDB !== 'undefined') indexedDB.deleteDatabase('till');
+} catch {
+  /* storage blocked: nothing to remove */
+}
