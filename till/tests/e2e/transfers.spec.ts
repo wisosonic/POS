@@ -41,6 +41,21 @@ const pickList = {
   ],
 };
 
+const delivery = {
+  id: 21,
+  orderId: 8,
+  supplier: 'Almarai Co',
+  currency: 'LBP',
+  note: null,
+  orderedAt: '2026-11-28T07:00:00.000Z',
+  status: 'open',
+  complete: false,
+  items: [
+    { itemId: 101, productId: 1, name: 'Palletised rice', ordered: '100', received: '60', outstanding: '40' },
+    { itemId: 102, productId: 2, name: 'Sugar 1kg', ordered: '20', received: '0', outstanding: '20' },
+  ],
+};
+
 async function managerOnTransfers(page: Page, kind: 'sale' | 'stock') {
   const posted: { path: string; body: unknown; key: string | undefined }[] = [];
   const post = (path: string, r: { request(): { postDataJSON(): unknown; headers(): Record<string, string> } }) =>
@@ -64,6 +79,11 @@ async function managerOnTransfers(page: Page, kind: 'sale' | 'stock') {
   await page.route('**/api/v1/incoming?**', (r) =>
     r.fulfill({ json: { data: r.request().url().includes('status=received') ? [] : [incoming] } }),
   );
+  await page.route('**/api/v1/deliveries?**', (r) => r.fulfill({ json: { data: [delivery] } }));
+  await page.route('**/api/v1/deliveries/*/receive', (r) => {
+    post('/receive', r);
+    return r.fulfill({ status: 201, json: { receiptId: 1 } });
+  });
   await page.route('**/api/v1/pick-lists?**', (r) => r.fulfill({ json: { data: [pickList] } }));
   await page.route('**/api/v1/stock-requests?**', (r) => r.fulfill({ json: { data: requests, nextCursor: null } }));
   await page.route('**/api/v1/shipments?**', (r) => r.fulfill({ json: { data: [], nextCursor: null } }));
@@ -195,6 +215,33 @@ test.describe('Transfers (US-HQ-transfers)', () => {
         ],
       },
     });
+  });
+
+  test('a stock branch receives what HQ bought, in parts: only the lines that arrived are sent, and never more than is still to come', async ({
+    page,
+  }) => {
+    const posted = await managerOnTransfers(page, 'stock');
+    await page.getByRole('tab', { name: 'Deliveries (1)' }).click();
+    const card = page.getByTestId('delivery');
+    await expect(card).toContainText('From Almarai Co');
+    await expect(page.getByLabel('Arrived: Palletised rice')).toHaveValue('40'); // still to arrive
+    await expect(page.getByLabel('Arrived: Sugar 1kg')).toHaveValue('20');
+    await page.getByLabel('Arrived: Palletised rice').fill('41'); // more than is outstanding
+    await card.getByRole('button', { name: 'Receive', exact: true }).click();
+    await expect(card.getByRole('alert')).toContainText('up to what is still to arrive');
+    expect(posted).toEqual([]);
+    await page.getByLabel('Arrived: Palletised rice').fill('40');
+    await page.getByLabel('Arrived: Sugar 1kg').fill('0'); // the sugar has not come yet
+    await card.getByRole('button', { name: 'Receive', exact: true }).click();
+    await expect(page.getByText('The goods are in stock.')).toBeVisible();
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ path: '/receive', body: { items: [{ itemId: 101, qty: '40' }] } }); // only what arrived
+    expect(posted[0]!.key).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  test('a shop has no Deliveries tab: goods are delivered to stock branches only', async ({ page }) => {
+    await managerOnTransfers(page, 'sale');
+    await expect(page.getByRole('tab', { name: /^Deliveries/ })).toHaveCount(0);
   });
 
   test('a stock branch may send to a shop as well, with no reason needed', async ({ page }) => {

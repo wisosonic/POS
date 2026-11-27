@@ -6,6 +6,7 @@ import { ApiError, get, post } from '../../lib/api';
 import type { Product } from '../../lib/types';
 import { useT } from '../../store/lang';
 import { useSettings } from '../../hooks/useTillData';
+import { DeliveriesTab } from './DeliveriesTab';
 import { PickTab, RequestsTab } from './RequestTabs';
 import { ProductPicker } from './ProductPicker';
 import { toast } from '../../store/toast';
@@ -46,7 +47,7 @@ const reasonText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.
 export function TransfersPage() {
   const t = useT();
   const isStock = useSettings().data?.branchKind === 'stock';
-  type Tab = 'requests' | 'pick' | 'incoming' | 'send' | 'history';
+  type Tab = 'requests' | 'pick' | 'deliveries' | 'incoming' | 'send' | 'history';
   const [tab, setTab] = useState<Tab>(isStock ? 'pick' : 'requests');
   const incoming = useQuery({
     queryKey: ['incoming', 'on_the_way'],
@@ -57,6 +58,12 @@ export function TransfersPage() {
     enabled: isStock,
     queryFn: () => get<{ data: unknown[] }>('/pick-lists?status=open').then((r) => r.data),
   });
+  const deliveries = useQuery({
+    queryKey: ['deliveries'],
+    enabled: isStock,
+    queryFn: () => get<{ data: unknown[] }>('/deliveries?status=open').then((r) => r.data),
+  });
+  const expected = deliveries.data?.length ?? 0;
   const waiting = incoming.data?.length ?? 0;
   const toPick = picking.data?.length ?? 0;
   const first: Tab = isStock ? 'pick' : 'requests';
@@ -77,6 +84,11 @@ export function TransfersPage() {
             {t('Requests')}
           </button>
         )}
+        {isStock && (
+          <button role="tab" aria-selected={tab === 'deliveries'} onClick={() => setTab('deliveries')}>
+            {expected > 0 ? t('Deliveries ({n})', { n: expected }) : t('Deliveries')}
+          </button>
+        )}
         <button role="tab" aria-selected={tab === 'incoming'} onClick={() => setTab('incoming')}>
           {waiting > 0 ? t('Coming in ({n})', { n: waiting }) : t('Coming in')}
         </button>
@@ -88,6 +100,7 @@ export function TransfersPage() {
         </button>
       </div>
       {tab === first && (isStock ? <PickTab /> : <RequestsTab />)}
+      {tab === 'deliveries' && <DeliveriesTab />}
       {tab === 'incoming' && <IncomingTab rows={incoming.data} loading={incoming.isLoading} />}
       {tab === 'send' && <SendTab />}
       {tab === 'history' && <HistoryTab />}

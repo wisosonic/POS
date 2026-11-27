@@ -1,6 +1,7 @@
 import type { Queryable } from '@pos/core/adapter';
 import { AppError } from '@pos/core/errors';
 import { relayShipments } from './relay';
+import { processPoReceipts } from '../purchasing/service';
 import { processResults, routeNewRequests } from './routing';
 import {
   digestRows,
@@ -65,6 +66,8 @@ export async function applyFacts(q: Queryable, branchId: number, facts: Fact[]):
   // Requests from a shop are routed once complete, and a stock branch's answer is taken in (docs/15 §5).
   if (facts.some((f) => f.tbl === 'pick_results' || f.tbl === 'pick_result_items')) await processResults(q, branchId);
   if (facts.some((f) => f.tbl === 'stock_requests' || f.tbl === 'stock_request_items')) await routeNewRequests(q, branchId);
+  // A stock branch's receipt against an expected delivery: an order whose every line has arrived closes by itself (docs/15 §6).
+  if (facts.some((f) => f.tbl === 'po_receipts' || f.tbl === 'po_receipt_items')) await processPoReceipts(q, branchId);
   return facts.length;
 }
 

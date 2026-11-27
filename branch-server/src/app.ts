@@ -38,6 +38,7 @@ import pingRoutes from './modules/ping/routes';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
 import { assertSaleBranch } from './modules/branch/kind';
+import deliveryRoutes from './modules/deliveries/routes';
 import requestRoutes from './modules/requests/routes';
 import transferRoutes from './modules/transfers/routes';
 import { runControl } from './modules/sync/control';
@@ -208,7 +209,17 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     onPulled: (tables) => {
       if (tables.includes('exchange_rates')) events.publish('rate.changed');
       if (
-        tables.some((t) => ['incoming_shipments', 'incoming_shipment_items', 'pick_lists', 'pick_list_items', 'request_status'].includes(t))
+        tables.some((t) =>
+          [
+            'incoming_shipments',
+            'incoming_shipment_items',
+            'pick_lists',
+            'pick_list_items',
+            'request_status',
+            'expected_deliveries',
+            'expected_delivery_items',
+          ].includes(t),
+        )
       )
         events.publish('stock.changed'); // stock is on the way, or there is something to pick, or a request moved
       if (tables.some((t) => ['categories', 'brands', 'units', 'suppliers', 'products'].includes(t))) events.publish('catalog.changed');
@@ -300,6 +311,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(purchaseRoutes);
       await api.register(transferRoutes);
       await api.register(requestRoutes);
+      await api.register(deliveryRoutes);
       await api.register(reportRoutes);
       await api.register(backupRoutes);
     },

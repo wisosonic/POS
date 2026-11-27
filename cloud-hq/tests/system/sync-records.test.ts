@@ -70,12 +70,13 @@ const wallets = (amount = 0) =>
     });
 
 /** A day's business of every kind. */
-async function aDay(tag: string) {
+// `withPurchase`: a branch that is connected to HQ makes no purchases of its own (HQ buys, docs/15 §6), so only the history from before connecting has one.
+async function aDay(tag: string, withPurchase = true) {
   const a = await sell();
   expect(a.status).toBe(201);
   expect((await giveBack(a.body.id)).status).toBe(201);
   expect((await expense(`Electricity ${tag}`)).status).toBe(201);
-  await receivePurchase();
+  if (withPurchase) await receivePurchase();
   expect((await service()).status).toBe(201);
   expect((await sell({ payments: [{ method: 'whish', currency: 'LBP', amount: 75000 }] })).status).toBe(201); // a wallet payment
   expect((await wallets()).status).toBeLessThan(300);
@@ -115,7 +116,7 @@ describe('everything a branch records reaches HQ (US-HQ-records)', () => {
     await aDay('before');
     const code = (await hq.http.post(`${api}/branches`).set(adminAuth).send({ code: 'REC', name: 'Records' })).body.enrolCode as string;
     expect((await c.http.post(`${api}/sync/connect`).set(auth(admin)).send({ url: hq.url, code })).status).toBe(200);
-    await aDay('after');
+    await aDay('after', false);
     // close the register with exactly what is expected, so the Z-report (the balances) is final too
     const cur = (await c.http.get(`${api}/registers/current`).set(auth(manager))).body;
     const counted = (cur.balances as { method: string; currency: string; expected: number }[]).map((b) => ({
@@ -195,8 +196,8 @@ describe('everything a branch records reaches HQ (US-HQ-records)', () => {
     for (const b of bal) expect([b.counted !== null, b.variance]).toEqual([true, 0]);
   });
 
-  it('a later change to a row (a balance, a purchase) reaches HQ again, and a second branch is kept apart', async () => {
-    const before = (await hq.app.database.one<{ n: number }>('SELECT COUNT(*) AS n FROM purchases'))!.n;
+  it('a later change to a row (a balance, an expense) reaches HQ again, and a second branch is kept apart', async () => {
+    const before = (await hq.app.database.one<{ n: number }>('SELECT COUNT(*) AS n FROM expenses'))!.n;
     await c.http
       .post(`${api}/registers/open`)
       .set(auth(cashier))
@@ -207,9 +208,9 @@ describe('everything a branch records reaches HQ (US-HQ-records)', () => {
           { method: 'cash', currency: 'LBP', amount: 0 },
         ],
       });
-    await receivePurchase();
+    expect((await expense('Later')).status).toBe(201);
     expect(await until(async () => (await verify()).inSync === true)).toBe(true);
-    expect((await hq.app.database.one<{ n: number }>('SELECT COUNT(*) AS n FROM purchases'))!.n).toBe(before + 1);
+    expect((await hq.app.database.one<{ n: number }>('SELECT COUNT(*) AS n FROM expenses'))!.n).toBe(before + 1);
     // a second branch with the very same ids: HQ keeps both, each under its own branch
     const c2 = await startCtx({ sync: { intervalMs: 60, backoffMs: [60, 200], idleMs: 40 } });
     try {

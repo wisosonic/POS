@@ -495,4 +495,18 @@ export const AR: Record<string, string> = {
   'Ship: {name}': 'أرسل: {name}',
   'What is shipped short goes to the next stock branch.': 'ما يُرسَل ناقصاً يذهب إلى فرع المخزون التالي.',
   'Ship it': 'أرسله',
+  'No deliveries are expected.': 'لا توجد شحنات متوقعة.',
+  'Each quantity is a number from zero up to what is still to arrive': 'كل كمية رقم من صفر حتى ما لم يصل بعد',
+  'Enter what arrived': 'أدخل ما وصل',
+  'The goods are in stock.': 'دخلت البضاعة المخزون.',
+  'Order {n}': 'الطلبية {n}',
+  Ordered: 'المطلوب',
+  'Received so far': 'المُستلَم حتى الآن',
+  'Arrived now': 'وصل الآن',
+  'Arrived: {name}': 'وصل: {name}',
+  Receive: 'استلام',
+  'Deliveries ({n})': 'الشحنات ({n})',
+  Deliveries: 'الشحنات',
+  'HQ buys for the chain. The goods are delivered to the stock branches, which receive them under Transfers. This list is what this branch bought before.':
+    'المقر الرئيسي يشتري للسلسلة. تُسلَّم البضاعة إلى فروع المخزون التي تستلمها من «التحويلات». هذه القائمة هي ما اشتراه هذا الفرع سابقاً.',
 };

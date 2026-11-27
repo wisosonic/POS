@@ -82,6 +82,8 @@ export default async function settingsRoutes(app: FastifyInstance) {
       printerConfigured: !!printerName?.trim(),
       // Connected to HQ: the catalog (products and their lists) is changed there, so the screens that edit it say so instead of offering buttons that would be refused.
       hqOwnsCatalog: hqOwnsCatalog(db),
+      // Connected to HQ: HQ buys centrally, so the branch's own purchase screens say so (docs/15 §6).
+      hqOwnsPurchasing: hqOwnsCatalog(db),
       // A stock branch is a warehouse with no tills (docs/15 §3): its screens show stock work, not the till.
       branchKind: await getBranchKind(app.database),
     };

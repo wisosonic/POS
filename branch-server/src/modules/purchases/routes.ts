@@ -5,6 +5,7 @@ import { E } from '../../errors';
 import { hashRequest, requireIdempotencyKey } from '../../util/idempotency';
 import { parse } from '../../util/validate';
 import { writeAuditQ } from '../audit/service';
+import { refuseIfHqBuys } from './hqBuys';
 import {
   createPurchase,
   getPurchase,
@@ -32,6 +33,7 @@ export default async function purchaseRoutes(app: FastifyInstance) {
   const idOf = (req: { params: unknown }) => Number((req.params as { id: string }).id);
 
   app.post('/purchases', manager, async (req, reply) => {
+    await refuseIfHqBuys(db);
     const id = await createPurchase(db, req.auth, parse(purchaseBody, req.body));
     return reply.status(201).send(await purchaseJson(db, (await getPurchase(db, id))!));
   });
@@ -65,6 +67,7 @@ export default async function purchaseRoutes(app: FastifyInstance) {
   });
 
   app.patch('/purchases/:id', manager, async (req) => {
+    await refuseIfHqBuys(db);
     const id = idOf(req);
     await updatePurchase(db, req.auth, id, parse(purchasePatchBody, req.body));
     return purchaseJson(db, (await getPurchase(db, id))!);
@@ -72,6 +75,7 @@ export default async function purchaseRoutes(app: FastifyInstance) {
 
   // Only a draft can be thrown away.
   app.delete('/purchases/:id', manager, async (req, reply) => {
+    await refuseIfHqBuys(db);
     const id = idOf(req);
     await db.tx(async (tx) => {
       const p = await getPurchase(tx, id);
@@ -91,6 +95,7 @@ export default async function purchaseRoutes(app: FastifyInstance) {
   });
 
   app.post('/purchases/:id/receive', manager, async (req, reply) => {
+    await refuseIfHqBuys(db);
     const key = requireIdempotencyKey(req);
     const body = parse(receiveBody, req.body ?? {});
     const id = idOf(req);
@@ -100,6 +105,7 @@ export default async function purchaseRoutes(app: FastifyInstance) {
   });
 
   app.post('/purchases/:id/payments', manager, async (req, reply) => {
+    await refuseIfHqBuys(db);
     const key = requireIdempotencyKey(req);
     const body = parse(supplierPaymentBody, req.body);
     const id = idOf(req);

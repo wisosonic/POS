@@ -188,7 +188,7 @@ export function updatePurchase(db: Database, actor: Actor, id: number, body: z.i
 }
 
 /** Convert a cost between currencies for a product that is priced in the other one. */
-async function costInProductCurrency(q: Queryable, costMinor: number, from: 'USD' | 'LBP', to: 'USD' | 'LBP'): Promise<number> {
+export async function costInProductCurrency(q: Queryable, costMinor: number, from: 'USD' | 'LBP', to: 'USD' | 'LBP'): Promise<number> {
   if (from === to) return costMinor;
   const rate = await currentRateQ(q);
   return from === 'USD' ? usdToLbp(costMinor, rate) : lbpToUsdCents(costMinor, rate);

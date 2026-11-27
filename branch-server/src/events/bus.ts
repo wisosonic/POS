@@ -52,6 +52,7 @@ export function eventsFor(method: string, route: string, status: number): EventT
   if (is('POST', '/shipments') || is('POST', '/stock-requests') || is('POST', '/pick-lists/:id/fill'))
     return status === 201 ? ['stock.changed'] : [];
   if (is('POST', '/receipts')) return status === 201 ? ['stock.changed', 'catalog.changed'] : []; // receiving can move a product's cost
+  if (is('POST', '/deliveries/:id/receive')) return status === 201 ? ['stock.changed', 'catalog.changed'] : []; // receiving can move a product's cost
   if (is('POST', '/stock/adjustments') || is('POST', '/stocktakes/:id/commit')) return ['stock.changed'];
   if (is('POST', '/products') || is('PATCH', '/products/:id') || is('POST', '/products/merge') || is('POST', '/products/import'))
     return ['catalog.changed'];

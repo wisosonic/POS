@@ -5,6 +5,8 @@ import { fmtMoney } from '../../lib/money';
 import type { Purchase, PurchaseStatus } from '../../lib/types';
 import { PurchaseDialog } from './PurchaseDialog';
 import { Icon } from '../../components/Icon';
+import { useSettings } from '../../hooks/useTillData';
+import { useT } from '../../store/lang';
 
 type Page = { data: Purchase[]; nextCursor: number | null };
 const LABEL: Record<PurchaseStatus, string> = { draft: 'Draft', ordered: 'Ordered', received: 'Received' };
@@ -15,6 +17,9 @@ const day = (iso: string) => iso.slice(0, 10);
 export function PurchasesPage() {
   const [status, setStatus] = useState<PurchaseStatus | ''>('');
   const [open, setOpen] = useState<Purchase | 'new' | null>(null);
+  const t = useT();
+  // Connected to HQ, HQ buys and the goods are delivered to the stock branches (docs/15 §6): this page is the branch's history.
+  const hqBuys = useSettings().data?.hqOwnsPurchasing === true;
 
   const purchases = useInfiniteQuery({
     queryKey: ['purchases', status],
@@ -31,6 +36,16 @@ export function PurchasesPage() {
         <Icon name="purchases" size={26} />
         Purchases
       </h1>
+      {hqBuys && (
+        <div className="banner" data-testid="hq-buys">
+          <div className="title">{t('Managed at HQ')}</div>
+          <div>
+            {t(
+              'HQ buys for the chain. The goods are delivered to the stock branches, which receive them under Transfers. This list is what this branch bought before.',
+            )}
+          </div>
+        </div>
+      )}
       <div className="toolbar">
         <label className="field">
           Show
@@ -42,9 +57,11 @@ export function PurchasesPage() {
           </select>
         </label>
         <span className="spacer" />
-        <button className="btn primary" onClick={() => setOpen('new')}>
-          New purchase
-        </button>
+        {!hqBuys && (
+          <button className="btn primary" onClick={() => setOpen('new')}>
+            New purchase
+          </button>
+        )}
       </div>
 
       {purchases.isLoading ? (
@@ -76,9 +93,11 @@ export function PurchasesPage() {
                 <td className="num">{fmtMoney(p.totalMinor, p.currency)}</td>
                 <td className="num">{p.status !== 'draft' && p.owedMinor > 0 ? fmtMoney(p.owedMinor, p.currency) : ''}</td>
                 <td className="num">
-                  <button className="btn small" onClick={() => setOpen(p)} aria-label={`Open purchase ${p.ref}`}>
-                    Open
-                  </button>
+                  {!hqBuys && (
+                    <button className="btn small" onClick={() => setOpen(p)} aria-label={`Open purchase ${p.ref}`}>
+                      Open
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

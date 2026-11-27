@@ -293,6 +293,8 @@ export type PublicSettings = {
   printerConfigured: boolean;
   /** Connected to HQ: products, categories, brands, units and suppliers are changed there (docs/12 §17). */
   hqOwnsCatalog?: boolean;
+  /** Connected to HQ: HQ buys centrally, so the branch's own purchase screens say so (docs/15 §6). */
+  hqOwnsPurchasing?: boolean;
   /** A stock branch is a warehouse with no tills (docs/15 §3). */
   branchKind?: 'sale' | 'stock';
 };

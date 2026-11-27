@@ -324,6 +324,14 @@ export const SYNC_TABLES: readonly SyncTable[] = [
     name: 'pick_result_items',
     columns: [int('id'), int('result_id'), int('product_id'), int('qty_asked_milli'), int('qty_shipped_milli')],
   },
+  {
+    name: 'po_receipts',
+    columns: [int('id'), int('delivery_id'), text('note', true), int('item_count'), int('user_id', true), text('created_at')],
+  },
+  {
+    name: 'po_receipt_items',
+    columns: [int('id'), int('receipt_id'), int('item_id'), int('product_id'), int('qty_milli')],
+  },
 ];
 
 export const syncTable = (name: string): SyncTable | undefined => SYNC_TABLES.find((t) => t.name === name);
@@ -365,6 +373,8 @@ export const CONTROLS: readonly ControlSpec[] = [
   { name: 'stock_request_items', day: 'created_at', amount: 'x.qty_milli', parent: { table: 'stock_requests', fk: 'request_id' } },
   { name: 'pick_results', day: 'created_at', amount: 'x.item_count' },
   { name: 'pick_result_items', day: 'created_at', amount: 'x.qty_shipped_milli', parent: { table: 'pick_results', fk: 'result_id' } },
+  { name: 'po_receipts', day: 'created_at', amount: 'x.item_count' },
+  { name: 'po_receipt_items', day: 'created_at', amount: 'x.qty_milli', parent: { table: 'po_receipts', fk: 'receipt_id' } },
 ];
 
 /** One number pair: rows and their summed amount. */
@@ -550,6 +560,25 @@ export const DOWN_TABLES: readonly DownTable[] = [
       int('unavailable_milli'),
       text('status'),
     ],
+  },
+  {
+    name: 'expected_deliveries',
+    ids: 'same',
+    columns: [
+      int('id'),
+      int('order_id'),
+      int('stock_branch_id'),
+      int('supplier_id', true),
+      text('currency'),
+      text('status'),
+      text('note', true),
+      text('ordered_at'),
+    ],
+  },
+  {
+    name: 'expected_delivery_items',
+    ids: 'same',
+    columns: [int('id'), int('delivery_id'), int('line_id'), int('product_id'), int('qty_milli'), int('unit_cost_minor')],
   },
 ];
 export const downTable = (name: string): DownTable | undefined => DOWN_TABLES.find((t) => t.name === name);
