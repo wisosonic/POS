@@ -5,7 +5,7 @@ import { loadCentralConfig } from './config';
 import { migrateCentral } from './db/migrate';
 
 // The HQ server entry point: `npm run dev -w @pos/central` (watch) or `npm run start -w @pos/central`.
-// HQ_ADMIN_TOKEN is required (a long random value). See docs/12-sync-and-hq.md.
+// HQ staff sign in with their own accounts (`npm run create-admin`); HQ_ADMIN_TOKEN is an optional break-glass credential. See docs/12-sync-and-hq.md.
 const config = loadCentralConfig();
 const databasePath = resolve(config.databasePath);
 mkdirSync(dirname(databasePath), { recursive: true });

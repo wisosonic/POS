@@ -15,10 +15,12 @@
     "test:system": "vitest run --project system --no-file-parallelism",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "create-admin": "tsx src/cli/create-admin.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "^11.2.1",
+    "@node-rs/argon2": "^2.2.2",
     "@pos/core": "*",
     "@pos/shared": "*",
     "better-sqlite3": "^13.0.3",

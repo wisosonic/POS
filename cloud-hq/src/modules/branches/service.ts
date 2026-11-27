@@ -1,6 +1,7 @@
 import type { Queryable } from '@pos/core/adapter';
 import { newOneTimeCode, newToken, normaliseCode, sha256 } from '@pos/core/credentials';
 import { AppError, E } from '@pos/core/errors';
+import { writeAudit } from '../staff/context';
 
 // Branches at HQ (docs/12-sync-and-hq.md §6). An HQ admin adds a branch and gets a one-time code (valid 30 minutes, works once); the
 // branch's server trades it for a long-lived token, which HQ stores only as a hash. Every later call from the branch carries the
@@ -29,15 +30,8 @@ type BranchRow = {
 export type Branch = { id: number; code: string; name: string };
 const toBranch = (r: BranchRow): Branch => ({ id: r.id, code: r.code, name: r.name });
 
-export async function hqAudit(q: Queryable, action: string, entity: string, entityId?: number | string, detail?: unknown): Promise<void> {
-  await q.run('INSERT INTO hq_audit (action, entity, entity_id, detail_json, created_at) VALUES (?, ?, ?, ?, ?)', [
-    action,
-    entity,
-    entityId === undefined ? null : String(entityId),
-    detail === undefined ? null : JSON.stringify(detail),
-    nowIso(),
-  ]);
-}
+/** The audit log (staff/context.ts): the actor of the transaction is recorded with each row. */
+export const hqAudit = writeAudit;
 
 export type BranchListItem = {
   id: number;

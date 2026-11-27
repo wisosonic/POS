@@ -1,6 +1,7 @@
 import rateLimit from '@fastify/rate-limit';
 import type { Database } from '@pos/core/adapter';
 import { safeEqual } from '@pos/core/credentials';
+import type { Queryable } from '@pos/core/adapter';
 import { AppError, errorHandler, notFoundHandler, problem } from '@pos/core/errors';
 import { openDatabase } from '@pos/core/open';
 import { createSqliteDatabase } from '@pos/core/sqlite';
@@ -13,6 +14,9 @@ import rateRoutes from './modules/rates/routes';
 import catalogListRoutes from './modules/catalog/routes';
 import productRoutes from './modules/catalog/productRoutes';
 import priceRoutes from './modules/catalog/priceRoutes';
+import { asStaff, hasRole, type Staff, type StaffRole } from './modules/staff/context';
+import staffRoutes from './modules/staff/routes';
+import { staffOfToken } from './modules/staff/users';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -20,8 +24,13 @@ declare module 'fastify' {
     registeredRoutes: { method: string; url: string }[];
     /** HQ's database through the portable adapter (@pos/core). */
     database: Database;
-    /** preHandler: HQ staff only (interim: the HQ admin token). */
-    adminOnly: (req: FastifyRequest) => Promise<void>;
+    /**
+     * preHandler: a signed-in member of HQ staff with at least this role (viewer < catalog < admin). Sets `request.staff`. A person who still has to
+     * choose their own password is stopped (`PASSWORD_RESET_REQUIRED`) unless the route says `allowReset`.
+     */
+    requireStaff: (min: StaffRole, opts?: { allowReset?: boolean }) => (req: FastifyRequest) => Promise<void>;
+    /** One transaction in which every audit row written says who made the change (staff/context.ts). */
+    staffTx: <T>(req: FastifyRequest, fn: (tx: Queryable) => Promise<T>) => Promise<T>;
     /** preHandler: a connected branch (`X-Branch-Token`). Sets `request.branch`. */
     branchOnly: (req: FastifyRequest) => Promise<void>;
     /** The folder product pictures are kept in (named by their content, docs/12 §19). */
@@ -29,6 +38,7 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     branch: Branch;
+    staff: Staff;
   }
 }
 
@@ -36,7 +46,11 @@ export const BRANCH_HEADER = 'x-branch-token';
 
 export type CentralOptions = {
   databasePath: string;
-  adminToken: string;
+  /**
+   * A break-glass credential: a long random value that works as an admin, for a first start or an emergency. It is not a person and is audited as
+   * `token`. Leave it unset once the admins have accounts (`npm run create-admin`).
+   */
+  adminToken?: string;
   /** Extra host names HQ answers to. */
   allowedHosts?: string[];
   logger?: boolean;
@@ -54,7 +68,8 @@ export type CentralOptions = {
  * `/sync/enrol` (the one-time code is its credential); `tests/central/security.test.ts` proves it.
  */
 export async function buildCentral(options: CentralOptions): Promise<FastifyInstance> {
-  if (options.adminToken.length < 24) throw new Error('The HQ admin token must be at least 24 characters');
+  if (options.adminToken !== undefined && options.adminToken.length < 24)
+    throw new Error('The HQ admin token must be at least 24 characters');
   const db = openDatabase(options.databasePath);
   const app = Fastify({
     logger: options.logger ? (options.logStream ? { stream: options.logStream } : true) : false,
@@ -110,11 +125,24 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
   if (options.rateLimit ?? options.production) await app.register(rateLimit, { global: false });
 
   app.decorateRequest('branch', undefined as unknown as Branch);
-  app.decorate('adminOnly', async (req: FastifyRequest) => {
+  app.decorateRequest('staff', undefined as unknown as Staff);
+  app.decorate('requireStaff', (min: StaffRole, opts: { allowReset?: boolean } = {}) => async (req: FastifyRequest) => {
     const header = req.headers.authorization;
     const token = header?.startsWith('Bearer ') ? header.slice(7) : '';
-    if (!token || !safeEqual(token, options.adminToken)) throw new AppError(401, 'UNAUTHENTICATED', 'HQ staff sign-in is required');
+    let staff: Staff | null = null;
+    if (token) {
+      staff =
+        options.adminToken && safeEqual(token, options.adminToken)
+          ? { id: null, username: 'hq-token', name: 'HQ token', role: 'admin', mustResetPassword: false, actor: 'token' }
+          : await staffOfToken(app.database, token);
+    }
+    if (!staff) throw new AppError(401, 'UNAUTHENTICATED', 'HQ staff sign-in is required');
+    if (staff.mustResetPassword && !opts.allowReset)
+      throw new AppError(403, 'PASSWORD_RESET_REQUIRED', 'Choose your own password first (POST /auth/password)');
+    if (!hasRole(staff.role, min)) throw new AppError(403, 'FORBIDDEN', 'Your role does not allow this');
+    req.staff = staff;
   });
+  app.decorate('staffTx', <T>(req: FastifyRequest, fn: (tx: Queryable) => Promise<T>) => asStaff(app.database, req.staff, fn));
   app.decorate('branchOnly', async (req: FastifyRequest) => {
     const raw = req.headers[BRANCH_HEADER];
     req.branch = await resolveBranch(app.database, typeof raw === 'string' && raw ? raw : undefined);
@@ -129,6 +157,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
       await api.register(catalogListRoutes);
       await api.register(productRoutes);
       await api.register(priceRoutes);
+      await api.register(staffRoutes);
     },
     { prefix: '/api/v1' },
   );

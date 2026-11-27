@@ -52,37 +52,38 @@ const idParam = z.object({ id: z.coerce.number().int().min(1) });
 /** The chain's products (docs/12 §17): set here, every connected branch receives them. HQ staff only. */
 export default async function productRoutes(app: FastifyInstance) {
   const db = app.database;
-  const admin = { preHandler: app.adminOnly };
+  const view = { preHandler: app.requireStaff('viewer') };
+  const edit = { preHandler: app.requireStaff('catalog') };
 
-  app.get('/products', admin, async (req) => {
+  app.get('/products', view, async (req) => {
     const r = await listProducts(db, parse(listQuery, req.query));
     return { data: r.data.map(productJson), nextCursor: r.nextCursor };
   });
 
   // Products from a spreadsheet's CSV. dryRun (the default) only says what would happen; a file with any error writes nothing, and applying is
   // one transaction.
-  app.post('/products/import', { ...admin, bodyLimit: MAX_IMPORT_BYTES + 4096 }, async (req) => {
+  app.post('/products/import', { ...edit, bodyLimit: MAX_IMPORT_BYTES + 4096 }, async (req) => {
     const body = parse(importBody, req.body);
-    return body.dryRun ? importProducts(db, body) : db.tx((tx) => importProducts(tx, body));
+    return body.dryRun ? importProducts(db, body) : app.staffTx(req, (tx) => importProducts(tx, body));
   });
 
-  app.get('/products/:id', admin, async (req) => {
+  app.get('/products/:id', view, async (req) => {
     const { id } = parse(idParam, req.params);
     const row = await getProduct(db, id);
     if (!row) throw new AppError(404, 'NOT_FOUND', 'No such product');
     return productJson(row);
   });
 
-  app.post('/products', admin, async (req, reply) => {
+  app.post('/products', edit, async (req, reply) => {
     const b = parse(createBody, req.body);
-    const row = await db.tx((tx) => createProduct(tx, b));
+    const row = await app.staffTx(req, (tx) => createProduct(tx, b));
     return reply.status(201).send(productJson(row));
   });
 
-  app.patch('/products/:id', admin, async (req) => {
+  app.patch('/products/:id', edit, async (req) => {
     const { id } = parse(idParam, req.params);
     const b = parse(patchBody, req.body);
-    return productJson(await db.tx((tx) => updateProduct(tx, id, b)));
+    return productJson(await app.staffTx(req, (tx) => updateProduct(tx, id, b)));
   });
 
   // A picture arrives as the request body itself (not a form). The type the sender claims is not trusted: the bytes decide (storeImage).
@@ -95,7 +96,7 @@ export default async function productRoutes(app: FastifyInstance) {
 
   // Set or replace a product's picture. The file is kept under a name made from its content and the product just points at it; every
   // connected branch then fetches the file by that name (`GET /sync/images/:name`).
-  app.post('/products/:id/image', admin, async (req) => {
+  app.post('/products/:id/image', edit, async (req) => {
     const { id } = parse(idParam, req.params);
     if (!(await getProduct(db, id))) throw new AppError(404, 'NOT_FOUND', 'No such product');
     const bytes = req.body;
@@ -108,19 +109,19 @@ export default async function productRoutes(app: FastifyInstance) {
         'UNSUPPORTED_IMAGE',
         'That file is not a picture the shop can use. Use a JPEG, PNG, GIF, WebP or AVIF picture.',
       );
-    return productJson(await db.tx((tx) => setProductImage(tx, id, stored.path)));
+    return productJson(await app.staffTx(req, (tx) => setProductImage(tx, id, stored.path)));
   });
 
   // Take the picture off a product. The file stays in the folder: another product may use the same one.
-  app.delete('/products/:id/image', admin, async (req) => {
+  app.delete('/products/:id/image', edit, async (req) => {
     const { id } = parse(idParam, req.params);
-    return productJson(await db.tx((tx) => setProductImage(tx, id, null)));
+    return productJson(await app.staffTx(req, (tx) => setProductImage(tx, id, null)));
   });
 
   // Retire, never delete: a retired product still goes down to the branches (they hide it), and its history stays whole.
-  app.delete('/products/:id', admin, async (req, reply) => {
+  app.delete('/products/:id', edit, async (req, reply) => {
     const { id } = parse(idParam, req.params);
-    await db.tx((tx) => updateProduct(tx, id, { active: false }));
+    await app.staffTx(req, (tx) => updateProduct(tx, id, { active: false }));
     return reply.status(204).send();
   });
 }

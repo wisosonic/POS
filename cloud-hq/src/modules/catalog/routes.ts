@@ -24,24 +24,25 @@ const toDb = (v: Record<string, unknown>) =>
 /** The catalog's small lists for the whole chain (docs/12 §15): set here, every connected branch receives them. HQ staff only. */
 export default async function catalogListRoutes(app: FastifyInstance) {
   const db = app.database;
-  const admin = { preHandler: app.adminOnly };
+  const view = { preHandler: app.requireStaff('viewer') };
+  const edit = { preHandler: app.requireStaff('catalog') };
 
   for (const [path, kind] of Object.entries(LIST_KINDS)) {
     const createBody = z.object({ name, ...EXTRA[path]! });
     const patchBody = z.object({ name, ...EXTRA[path]! }).partial();
 
-    app.get(`/${path}`, admin, async () => ({ data: (await listRows(db, kind)).map((r) => toJson(path, r)) }));
+    app.get(`/${path}`, view, async () => ({ data: (await listRows(db, kind)).map((r) => toJson(path, r)) }));
 
-    app.post(`/${path}`, admin, async (req, reply) => {
+    app.post(`/${path}`, edit, async (req, reply) => {
       const { name: n, ...rest } = parse(createBody, req.body) as { name: string } & Record<string, unknown>;
-      const row = await db.tx((tx) => createRow(tx, kind, n, toDb(rest)));
+      const row = await app.staffTx(req, (tx) => createRow(tx, kind, n, toDb(rest)));
       return reply.status(201).send(toJson(path, row));
     });
 
-    app.patch(`/${path}/:id`, admin, async (req) => {
+    app.patch(`/${path}/:id`, edit, async (req) => {
       const { id } = parse(idParam, req.params);
       const b = parse(patchBody, req.body) as Record<string, unknown>;
-      const row = await db.tx((tx) => updateRow(tx, kind, id, toDb(b)));
+      const row = await app.staffTx(req, (tx) => updateRow(tx, kind, id, toDb(b)));
       return toJson(path, row);
     });
   }

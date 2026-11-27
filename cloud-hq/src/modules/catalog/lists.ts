@@ -1,5 +1,6 @@
 import type { Queryable } from '@pos/core/adapter';
 import { AppError } from '@pos/core/errors';
+import { writeAudit } from '../staff/context';
 
 // The catalog's small lists at HQ (docs/12-sync-and-hq.md §15, P3a): categories, brands, units, suppliers. HQ is the only place they change once
 // a branch is connected. Every change writes its change_log line and an hq_audit row in the SAME transaction, so a branch cannot miss it.
@@ -38,13 +39,7 @@ export const listRows = (q: Queryable, kind: ListKind): Promise<ListRow[]> =>
 async function record(q: Queryable, kind: ListKind, id: number, action: 'create' | 'update', detail: unknown): Promise<void> {
   const now = nowIso();
   await q.run('INSERT INTO change_log (tbl, pk, op, created_at) VALUES (?, ?, ?, ?)', [kind.table, id, 'u', now]);
-  await q.run('INSERT INTO hq_audit (action, entity, entity_id, detail_json, created_at) VALUES (?, ?, ?, ?, ?)', [
-    `${kind.entity}.${action}`,
-    kind.entity,
-    String(id),
-    JSON.stringify(detail),
-    now,
-  ]);
+  await writeAudit(q, `${kind.entity}.${action}`, kind.entity, id, detail);
 }
 
 /** Add an entry. `values` holds only the kind's own extra columns (already checked by the route). */

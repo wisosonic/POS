@@ -27,7 +27,9 @@ const KEEP = process.argv.includes('--keep');
 const PORTS = { hq: 4101, a: 3101, b: 3102, till: 8101 };
 const ADMIN_PW = 'sandbox-admin-pass-1';
 const CASHIER_PW = 'sandbox-cashier-pass-1';
-const HQ_TOKEN = randomBytes(32).toString('base64url');
+const HQ_PW = 'sandbox-hq-admin-pass-1';
+// HQ has no break-glass token here: its staff sign in with their own account (P3d), and this is that person's session token once HQ is up.
+let HQ_TOKEN = '';
 const JWT = randomBytes(32).toString('hex');
 
 const root = mkdtempSync(join(tmpdir(), 'pos-sandbox-'));
@@ -195,13 +197,14 @@ async function main() {
       check(existsSync(join(box('till'), 'web', 'dist', 'index.html')), 'till/web/dist/index.html was not made');
     });
 
-  await step('the two branch servers get their own admin account in their own database', async () => {
+  await step('HQ and the two branch servers get their own admin account in their own database', async () => {
+    run(box('hq'), 'node', ['--import', 'tsx', 'src/cli/create-admin.ts', 'hqadmin', HQ_PW], { DATABASE_PATH: join(box('hq'), 'data', 'hq.db') });
     for (const d of ['branch-a', 'branch-b'])
       run(box(d), 'node', ['--import', 'tsx', 'src/cli/create-admin.ts', 'admin', ADMIN_PW], { DATABASE_PATH: join(box(d), 'data', 'pos.db') });
   });
 
   await step('HQ, branch A, branch B and the till start, each from its own sandbox, and answer', async () => {
-    start('hq', 'hq', ['src/index.ts'], { PORT: String(PORTS.hq), DATABASE_PATH: join(box('hq'), 'data', 'hq.db'), HQ_ADMIN_TOKEN: HQ_TOKEN });
+    start('hq', 'hq', ['src/index.ts'], { PORT: String(PORTS.hq), DATABASE_PATH: join(box('hq'), 'data', 'hq.db') });
     for (const [n, d] of [['a', 'branch-a'], ['b', 'branch-b']])
       start(`branch-${n}`, d, ['src/index.ts'], {
         PORT: String(PORTS[n]),
@@ -214,6 +217,10 @@ async function main() {
     start('till', 'till', ['agent/src/cli.ts', 'serve'], { PORT: String(PORTS.till), TILL_DATA_DIR: join(box('till'), 'data'), WEB_DIST: join(box('till'), 'web', 'dist') });
     for (const [base, path] of [[url.hq, '/api/v1/healthz'], [url.a, '/api/v1/healthz'], [url.b, '/api/v1/healthz'], [url.till, '/till/health']])
       await until(`${base}${path} answers`, () => healthy(base, path), 60_000);
+    // HQ staff sign in with a name and password (no token); a wrong password is refused, and an anonymous request too.
+    check((await http('POST', url.hq, '/api/v1/auth/login', { body: { username: 'hqadmin', password: 'not-the-password-1' } })).status === 401, 'HQ accepted a wrong password');
+    check((await http('GET', url.hq, '/api/v1/branches', {})).status === 401, 'HQ answered an anonymous request');
+    HQ_TOKEN = must(await http('POST', url.hq, '/api/v1/auth/login', { body: { username: 'hqadmin', password: HQ_PW } }), 200, 'the HQ admin signs in').token;
   });
 
   let adminA, adminB;

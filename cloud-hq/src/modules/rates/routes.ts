@@ -17,13 +17,16 @@ const json = (r: { id: number; rate_lbp_per_usd: number; effective_from: string;
 /** The exchange rate for the whole chain: set here, every connected branch receives it (docs/12 §15). HQ staff only. */
 export default async function rateRoutes(app: FastifyInstance) {
   const db = app.database;
-  const admin = { preHandler: app.adminOnly };
+  const view = { preHandler: app.requireStaff('viewer') };
+  const edit = { preHandler: app.requireStaff('catalog') };
 
-  app.get('/exchange-rates', admin, async () => ({ data: (await listRates(db)).map(json) }));
+  app.get('/exchange-rates', view, async () => ({ data: (await listRates(db)).map(json) }));
 
-  app.post('/exchange-rates', admin, async (req, reply) => {
+  app.post('/exchange-rates', edit, async (req, reply) => {
     const b = parse(body, req.body);
-    const row = await db.tx((tx) => addRate(tx, b.rateLbpPerUsd, b.effectiveFrom ? new Date(b.effectiveFrom).toISOString() : undefined));
+    const row = await app.staffTx(req, (tx) =>
+      addRate(tx, b.rateLbpPerUsd, b.effectiveFrom ? new Date(b.effectiveFrom).toISOString() : undefined),
+    );
     return reply.status(201).send(json(row));
   });
 }

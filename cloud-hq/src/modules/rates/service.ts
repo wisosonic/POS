@@ -1,4 +1,5 @@
 import type { Queryable } from '@pos/core/adapter';
+import { writeAudit } from '../staff/context';
 
 // HQ's exchange rate (docs/12-sync-and-hq.md §15). A rate is added, never edited: the newest effective one applies, as at a branch.
 // Adding one writes the change_log line in the same transaction, so a branch cannot miss it.
@@ -14,13 +15,7 @@ export async function addRate(q: Queryable, rate: number, effectiveFrom?: string
     [rate, effectiveFrom ?? now, now],
   ))!;
   await q.run('INSERT INTO change_log (tbl, pk, op, created_at) VALUES (?, ?, ?, ?)', ['exchange_rates', row.id, 'u', now]);
-  await q.run('INSERT INTO hq_audit (action, entity, entity_id, detail_json, created_at) VALUES (?, ?, ?, ?, ?)', [
-    'rate.add',
-    'exchange-rate',
-    String(row.id),
-    JSON.stringify({ rateLbpPerUsd: rate, effectiveFrom: row.effective_from }),
-    now,
-  ]);
+  await writeAudit(q, 'rate.add', 'exchange-rate', row.id, { rateLbpPerUsd: rate, effectiveFrom: row.effective_from });
   return row;
 }
 

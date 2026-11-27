@@ -176,7 +176,7 @@ describe('what HQ writes down', () => {
 });
 
 describe('protecting HQ itself (it is the first part reachable from the internet)', () => {
-  const OPEN = new Set(['GET /api/v1/healthz', 'POST /api/v1/sync/enrol']);
+  const OPEN = new Set(['GET /api/v1/healthz', 'POST /api/v1/sync/enrol', 'POST /api/v1/auth/login']);
   const real = () => hq.app.registeredRoutes.filter((r) => r.url.startsWith(api) && !['HEAD', 'OPTIONS'].includes(r.method));
   const concrete = (url: string) => url.replace(/:\w+/g, '1');
 
@@ -185,7 +185,7 @@ describe('protecting HQ itself (it is the first part reachable from the internet
     for (const open of OPEN) expect(real().map((r) => `${r.method} ${r.url}`)).toContain(open);
   });
 
-  it('every other route refuses an anonymous request and a garbage token: only the two listed doors are open', async () => {
+  it('every other route refuses an anonymous request and a garbage token: only the three listed doors are open', async () => {
     const open: string[] = [];
     for (const r of real()) {
       if (OPEN.has(`${r.method} ${r.url}`)) continue;
@@ -233,8 +233,9 @@ describe('protecting HQ itself (it is the first part reachable from the internet
 });
 
 describe('HQ configuration', () => {
-  it('refuses to start without a real admin token', () => {
-    expect(() => loadCentralConfig({})).toThrow(/HQ_ADMIN_TOKEN/);
+  it('the break-glass token is optional, but if one is set it must be a real one', () => {
+    expect(loadCentralConfig({}).adminToken).toBeUndefined();
+    expect(loadCentralConfig({ HQ_ADMIN_TOKEN: '' }).adminToken).toBeUndefined();
     expect(() => loadCentralConfig({ HQ_ADMIN_TOKEN: 'short' })).toThrow(/at least 24/);
   });
 

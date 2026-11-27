@@ -13,29 +13,30 @@ const body = z.object({ priceMinor: z.number().int().min(0).max(Number.MAX_SAFE_
  */
 export default async function priceRoutes(app: FastifyInstance) {
   const db = app.database;
-  const admin = { preHandler: app.adminOnly };
+  const view = { preHandler: app.requireStaff('viewer') };
+  const edit = { preHandler: app.requireStaff('catalog') };
 
-  app.get('/branches/:id/prices', admin, async (req) => {
+  app.get('/branches/:id/prices', view, async (req) => {
     const { id } = parse(branchOnly, req.params);
     return { data: (await listOverrides(db, id)).map(overrideJson) };
   });
 
   // Every branch that has its own price for this product.
-  app.get('/products/:id/prices', admin, async (req) => {
+  app.get('/products/:id/prices', view, async (req) => {
     const { id } = parse(branchOnly, req.params);
     return { data: (await overridesOfProduct(db, id)).map((r) => ({ branchId: r.branch_id, priceMinor: r.price_minor })) };
   });
 
-  app.put('/branches/:id/prices/:productId', admin, async (req) => {
+  app.put('/branches/:id/prices/:productId', edit, async (req) => {
     const { id, productId } = parse(ids, req.params);
     const b = parse(body, req.body);
-    const changed = await db.tx((tx) => setOverride(tx, id, productId, b.priceMinor));
+    const changed = await app.staffTx(req, (tx) => setOverride(tx, id, productId, b.priceMinor));
     return { branchId: id, productId, priceMinor: b.priceMinor, changed };
   });
 
-  app.delete('/branches/:id/prices/:productId', admin, async (req, reply) => {
+  app.delete('/branches/:id/prices/:productId', edit, async (req, reply) => {
     const { id, productId } = parse(ids, req.params);
-    await db.tx((tx) => removeOverride(tx, id, productId));
+    await app.staffTx(req, (tx) => removeOverride(tx, id, productId));
     return reply.status(204).send();
   });
 }

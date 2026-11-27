@@ -2,6 +2,7 @@ import type { Queryable } from '@pos/core/adapter';
 import { AppError } from '@pos/core/errors';
 import { toReceiptName } from '@pos/shared/translit';
 import { qtyNumberToMilli } from '../../util/qty';
+import { writeAudit } from '../staff/context';
 
 // HQ's products (docs/12-sync-and-hq.md §17, P3b). A change writes the product, its change_log line and an hq_audit row in ONE transaction, so a
 // branch cannot miss it. A product is never deleted: retiring it (active = 0) is the delete, and a retired product still goes down to the branches.
@@ -99,13 +100,7 @@ async function checkBarcode(q: Queryable, barcode: string, active: boolean, exce
 async function record(q: Queryable, id: number, action: string, detail: unknown): Promise<void> {
   const now = nowIso();
   await q.run('INSERT INTO change_log (tbl, pk, op, created_at) VALUES (?, ?, ?, ?)', ['products', id, 'u', now]);
-  await q.run('INSERT INTO hq_audit (action, entity, entity_id, detail_json, created_at) VALUES (?, ?, ?, ?, ?)', [
-    action,
-    'product',
-    String(id),
-    JSON.stringify(detail),
-    now,
-  ]);
+  await writeAudit(q, action, 'product', id, detail);
 }
 
 export async function createProduct(q: Queryable, b: ProductInput & { name: string }): Promise<ProductRow> {

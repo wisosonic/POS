@@ -87,7 +87,7 @@ The sync loop runs inside the branch server. While online it syncs every few sec
 
 ## 12. What P2a built (2026-11-23)
 
-**The HQ server** (`cloud-hq`, run with `npm run dev --prefix cloud-hq` / `start`; port 4000 by default). Its own SQLite database through the shared adapter (`branch-server/core`, `@pos/core`), its own migrations folder. Configuration: `HQ_ADMIN_TOKEN` (required, at least 24 characters), `PORT`, `HOST` (localhost unless set), `DATABASE_PATH`, `ALLOWED_HOSTS`. HQ refuses a request for any host name or web page origin that is not its own or listed, sends no-store / no-sniff / no-frame headers, and rate-limits the open door in production.
+**The HQ server** (`cloud-hq`, run with `npm run dev --prefix cloud-hq` / `start`; port 4000 by default). Its own SQLite database through the shared adapter (`branch-server/core`, `@pos/core`), its own migrations folder. Configuration: `HQ_ADMIN_TOKEN` (optional break-glass credential, at least 24 characters if set; §21), `UPLOADS_DIR`, `PORT`, `HOST` (localhost unless set), `DATABASE_PATH`, `ALLOWED_HOSTS`. HQ refuses a request for any host name or web page origin that is not its own or listed, sends no-store / no-sniff / no-frame headers, and rate-limits the open door in production.
 
 | Method | Path | Who | What |
 |---|---|---|---|
@@ -99,7 +99,7 @@ The sync loop runs inside the branch server. While online it syncs every few sec
 | POST | `/api/v1/sync/enrol` | **open, rate limited** | `{ code }` → `{ token, branch }`, the token shown once; `422 ENROL_CODE_INVALID` |
 | GET | `/api/v1/sync/ping` | branch (`X-Branch-Token`) | `{ ok, serverTime, branch, changeSeq }` (`changeSeq` = HQ's latest change number, docs/14 §6); `401 BRANCH_UNKNOWN` |
 
-HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_ADMIN_TOKEN>`, compared in constant time). That is deliberately temporary: HQ users with their own passwords and roles come with P3. Everything HQ changes is written to an append-only `hq_audit`, never a code or a token. Only hashes of codes and tokens are stored. The only open doors are `/healthz` and `/sync/enrol`; `cloud-hq/tests/hq.test.ts` proves every other route refuses an anonymous request and a garbage token.
+HQ staff sign in with their own accounts (§21: name, password, role). Everything HQ changes is written to an append-only `hq_audit` that says who made the change, never a code, a password or a token. Only hashes of codes, passwords and tokens are stored. The only open doors are `/healthz`, `/sync/enrol` and `/auth/login`; `cloud-hq/tests/hq.test.ts` proves every other route refuses an anonymous request and a garbage token.
 
 **The branch side** (`branch-server`, migration `0017_hq_link.sql`, `modules/sync/`). An admin connects the branch with HQ's address and the one-time code. The branch trades it for its token, stores it in `hq_link` (**never returned, logged or audited**), and takes HQ's branch code and name for its own local branch row (printed on receipts later).
 
@@ -198,6 +198,20 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 **Another branch's override must not make a branch ask again and again.** The ping's `changeSeq` and the page's `next` are both computed over only the lines this branch can see (`branch_id IS NULL OR = its id`), so branch B's cursor never falls behind a line it will never receive. `catalog-prices.test.ts` proves B's "news" number and cursor do not move when A's price changes.
 
 **Not covered yet:** a screen at HQ (API only), an import of overrides from a CSV, a price per branch GROUP, a cost per branch from HQ, and a scheduled start (an override takes effect when it reaches the branch; a price change in the middle of a sale does not touch the sale, which is priced once on the server).
+
+## 21. What P3d built (2026-11-27): HQ staff accounts
+
+**Why.** HQ is the first part reachable from the internet, and until now one long-lived token opened everything and said nobody. Now people have their own accounts, and every change says who made it.
+
+**Accounts (`cloud-hq/src/modules/staff/`, migration 0008).** `hq_users`: a lower-case name (3 to 40 characters), a display name, a role, an **Argon2id** password hash (`@node-rs/argon2`, same settings as a branch), `active`, `must_reset_password`. Roles are ranked: **viewer** (reads everything), **catalog** (also changes products, their lists, prices, the import and the exchange rate), **admin** (also branches and people). A password has **at least 12 characters**. `POST /users` (admin) makes an account with a password the admin chose and `must_reset_password`: **the server stops that person from doing anything but `/auth/me`, `/auth/password` and `/auth/logout`** (`403 PASSWORD_RESET_REQUIRED`) until they choose their own. `PATCH /users/:id` changes name, role or `active`; a changed role or a closed account signs the person out at once; **HQ always keeps one active admin** (`409 LAST_ADMIN`). `POST /users/:id/password` (admin) resets a password (and the person must choose a new one).
+
+**Signing in (the third open door).** `POST /auth/login { username, password }` answers `{ token, expiresAt, user }`. The token is an opaque 256-bit value, **shown once and stored only as a hash** (`hq_sessions`), valid 8 hours, ended by `POST /auth/logout`, a password change, a changed role or a closed account. The sign-in is rate limited (10 a minute per address, in production), **five wrong passwords lock the account for 15 minutes** (`429 ACCOUNT_LOCKED`, cleared by an admin's reset), and a wrong name, a wrong password and a closed account **answer the same** (`401 INVALID_CREDENTIALS`) and take the same time (an unknown name is checked against a dummy hash), so the answer does not say which names exist. Hashing is done before a transaction is opened (the adapter forbids waiting inside one). `GET /auth/me`, `POST /auth/password { current, password }` (closes every session and returns a fresh one).
+
+**The audit says who.** `hq_audit.actor`: `user:<name>`, `token` (the break-glass token) or empty (a branch enrolling, a script). It is set by `asStaff` (`app.staffTx(req, fn)`) in the same transaction as the change, through a one-row `hq_context` that is cleared again inside it, so the code that writes an audit row (`writeAudit`, the only way) knows nothing about people, and a failed transaction never leaves a stale name behind.
+
+**The first admin, and the old token.** `npm run create-admin --prefix cloud-hq -- <name> <password>` makes (or resets) an admin without any token. `HQ_ADMIN_TOKEN` is now **optional**: if set it still works as an admin (for a first start or an emergency), audited as `token`; **leave it unset once the admins have accounts**. The sandbox chain test runs HQ without it. A locked-out admin can be reset with `create-admin` too.
+
+**Not covered yet:** HQ screens (everything is API), two-factor sign-in, a password-expiry rule, per-branch permissions for HQ staff (a catalog person sees every branch), and **the people who work at a branch** (`docs/QUESTIONS.md` #21: they stay local to each branch until HR, P6). A locked account is also an easy way to lock a real admin out (known trade-off of any lockout); `create-admin` is the way back in.
 
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 

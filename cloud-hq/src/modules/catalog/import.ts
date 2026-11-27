@@ -2,6 +2,7 @@ import type { Queryable } from '@pos/core/adapter';
 import { AppError } from '@pos/core/errors';
 import { parseCsv, parseDecimalMinor, toReceiptName } from '@pos/shared';
 import { z } from 'zod';
+import { writeAudit } from '../staff/context';
 import { createRow, LIST_KINDS } from './lists';
 import { createProduct, updateProduct, type ProductInput } from './products';
 
@@ -395,14 +396,7 @@ export async function importProducts(q: Queryable, input: ImportBody): Promise<I
     if (p.action === 'create') await createProduct(q, { ...patch, name: w.name });
     else await updateProduct(q, p.existing!.id, { ...patch, name: w.name });
   }
-  const now = new Date().toISOString();
-  await q.run('INSERT INTO hq_audit (action, entity, entity_id, detail_json, created_at) VALUES (?, ?, ?, ?, ?)', [
-    'product.import',
-    'product',
-    null,
-    JSON.stringify({ ...summary, newLookups: newLookups.size }),
-    now,
-  ]);
+  await writeAudit(q, 'product.import', 'product', null, { ...summary, newLookups: newLookups.size });
   result.applied = true;
   return result;
 }

@@ -4,7 +4,17 @@ Questions for the owner. Answer under each one (write after "Answer:"). New ques
 
 ## Open
 
-Nothing is open. (New questions for the product owner are added here.)
+### 21. Once branches are connected to HQ, who creates the branch staff (cashiers, managers)?
+
+Context (P3d, 2026-11-27): HQ now has its own staff accounts (name, password, role: viewer, catalog, admin). The people who work at a branch (cashiers, branch managers, the branch admin) are still made **at each branch**, in its own database, with ids of its own. The catalog already comes from HQ (P3a to P3c); this is the last thing the old plan said HQ would own.
+
+- **A. Stay local (as now).** Each branch makes and closes its own accounts. Simple, nothing to design, works offline. Cost: HQ cannot see who works where, and a person who leaves must be closed at every branch they could sign in at.
+- **B. HQ owns them and sends them down** (name, role, branch, the password hash, the PIN hash). One place to close an account, and a person can work in two branches. Cost: password hashes travel to every branch (they are already hashes, over HTTPS, but it is a new place they sit); the branch's own ids for users must become HQ's (like the catalog), so a branch must connect with no accounts of its own except one local break-glass admin; a bigger change that touches sign-in at the till.
+- **C. A mix:** HQ owns managers and admins, each branch keeps its own cashiers.
+
+**Recommended:** **A until P6 (HR).** HR needs an `employees` list at HQ anyway (not every employee signs in), and linking an employee to a sign-in is the natural moment to decide B. Nothing built so far makes A harder to leave.
+
+Answer:
 
 ## Answered
 
