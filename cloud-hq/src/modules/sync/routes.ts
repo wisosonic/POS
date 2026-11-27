@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { MAX_BATCH_ROWS, MAX_CHANGES_PAGE, type Fact } from '@pos/core/sync';
 import { enrolBranch } from '../branches/service';
 import { mimeOfStored, STORED_NAME } from '../catalog/images';
+import { reconcile } from '../facts/control';
 import { applyFacts, changesAfter, tableDigest } from '../facts/service';
 
 const LIMIT = { max: 10, timeWindow: '1 minute' };
@@ -39,6 +40,25 @@ export default async function syncRoutes(app: FastifyInstance) {
     const b = parse(z.object({ rows: z.array(factRow).max(MAX_BATCH_ROWS) }), req.body);
     const applied = await db.tx((tx) => applyFacts(tx, req.branch.id, b.rows as Fact[]));
     return { applied };
+  });
+
+  // What the branch holds, per table and day (docs/12 §24). HQ compares it with its own copy and keeps the result. The figures are small numbers
+  // (a count and a sum per table per day); the branch id comes from the token.
+  const control = z.object({
+    days: z
+      .array(
+        z.object({
+          day: z.string().max(10),
+          tables: z.record(z.string().max(40), z.object({ n: z.number().int().min(0), s: z.number().int() })),
+        }),
+      )
+      .min(1)
+      .max(31),
+  });
+  app.post('/sync/control', branch, async (req) => {
+    const b = parse(control, req.body);
+    const done = await db.tx((tx) => reconcile(tx, req.branch.id, b.days));
+    return { checked: done.checked, mismatched: done.mismatched };
   });
 
   // What HQ owns, after a number: the branch applies the page in order and asks again (docs/12 §15).

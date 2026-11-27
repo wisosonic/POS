@@ -37,6 +37,7 @@ import { TopicVersions } from './events/versions';
 import pingRoutes from './modules/ping/routes';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
+import { runControl } from './modules/sync/control';
 import { fetchMissingImages } from './modules/sync/images';
 import { pullOnce } from './modules/sync/down';
 import { pushOnce } from './modules/sync/up';
@@ -86,6 +87,8 @@ export type BuildOptions = {
     batchSize?: number;
     /** Replaces `fetch` for every call to HQ: a test makes the connection fail or lose answers. */
     fetchImpl?: typeof fetch;
+    /** How often the branch tells HQ what it holds, for the daily comparison (default 30 minutes). */
+    controlEveryMs?: number;
     /**
      * Refuse to connect a branch that has a catalog of its own (default true). Tests that connect the seeded test branch switch it off; the
      * test of the gate itself leaves it on.
@@ -197,6 +200,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     db: app.database,
     onChange: () => events.publish('sync.changed'),
     pull: (link, signal) => pullOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, signal }),
+    control: (link, signal) => runControl(app.database, link, { fetchImpl: options.sync?.fetchImpl, signal }),
     fetchImages: (link, signal) => fetchMissingImages(app.database, link, app.uploadsDir, { fetchImpl: options.sync?.fetchImpl, signal }),
     onPulled: (tables) => {
       if (tables.includes('exchange_rates')) events.publish('rate.changed');

@@ -354,9 +354,46 @@ export async function stockReport(q: Queryable, opts: { productId?: number; bran
   return rows;
 }
 
+export type ReconciliationRow = {
+  branchId: number;
+  branch: string;
+  day: string;
+  status: 'ok' | 'mismatch';
+  checkedAt: string;
+  differences: { table: string; branch: { n: number; s: number }; hq: { n: number; s: number } }[];
+};
+
+/** The latest daily comparison for each branch and day (docs/12 §24): where HQ and a branch disagree about what the branch holds. */
+export async function reconciliationReport(
+  q: Queryable,
+  opts: { from: string; to: string; branchId?: number; onlyMismatch: boolean },
+): Promise<ReconciliationRow[]> {
+  const where = ['r.day >= ?', 'r.day <= ?'];
+  const params: Param[] = [opts.from, opts.to];
+  if (opts.branchId !== undefined) {
+    where.push('r.branch_id = ?');
+    params.push(opts.branchId);
+  }
+  if (opts.onlyMismatch) where.push("r.status = 'mismatch'");
+  const rows = await q.all<{ branch_id: number; day: string; status: 'ok' | 'mismatch'; checked_at: string; diff_json: string | null }>(
+    `SELECT r.branch_id, r.day, r.status, r.checked_at, r.diff_json FROM reconciliations r WHERE ${where.join(' AND ')} ORDER BY r.day DESC, r.branch_id`,
+    params,
+  );
+  const names = await branchNames(q);
+  return rows.map((r) => ({
+    branchId: r.branch_id,
+    branch: nameOf(names, r.branch_id),
+    day: r.day,
+    status: r.status,
+    checkedAt: r.checked_at,
+    differences: r.diff_json ? (JSON.parse(r.diff_json) as ReconciliationRow['differences']) : [],
+  }));
+}
+
 /** The chain at a glance: each branch's takings, returns, spending and open tills in the range, and when it was last heard from. */
 export async function overview(q: Queryable, range: Range, staleMinutes: number) {
-  const [sales, returns, names, open, spent, seen] = await Promise.all([
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  const [sales, returns, names, open, spent, seen, recon] = await Promise.all([
     salesByHour(q, range),
     returnsByHour(q, range),
     branchNames(q),
@@ -368,6 +405,10 @@ export async function overview(q: Queryable, range: Range, staleMinutes: number)
       [range.from, range.to],
     ),
     q.all<{ id: number; active: number; last_seen_at: string | null }>('SELECT id, active, last_seen_at FROM branches ORDER BY id'),
+    q.all<{ branch_id: number; last: string; bad: number }>(
+      `SELECT branch_id, MAX(checked_at) AS last, SUM(CASE WHEN status = 'mismatch' THEN 1 ELSE 0 END) AS bad FROM reconciliations WHERE day >= ? GROUP BY branch_id`,
+      [since],
+    ),
   ]);
   const folded: Folded = new Map();
   for (const s of sales) add(folded, String(s.branch_id), s);
@@ -385,6 +426,11 @@ export async function overview(q: Queryable, range: Range, staleMinutes: number)
       openRegisters: open.find((o) => o.branch_id === b.id)?.n ?? 0,
       expenses: spent.filter((e) => e.branch_id === b.id).map((e) => ({ currency: e.currency, amount: e.amount })),
       lastSeenAt: last,
+      // The daily comparison of the last 30 days: when it last ran, and on how many days HQ and the branch disagree (docs/12 §24).
+      reconciliation: {
+        lastCheckedAt: recon.find((x) => x.branch_id === b.id)?.last ?? null,
+        mismatchDays: recon.find((x) => x.branch_id === b.id)?.bad ?? 0,
+      },
       // A branch that has not been heard from lately: its figures may be behind (they are what it has sent, not what it has done).
       stale: b.active === 1 && (last === null || now - Date.parse(last) > staleMinutes * 60_000),
     };

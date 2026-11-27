@@ -288,6 +288,77 @@ export const SYNC_TABLES: readonly SyncTable[] = [
 
 export const syncTable = (name: string): SyncTable | undefined => SYNC_TABLES.find((t) => t.name === name);
 
+// ------------------------------------------------------------------ reconciliation (docs/12 §24, P4c)
+
+/**
+ * A control: for each day (the UTC date of a row's time), how many rows a table has and the sum of one amount. The branch computes it from its own
+ * tables and sends it; HQ computes the SAME thing from its mirror and compares. A difference means a row is missing, doubled or changed on one side
+ * (a restored backup, a lost write, a bug), which no one would otherwise see. Defined ONCE here, so the two sides cannot drift.
+ * `parent`: the table has no time of its own; its rows count on the day of the parent row they belong to.
+ */
+export type ControlSpec = { name: string; day: string; amount: string; parent?: { table: string; fk: string } };
+
+/** Columns are written with the alias `x` (the table) and, with a parent, `p` (the parent). `day` is the time column of the table or its parent. */
+export const CONTROLS: readonly ControlSpec[] = [
+  { name: 'sales', day: 'created_at', amount: 'x.total_lbp' },
+  { name: 'sale_items', day: 'created_at', amount: 'x.line_total_lbp', parent: { table: 'sales', fk: 'sale_id' } },
+  { name: 'payments', day: 'created_at', amount: 'x.amount' },
+  { name: 'stock_movements', day: 'created_at', amount: 'x.qty_milli_delta' },
+  { name: 'returns', day: 'created_at', amount: 'x.refund_lbp + x.balance_reduced_lbp' },
+  { name: 'return_items', day: 'created_at', amount: 'x.amount_lbp', parent: { table: 'returns', fk: 'return_id' } },
+  { name: 'customer_payments', day: 'created_at', amount: 'x.amount_lbp' },
+  { name: 'register_sessions', day: 'opened_at', amount: '0' },
+  { name: 'register_balances', day: 'opened_at', amount: 'x.expected', parent: { table: 'register_sessions', fk: 'session_id' } },
+  { name: 'register_movements', day: 'created_at', amount: 'x.amount' },
+  { name: 'expenses', day: 'created_at', amount: 'x.amount_minor' },
+  { name: 'purchases', day: 'created_at', amount: 'x.total_minor' },
+  { name: 'purchase_items', day: 'created_at', amount: 'x.qty_milli', parent: { table: 'purchases', fk: 'purchase_id' } },
+  { name: 'purchase_payments', day: 'created_at', amount: 'x.amount_minor' },
+  { name: 'wallet_entries', day: 'created_at', amount: 'x.amount' },
+  { name: 'wallet_counts', day: 'counted_at', amount: 'x.counted' },
+  { name: 'service_sales', day: 'created_at', amount: 'x.fee_minor' },
+];
+
+/** One number pair: rows and their summed amount. */
+export type Control = { n: number; s: number };
+/** One day's controls, by table name. `day` is `YYYY-MM-DD` (UTC). */
+export type DayControls = { day: string; tables: Record<string, Control> };
+
+/** The query that groups one table by day. Parameters, in order: from, to (plain dates: from inclusive, to exclusive), then on HQ's side the branch id (twice with a parent). */
+export function controlSql(spec: ControlSpec, side: 'branch' | 'hq'): string {
+  const hq = side === 'hq';
+  if (!spec.parent) {
+    return `SELECT substr(x.${spec.day}, 1, 10) AS d, COUNT(*) AS n, COALESCE(SUM(${spec.amount}), 0) AS s FROM ${spec.name} x
+      WHERE x.${spec.day} >= ? AND x.${spec.day} < ?${hq ? ' AND x.branch_id = ?' : ''} GROUP BY d`;
+  }
+  const on = hq ? `p.branch_id = x.branch_id AND p.id = x.${spec.parent.fk}` : `p.id = x.${spec.parent.fk}`;
+  return `SELECT substr(p.${spec.day}, 1, 10) AS d, COUNT(*) AS n, COALESCE(SUM(${spec.amount}), 0) AS s FROM ${spec.name} x
+    JOIN ${spec.parent.table} p ON ${on}
+    WHERE p.${spec.day} >= ? AND p.${spec.day} < ?${hq ? ' AND x.branch_id = ?' : ''} GROUP BY d`;
+}
+
+/** The days a control covers: the `count` days that END before `today` (a plain date), oldest first. Today itself is still changing. */
+export function controlDays(today: string, count: number): { from: string; to: string; days: string[] } {
+  const end = Date.parse(`${today}T00:00:00Z`);
+  const days: string[] = [];
+  for (let i = count; i >= 1; i--) days.push(new Date(end - i * 86_400_000).toISOString().slice(0, 10));
+  return { from: days[0]!, to: today, days };
+}
+
+export type ControlDiff = { table: string; branch: Control; hq: Control };
+
+/** Which tables differ between what the branch says and what HQ holds (a table the other side does not know is skipped, not a difference). */
+export function diffControls(branch: Record<string, Control>, hq: Record<string, Control>): ControlDiff[] {
+  const out: ControlDiff[] = [];
+  for (const spec of CONTROLS) {
+    const b = branch[spec.name];
+    if (!b) continue;
+    const h = hq[spec.name] ?? { n: 0, s: 0 };
+    if (b.n !== h.n || b.s !== h.s) out.push({ table: spec.name, branch: b, hq: h });
+  }
+  return out;
+}
+
 export type FactValue = number | string | null;
 export type FactRow = Record<string, FactValue>;
 /** One change: `u` = this is the row now (insert or update), `d` = it is gone. */

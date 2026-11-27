@@ -96,7 +96,7 @@ describe('connecting a branch to HQ (Settings > HQ)', () => {
     const res = await c.http.post(`${api}/sync/connect`).set(auth(admin)).send({ url: hq.url, code });
     expect(JSON.stringify(res.body)).not.toMatch(/token/i);
     expect(Object.keys(await status()).sort()).toEqual(
-      ['branch', 'connectedAt', 'hqUrl', 'lastError', 'lastOkAt', 'linked', 'progress', 'since', 'state'].sort(),
+      ['branch', 'connectedAt', 'control', 'hqUrl', 'lastError', 'lastOkAt', 'linked', 'progress', 'since', 'state'].sort(),
     );
     const audit = (await c.http.get(`${api}/audit?action=hq.connect`).set(auth(admin))).body.data;
     expect(audit.length).toBeGreaterThan(0);

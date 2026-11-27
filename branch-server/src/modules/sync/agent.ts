@@ -2,6 +2,7 @@ import type { Database } from '../../db/adapter';
 import { nowIso } from '../../util/time';
 import { pingHq } from './hqClient';
 import type { PullOutcome } from './down';
+import type { ControlOutcome } from './control';
 import type { PushOutcome } from './up';
 import { getLink, recordError, recordOk, type Link } from './service';
 
@@ -27,6 +28,10 @@ export type SyncAgentOptions = {
   push?: (link: Link, signal: AbortSignal) => Promise<PushOutcome>;
   /** Fetch and apply the next page of what HQ owns (modules/sync/down.ts). Called again and again while it says there is more. */
   pull?: (link: Link, signal: AbortSignal) => Promise<PullOutcome>;
+  /** Tell HQ what this branch holds, per table and day, so HQ can compare (modules/sync/control.ts). Never throws. Run when everything has been sent. */
+  control?: (link: Link, signal: AbortSignal) => Promise<ControlOutcome>;
+  /** How often to send the control (default 30 minutes; a first or renewed connection sends one as soon as it has caught up). */
+  controlEveryMs?: number;
   /** Fetch the product pictures that products name and this branch lacks (modules/sync/images.ts). Never throws. Run after each pull. */
   fetchImages?: (link: Link, signal: AbortSignal) => Promise<unknown>;
   /** HQ's changes were applied: which tables changed (so the screens can be told). */
@@ -52,6 +57,8 @@ export class SyncAgent {
   private nudged = false;
   private moreWaiting = false;
   private lastPull = 0;
+  private lastControl = 0;
+  private control: { at: string; outcome: ControlOutcome } | null = null;
 
   constructor(private readonly opts: SyncAgentOptions) {}
 
@@ -121,10 +128,29 @@ export class SyncAgent {
       if (this.abort.signal.aborted) return null;
       const r = await push(link, this.abort.signal);
       if ('error' in r) return r;
-      if (!r.more) return null;
+      if (!r.more) {
+        await this.maybeControl(link);
+        return null;
+      }
     }
     this.moreWaiting = true;
     return null;
+  }
+
+  /** What HQ last said about the daily control (or why none was sent), for the branch's own status screen. */
+  lastControlResult(): { at: string; outcome: ControlOutcome } | null {
+    return this.control;
+  }
+
+  /** Everything has been sent: now and then, say what this branch holds so HQ can compare. A problem here is noted, never a failure of the sync. */
+  private async maybeControl(link: Link): Promise<void> {
+    const control = this.opts.control;
+    if (!control || this.abort.signal.aborted) return;
+    if (Date.now() - this.lastControl < (this.opts.controlEveryMs ?? 30 * 60_000)) return;
+    const outcome = await control(link, this.abort.signal);
+    // A control that could not be made now (busy, away) is tried again at the next round, not in half an hour.
+    if (!('skipped' in outcome) && !('error' in outcome)) this.lastControl = Date.now();
+    this.control = { at: nowIso(), outcome };
   }
 
   /** Wait, but stop waiting at once if the loop is stopped or nudged. */
@@ -169,6 +195,7 @@ export class SyncAgent {
           }
           if (!wasOnline) {
             this.lastPull = 0; // a first or renewed connection always pulls
+            this.lastControl = 0; // ...and sends a control as soon as it has caught up
             await this.opts.onReconnect?.(link);
           }
           // Send what is waiting: first what changed, then the history from before this branch connected.

@@ -8,6 +8,7 @@ import {
   expensesReport,
   overview,
   paymentsReport,
+  reconciliationReport,
   productsReport,
   registersReport,
   salesReport,
@@ -103,6 +104,28 @@ export default async function reportRoutes(app: FastifyInstance) {
     const q = parse(range.extend({ onlyVariance: z.enum(['true', 'false']).default('false') }), req.query);
     const r = resolve(q);
     return { ...r, ...(await registersReport(db, r, { branchId: q.branchId, onlyVariance: q.onlyVariance === 'true' })) };
+  });
+
+  // Where HQ and a branch disagree about what the branch holds, day by day (docs/12 §24). `from` and `to` are days (default: the last 30).
+  app.get('/reports/reconciliation', view, async (req) => {
+    const q = parse(
+      z.object({
+        from: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        to: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        branchId: z.coerce.number().int().positive().optional(),
+        onlyMismatch: z.enum(['true', 'false']).default('false'),
+      }),
+      req.query,
+    );
+    const to = q.to ?? new Date().toISOString().slice(0, 10);
+    const from = q.from ?? new Date(Date.parse(`${to}T00:00:00Z`) - 30 * 86_400_000).toISOString().slice(0, 10);
+    return { from, to, data: await reconciliationReport(db, { from, to, branchId: q.branchId, onlyMismatch: q.onlyMismatch === 'true' }) };
   });
 
   // Stock per product at every branch, derived from the movements the branches sent. `lowOnly=true`: at or under the product's alert somewhere.

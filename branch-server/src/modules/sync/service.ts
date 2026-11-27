@@ -107,6 +107,16 @@ async function startCapture(q: Queryable): Promise<void> {
   await q.run('UPDATE sync_control SET capture = 1, last_push_at = NULL, down_cursor = 0 WHERE id = 1');
 }
 
+/**
+ * Send everything again: the first send of history is started over for every table. HQ stores rows with upserts, so rows it already has are
+ * simply stored again, and a row it lost comes back. This is the way back from a difference the daily control found (docs/12 §24). The outbox,
+ * the link and the down cursor are not touched.
+ */
+export async function restartSnapshot(q: Queryable): Promise<void> {
+  await q.run('DELETE FROM sync_snapshot');
+  for (const t of SYNC_TABLES) await q.run(`INSERT INTO sync_snapshot (tbl, upto) SELECT ?, COALESCE(MAX(id), 0) FROM ${t.name}`, [t.name]);
+}
+
 /** A branch that is not connected records nothing, and keeps nothing waiting. */
 async function stopCapture(q: Queryable): Promise<void> {
   await q.run('UPDATE sync_control SET capture = 0, last_push_at = NULL, down_cursor = 0 WHERE id = 1');

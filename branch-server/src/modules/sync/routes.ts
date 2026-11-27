@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { parse } from '../../util/validate';
 import { AppError, E } from '../../errors';
 import { enrolAtHq, normaliseHqUrl } from './hqClient';
-import { assertCatalogCanConnect, clearLink, getLink, saveLink, syncProgress } from './service';
+import { writeAuditQ } from '../audit/service';
+import { assertCatalogCanConnect, clearLink, getLink, restartSnapshot, saveLink, syncProgress } from './service';
 import { verifyWithHq } from './up';
 
 const connectBody = z.object({ url: z.string().trim().min(1).max(300), code: z.string().trim().min(6).max(24) });
@@ -28,6 +29,8 @@ export default async function syncRoutes(app: FastifyInstance) {
       since: s.since,
       lastOkAt: link?.lastOkAt ?? null,
       lastError: s.lastError ?? link?.lastError ?? null,
+      // What HQ said about the last daily control, or why none was sent yet (docs/12 §24).
+      control: app.sync.lastControlResult(),
       // What is waiting to go to HQ: the changes recorded since connecting, and the history from before.
       progress: await syncProgress(db),
     };
@@ -52,6 +55,18 @@ export default async function syncRoutes(app: FastifyInstance) {
     if (app.catalogGate) await assertCatalogCanConnect(db, hqUrl); // before the one-time code is spent
     const done = await enrolAtHq(hqUrl, b.code); // the network call is made BEFORE the transaction
     await db.tx((tx) => saveLink(tx, req.auth.id, hqUrl, done.token, done.branch));
+    app.sync.nudge();
+    return statusJson();
+  });
+
+  // HQ found a difference (or the admin wants to be sure): send everything again. HQ stores rows with upserts, so this is safe to repeat.
+  app.post('/sync/resync', admin, async (req) => {
+    const link = await getLink(db);
+    if (!link) throw E.conflict('NOT_CONNECTED', 'This branch is not connected to HQ');
+    await db.tx(async (tx) => {
+      await restartSnapshot(tx);
+      await writeAuditQ(tx, { userId: req.auth.id, action: 'hq.resync', entity: 'hq' });
+    });
     app.sync.nudge();
     return statusJson();
   });

@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { digestRows, MAX_BATCH_ROWS, SYNC_TABLES, syncTable, validateRow, type FactRow } from '../../core/src/sync';
+import {
+  CONTROLS,
+  controlDays,
+  controlSql,
+  diffControls,
+  digestRows,
+  MAX_BATCH_ROWS,
+  SYNC_TABLES,
+  syncTable,
+  validateRow,
+  type FactRow,
+} from '../../core/src/sync';
 
 // The shared definition of what a branch sends to HQ, and the fingerprint used to prove HQ holds the same rows (docs/12-sync-and-hq.md §3-4).
 const sales = syncTable('sales')!;
@@ -147,5 +158,37 @@ describe('the fingerprint of a set of rows', () => {
     expect(d.count).toBe(5000);
     expect(digestRows(sales, [...many].reverse())).toEqual(d);
     expect(digestRows(sales, many.slice(1))).not.toEqual(d);
+  });
+});
+
+describe('the daily control (docs/12 §24)', () => {
+  it('covers the days that end before today, oldest first, and never today', () => {
+    expect(controlDays('2026-11-27', 3)).toEqual({
+      from: '2026-11-24',
+      to: '2026-11-27',
+      days: ['2026-11-24', '2026-11-25', '2026-11-26'],
+    });
+    expect(controlDays('2026-03-02', 2).days).toEqual(['2026-02-28', '2026-03-01']); // across a month end
+  });
+
+  it('says which tables differ, skips what the other side does not know, and treats a table HQ has no rows of as zero', () => {
+    const same = { n: 2, s: 10 };
+    expect(diffControls({ sales: same, expenses: same }, { sales: same, expenses: same })).toEqual([]);
+    expect(diffControls({ sales: same }, { sales: { n: 2, s: 11 } })).toEqual([{ table: 'sales', branch: same, hq: { n: 2, s: 11 } }]);
+    expect(diffControls({ sales: same }, {})).toEqual([{ table: 'sales', branch: same, hq: { n: 0, s: 0 } }]);
+    expect(diffControls({ future_table: same } as never, {})).toEqual([]); // a table from another version is not a difference
+    expect(diffControls({}, { sales: same })).toEqual([]); // the branch said nothing about it
+  });
+
+  it('is one definition for both sides: a child table counts on its parent’s day, and HQ always narrows to one branch', () => {
+    const items = CONTROLS.find((c) => c.name === 'sale_items')!;
+    expect(controlSql(items, 'branch')).toContain('JOIN sales p ON p.id = x.sale_id');
+    expect(controlSql(items, 'hq')).toContain('p.branch_id = x.branch_id AND p.id = x.sale_id');
+    expect(controlSql(items, 'hq')).toContain('x.branch_id = ?');
+    for (const spec of CONTROLS) {
+      expect(controlSql(spec, 'hq'), spec.name).toContain('x.branch_id = ?');
+      expect(controlSql(spec, 'branch'), spec.name).not.toContain('branch_id');
+    }
+    expect(new Set(CONTROLS.map((c) => c.name)).size).toBe(CONTROLS.length);
   });
 });
