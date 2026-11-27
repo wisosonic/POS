@@ -82,7 +82,18 @@ export default async function lookupRoutes(app: FastifyInstance) {
       return { data: rows.map((r) => toJson(kind, r)) };
     });
 
+    // Once connected, these four lists are HQ's (docs/12 §15, P3a): a second source would fight the one that comes down.
+    const hqOwned = ['categories', 'brands', 'units', 'suppliers'].includes(kind.table);
+    const refuseIfConnected = () => {
+      if (hqOwned && db.prepare('SELECT 1 FROM hq_link WHERE id = 1').get())
+        throw E.conflict(
+          'HQ_OWNS_CATALOG',
+          'This branch is connected to HQ: categories, brands, units and suppliers are changed at HQ and arrive here by themselves.',
+        );
+    };
+
     app.post(kind.path, write, async (req, reply) => {
+      refuseIfConnected();
       const b = parse(createBody, req.body) as Record<string, unknown> & { name: string };
       if (taken(b.name)) throw E.conflict('DUPLICATE_NAME', duplicateMessage(kind, b.name));
       const fields = Object.keys(kind.columns);
@@ -106,6 +117,7 @@ export default async function lookupRoutes(app: FastifyInstance) {
     });
 
     app.patch(`${kind.path}/:id`, write, async (req) => {
+      refuseIfConnected();
       const id = Number((req.params as { id: string }).id);
       const b = parse(patchBody, req.body) as Record<string, unknown>;
       const before = get(id);

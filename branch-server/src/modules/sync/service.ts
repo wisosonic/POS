@@ -1,4 +1,5 @@
 import { SYNC_TABLES } from '@pos/core/sync';
+import { AppError } from '@pos/core/errors';
 import type { Queryable } from '../../db/adapter';
 import { nowIso } from '../../util/time';
 import { writeAuditQ } from '../audit/service';
@@ -40,8 +41,32 @@ export async function getLink(q: Queryable): Promise<Link | null> {
     : null;
 }
 
+/**
+ * The catalog's lists come from HQ with HQ's ids (P3a), so a branch may connect only while it has no catalog of its own: no products,
+ * categories, brands or suppliers, and no unit besides the three it starts with. Exception: a branch whose catalog already came from THIS
+ * HQ (it connects again with a new code). Call it BEFORE the one-time code is spent, so a refusal does not waste the code.
+ */
+export async function assertCatalogCanConnect(q: Queryable, hqUrl: string): Promise<void> {
+  const from = await q.one<{ catalog_hq_url: string | null }>('SELECT catalog_hq_url FROM sync_control WHERE id = 1');
+  if (from?.catalog_hq_url === hqUrl) return;
+  const count = async (sql: string) => (await q.one<{ n: number }>(sql))!.n;
+  const own =
+    (await count('SELECT COUNT(*) AS n FROM products')) +
+    (await count('SELECT COUNT(*) AS n FROM categories')) +
+    (await count('SELECT COUNT(*) AS n FROM brands')) +
+    (await count('SELECT COUNT(*) AS n FROM suppliers')) +
+    (await count('SELECT COUNT(*) AS n FROM units WHERE id > 3'));
+  if (own > 0)
+    throw new AppError(
+      409,
+      'CATALOG_NOT_EMPTY',
+      'This branch already has products, categories, brands or suppliers of its own. A branch takes its catalog from HQ, so connect a branch that has none (a fresh install), and add the products at HQ.',
+    );
+}
+
 /** Connect (or connect again, replacing the old link). The local branch takes HQ's code and name, which receipts will print. */
 export async function saveLink(q: Queryable, actorId: number, hqUrl: string, token: string, branch: HqBranch): Promise<void> {
+  await q.run('UPDATE sync_control SET catalog_hq_url = ? WHERE id = 1', [hqUrl]);
   const now = nowIso();
   await q.run(
     `INSERT INTO hq_link (id, hq_url, branch_token, hq_branch_id, hq_branch_code, hq_branch_name, connected_at, last_ok_at, last_error)

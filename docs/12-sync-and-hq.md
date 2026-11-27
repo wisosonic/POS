@@ -139,13 +139,27 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **How fast:** the branch asks every 10 s, so a new rate reaches every branch within about ten seconds. There is no push from HQ yet (a stream from HQ is an option if that is ever too slow).
 
-**Same pattern for what comes next (P3):** add the table to `DOWN_TABLES` (branch-server/core/src/sync.ts), a table at HQ with a `change_log` line written by its service, a `hq_id` column at the branch, and a case in `applyChange`. `branch-server/tests/db/sync-schema.test.ts` checks the lists agree.
+**Same pattern for what comes next (P3):** add the table to `DOWN_TABLES` (`branch-server/core/src/sync.ts`, copied to `cloud-hq/core`), a table at HQ with a `change_log` line written by its service, and either `ids: 'mapped'` (a `hq_id` column at the branch and a case in `applyChange`: the rate) or `ids: 'same'` (§17: the branch uses HQ's id as its own, no branch code needed). `cloud-hq/tests/system/sync-schema.test.ts` checks the lists agree.
 
 ## 16. What P2d proved (2026-11-24): two branches and HQ under failure
 
 `branch-server/tests/integration/sync-chaos.test.ts` runs HQ and TWO real branch servers over real HTTP. Both branches are seeded the same way, so they have the same ids and the same receipt numbers, which HQ must keep apart. Proven: the two add up at HQ (sales, lines, payments, stock movements: counts and sums, per branch and in total); a rate set at HQ reaches both; both sell while HQ is gone and catch up by themselves when it returns; with 30% of calls failing and 30% of answers lost (a seeded generator, so a failure can be repeated) while both sell at the same time, HQ ends with every row once; and a branch server stopped and started again in the middle of a backlog stays connected and finishes sending.
 
 **Not covered:** a crash in the middle of a database write (SQLite and the transactions cover it, but it is not simulated), clock differences between machines, a branch that is away for weeks with a very large backlog, and anything over a real internet link (everything here is one machine).
+
+## 17. What P3a built (2026-11-27): the catalog's lists go down with HQ's ids
+
+**What:** categories, brands, units and suppliers. HQ owns them (migration 0004, `cloud-hq/src/modules/catalog/`): `GET/POST /categories|/brands|/units|/suppliers` and `PATCH /<list>/:id` (HQ staff). A name is unique per list (case-insensitive, `409 DUPLICATE_NAME`). **There is no delete** (a product may point at one; renaming covers the need, as at a branch). Every create or rename writes its `change_log` line and an `hq_audit` row in the same transaction. A new HQ already holds the three units every branch starts with (Piece, KG, Box: ids 1 to 3), with their log lines.
+
+**One id everywhere (the decision of P3a).** Unlike the rate, a connected branch stores these rows **under HQ's id as its own id** (`DOWN_TABLES` `ids: 'same'`; an upsert on `id`, applied in the same page transaction as everything else). So a product that will point at category 7 means the same category at HQ and at every branch, and HQ's reports need no id translation. **This only works if the branch had no catalog of its own when it connected**, so:
+
+- `POST /sync/connect` is refused with `409 CATALOG_NOT_EMPTY` if the branch has any product, category, brand or supplier, or a unit besides its three starting ones. The check runs **before** the one-time code is spent, so a refusal wastes nothing. A fresh install passes; the products are then added at HQ.
+- Exception: a branch whose catalog already came from **this HQ** (`sync_control.catalog_hq_url`, migration 0022) may connect again with a new code (a lost token). A different HQ is refused. To move a branch with a catalog to another HQ, start it from a fresh data folder.
+- While connected the branch cannot change these four lists (`409 HQ_OWNS_CATALOG`, as `HQ_OWNS_RATES` for the rate). Expense categories and service types stay the branch's own.
+- The screens are told with `catalog.changed` (the `catalog` number of the ping).
+- Tests that connect the seeded test branch (it has a catalog) switch the check off with `sync: { catalogGate: false }`; `startCtx` does that by default. `cloud-hq/tests/system/catalog-lists.test.ts` leaves it on.
+
+**Next:** P3b, the products themselves (prices, barcodes, pictures, a paged first sync of about 8,000, the CSV import at HQ, and the branch's product screens read-only while connected: `docs/QUESTIONS.md` #15).
 
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 

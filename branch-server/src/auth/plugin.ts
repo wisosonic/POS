@@ -39,6 +39,8 @@ declare module 'fastify' {
     requestRestart: () => void;
     /** The server speaks HTTPS: the sign-in cookie is then marked Secure. */
     tls: boolean;
+    /** Connecting to HQ needs an empty catalog (see `sync.catalogGate` in app.ts). */
+    catalogGate: boolean;
     /** The database file this server owns. */
     dbPath: string;
     /** Where product pictures are kept (content-named files, served at /uploads/<name>). */

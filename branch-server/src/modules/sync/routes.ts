@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { parse } from '../../util/validate';
 import { AppError, E } from '../../errors';
 import { enrolAtHq, normaliseHqUrl } from './hqClient';
-import { clearLink, getLink, saveLink, syncProgress } from './service';
+import { assertCatalogCanConnect, clearLink, getLink, saveLink, syncProgress } from './service';
 import { verifyWithHq } from './up';
 
 const connectBody = z.object({ url: z.string().trim().min(1).max(300), code: z.string().trim().min(6).max(24) });
@@ -49,6 +49,7 @@ export default async function syncRoutes(app: FastifyInstance) {
   app.post('/sync/connect', admin, async (req) => {
     const b = parse(connectBody, req.body);
     const hqUrl = normaliseHqUrl(b.url);
+    if (app.catalogGate) await assertCatalogCanConnect(db, hqUrl); // before the one-time code is spent
     const done = await enrolAtHq(hqUrl, b.code); // the network call is made BEFORE the transaction
     await db.tx((tx) => saveLink(tx, req.auth.id, hqUrl, done.token, done.branch));
     app.sync.nudge();

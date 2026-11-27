@@ -47,8 +47,27 @@ function checkPage(page: Page, cursor: number): string | null {
   return null;
 }
 
+// The catalog lists use HQ's id as their own id (DOWN_TABLES `ids: 'same'`): an upsert on `id`. Table and column names come from that fixed list.
+async function applySameId(q: Queryable, c: Change): Promise<void> {
+  const table = downTable(c.tbl)!;
+  if (c.op === 'd') {
+    await q.run(`DELETE FROM ${table.name} WHERE id = ?`, [c.pk]);
+    return;
+  }
+  const cols = table.columns.map((x) => x.name);
+  const updates = cols
+    .filter((x) => x !== 'id')
+    .map((x) => `${x} = excluded.${x}`)
+    .join(', ');
+  await q.run(
+    `INSERT INTO ${table.name} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ON CONFLICT (id) DO UPDATE SET ${updates}`,
+    cols.map((x) => c.row![x] ?? null),
+  );
+}
+
 async function applyChange(q: Queryable, c: Change): Promise<void> {
-  // Only exchange rates come down so far. A new table adds its own case here (and to DOWN_TABLES and a migration for its hq_id).
+  // A new table adds itself to DOWN_TABLES; `ids: 'same'` ones are handled above, `mapped` ones need their own case here and an hq_id column.
+  if (downTable(c.tbl)?.ids === 'same') return applySameId(q, c);
   if (c.tbl === 'exchange_rates') {
     if (c.op === 'd') {
       await q.run('DELETE FROM exchange_rates WHERE hq_id = ?', [c.pk]);

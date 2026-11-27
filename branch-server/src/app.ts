@@ -85,6 +85,11 @@ export type BuildOptions = {
     batchSize?: number;
     /** Replaces `fetch` for every call to HQ: a test makes the connection fail or lose answers. */
     fetchImpl?: typeof fetch;
+    /**
+     * Refuse to connect a branch that has a catalog of its own (default true). Tests that connect the seeded test branch switch it off; the
+     * test of the gate itself leaves it on.
+     */
+    catalogGate?: boolean;
   };
 };
 
@@ -104,6 +109,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     ...(tls ? { https: tls } : {}),
   }) as unknown as FastifyInstance; // the https server type differs only in the server it holds
   app.decorate('tls', !!tls);
+  app.decorate('catalogGate', options.sync?.catalogGate !== false);
   const registeredRoutes: { method: string; url: string }[] = [];
   app.addHook('onRoute', (route) => {
     for (const method of [route.method].flat()) registeredRoutes.push({ method, url: route.url });
@@ -192,6 +198,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     pull: (link, signal) => pullOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, signal }),
     onPulled: (tables) => {
       if (tables.includes('exchange_rates')) events.publish('rate.changed');
+      if (tables.some((t) => ['categories', 'brands', 'units', 'suppliers'].includes(t))) events.publish('catalog.changed');
     },
     push: (link, signal) =>
       pushOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, batchSize: options.sync?.batchSize, signal }),

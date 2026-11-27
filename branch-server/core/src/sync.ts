@@ -150,10 +150,22 @@ export function digestRows(table: SyncTable, rows: Iterable<FactRow>): Digest {
  * The tables HQ owns and branches copy. Each row keeps HQ's id; at a branch it is stored in the column `hq_id` of its own table (so HQ's
  * numbers never collide with ids the branch made itself). Same column checks as for what goes up.
  */
-export const DOWN_TABLES: readonly SyncTable[] = [
-  { name: 'exchange_rates', columns: [int('id'), int('rate_lbp_per_usd'), text('effective_from'), text('created_at')] },
+export type DownTable = SyncTable & {
+  /**
+   * `mapped`: the branch keeps HQ's id in `hq_id` beside its own ids (a rate: nothing points at it).
+   * `same`: the branch uses HQ's id AS its own id (the catalog, docs/12 §15 and P3): a product, a sale item or a stock movement then
+   * means the same thing at HQ and at every branch. Possible because a branch must have an empty catalog when it connects.
+   */
+  ids: 'mapped' | 'same';
+};
+export const DOWN_TABLES: readonly DownTable[] = [
+  { name: 'exchange_rates', ids: 'mapped', columns: [int('id'), int('rate_lbp_per_usd'), text('effective_from'), text('created_at')] },
+  { name: 'categories', ids: 'same', columns: [int('id'), text('name')] },
+  { name: 'brands', ids: 'same', columns: [int('id'), text('name')] },
+  { name: 'units', ids: 'same', columns: [int('id'), text('name'), int('fractional')] },
+  { name: 'suppliers', ids: 'same', columns: [int('id'), text('name'), text('address', true), text('phone', true), text('email', true)] },
 ];
-export const downTable = (name: string): SyncTable | undefined => DOWN_TABLES.find((t) => t.name === name);
+export const downTable = (name: string): DownTable | undefined => DOWN_TABLES.find((t) => t.name === name);
 
 /** One entry of HQ's change log, as a branch receives it. `seq` is HQ's order; a branch remembers the last one it applied. */
 export type Change = { seq: number; tbl: string; pk: number; op: 'u' | 'd'; row?: FactRow };

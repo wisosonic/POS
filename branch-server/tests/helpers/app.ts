@@ -56,7 +56,8 @@ export async function startCtx(
     webDist: options.webDist,
     restart: options.restart,
     reports: options.reports ?? { worker: false },
-    sync: options.sync ?? { enabled: false },
+    // The seeded test branch has a catalog of its own, so the connect check is off unless a test turns it on (`catalogGate: true`).
+    sync: { catalogGate: false, ...(options.sync ?? { enabled: false }) },
   });
   await app.ready();
   if (!options.blindCount) await app.database.run('UPDATE store_settings SET cashier_blind_count = 0 WHERE id = 1');

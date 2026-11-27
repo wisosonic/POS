@@ -6,6 +6,8 @@ import { adminAuth, branchAuth, startHq, type Hq } from './helpers';
 // and a branch reads the log after the number it remembers.
 let hq: Hq;
 let token = '';
+// A new HQ already has three lines in its log: the units every branch starts with (migration 0004). The rate tests start after them.
+let base = 0;
 const api = '/api/v1';
 const setRate = (rateLbpPerUsd: number, extra: Record<string, unknown> = {}) =>
   hq.http
@@ -19,6 +21,13 @@ beforeAll(async () => {
   hq = await startHq();
   const code = (await hq.http.post(`${api}/branches`).set(adminAuth).send({ code: 'D1', name: 'Down' })).body.enrolCode as string;
   token = (await hq.http.post(`${api}/sync/enrol`).send({ code })).body.token as string;
+  const seeded = (await changes(0)).body;
+  expect(seeded.changes.map((c: { tbl: string; pk: number }) => [c.tbl, c.pk])).toEqual([
+    ['units', 1],
+    ['units', 2],
+    ['units', 3],
+  ]);
+  base = seeded.next;
 });
 afterAll(() => hq.close());
 
@@ -55,7 +64,7 @@ describe('the change log a branch reads', () => {
   it('gives each change with the row as it is, in order, and where to ask next', async () => {
     await setRate(90000);
     await setRate(91000, { effectiveFrom: '2030-01-01T00:00:00.000Z' });
-    const res = await changes(0);
+    const res = await changes(base);
     expect(res.status).toBe(200);
     expect(res.body.more).toBe(false);
     expect(res.body.changes.map((c: { tbl: string; op: string }) => [c.tbl, c.op])).toEqual([
@@ -70,7 +79,7 @@ describe('the change log a branch reads', () => {
   });
 
   it('pages: a small limit says there is more, and asking again after `next` continues without a gap or a repeat', async () => {
-    const first = (await changes(0, 2)).body;
+    const first = (await changes(base, 2)).body;
     expect(first.changes).toHaveLength(2);
     expect(first.more).toBe(true);
     const second = (await changes(first.next, 2)).body;

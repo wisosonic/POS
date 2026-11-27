@@ -107,16 +107,28 @@ describe('HQ’s copies are mirrors, not records of HQ’s own', () => {
 // What HQ owns and sends down (docs/12 §15): HQ's table has the listed columns; the branch's has them plus hq_id, where HQ's id is kept.
 describe.each(DOWN_TABLES.map((t) => [t.name, t] as const))('down: %s', (_name, table) => {
   const listed = table.columns.map((c) => ({ name: c.name, kind: c.kind, nullable: c.nullable }));
-  it('HQ has exactly the listed columns', () => {
-    expect(info(hq, table.name).map((c) => ({ name: c.name, kind: kind(c.type), nullable: c.notnull === 0 && c.pk === 0 }))).toEqual(
-      listed,
-    );
+  // HQ's own bookkeeping columns on a list it owns are not sent (the rate has none).
+  const bookkeeping = table.ids === 'same' ? ['created_at', 'updated_at'] : [];
+  it('HQ has exactly the listed columns (plus created_at and updated_at on the catalog lists)', () => {
+    expect(
+      info(hq, table.name)
+        .filter((c) => !bookkeeping.includes(c.name))
+        .map((c) => ({ name: c.name, kind: kind(c.type), nullable: c.notnull === 0 && c.pk === 0 })),
+    ).toEqual(listed);
   });
-  it('the branch has the listed columns, and an hq_id (unique) where HQ id is kept apart from its own ids', () => {
+  it.runIf(table.ids === 'same')('the branch uses HQ’s id as its own id: the same columns, no hq_id', () => {
     const cols = info(branch, table.name).map((c) => c.name);
-    for (const c of table.columns.filter((x) => x.name !== 'id')) expect(cols, c.name).toContain(c.name);
-    expect(cols).toContain('hq_id');
-    const idx = branch.prepare(`PRAGMA index_list(${table.name})`).all() as { name: string; unique: number }[];
-    expect(idx.some((i) => i.unique === 1 && i.name.includes('hq'))).toBe(true);
+    for (const c of table.columns) expect(cols, c.name).toContain(c.name);
+    expect(cols).not.toContain('hq_id');
   });
+  it.runIf(table.ids === 'mapped')(
+    'the branch has the listed columns, and an hq_id (unique) where HQ id is kept apart from its own ids',
+    () => {
+      const cols = info(branch, table.name).map((c) => c.name);
+      for (const c of table.columns.filter((x) => x.name !== 'id')) expect(cols, c.name).toContain(c.name);
+      expect(cols).toContain('hq_id');
+      const idx = branch.prepare(`PRAGMA index_list(${table.name})`).all() as { name: string; unique: number }[];
+      expect(idx.some((i) => i.unique === 1 && i.name.includes('hq'))).toBe(true);
+    },
+  );
 });

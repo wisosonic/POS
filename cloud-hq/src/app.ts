@@ -9,6 +9,7 @@ import branchRoutes from './modules/branches/routes';
 import { resolveBranch, type Branch } from './modules/branches/service';
 import syncRoutes from './modules/sync/routes';
 import rateRoutes from './modules/rates/routes';
+import catalogListRoutes from './modules/catalog/routes';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -117,6 +118,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
       await api.register(branchRoutes);
       await api.register(syncRoutes);
       await api.register(rateRoutes);
+      await api.register(catalogListRoutes);
     },
     { prefix: '/api/v1' },
   );
