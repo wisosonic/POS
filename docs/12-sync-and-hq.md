@@ -275,6 +275,10 @@ The design of all of P5 is in `docs/15-stock-flow-and-customers.md` (read it bef
 
 **Not yet:** the warehouse's own screens (receiving, shipping: P5b), live updates for a browser at a stock branch (it has no till, so no device token, so no `/ping`; P5b decides how it follows changes), and the sale-only menu entries are not hidden.
 
+## 26. What P5b built (2026-11-28): shipments and receipts
+
+The detail is in `docs/15` §4.1. In sync terms: four more tables go UP (`shipments`, `shipment_items`, `receipts`, `receipt_items`: 23 in all, each in the daily control), and three go DOWN under HQ's own ids (`branch_directory` to every branch; `incoming_shipments` and `incoming_shipment_items` to the **receiving branch only**). The branch-scoped change log of P3c (`change_log.branch_id`) is what makes "only the receiver" possible; HQ writes those lines in `relayShipments`, in the same transaction that stores the sender's facts, once the shipment's lines are all there.
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

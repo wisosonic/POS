@@ -49,6 +49,8 @@ export function eventsFor(method: string, route: string, status: number): EventT
   if (is('POST', /^\/sales\/:id\/(void|delete)$/)) return ['stock.changed', 'register.updated'];
   if (is('POST', '/returns')) return status === 201 ? ['stock.changed', 'register.updated'] : [];
   if (is('POST', '/purchases/:id/receive')) return ['stock.changed', 'catalog.changed']; // receiving can move a product's cost
+  if (is('POST', '/shipments')) return status === 201 ? ['stock.changed'] : [];
+  if (is('POST', '/receipts')) return status === 201 ? ['stock.changed', 'catalog.changed'] : []; // receiving can move a product's cost
   if (is('POST', '/stock/adjustments') || is('POST', '/stocktakes/:id/commit')) return ['stock.changed'];
   if (is('POST', '/products') || is('PATCH', '/products/:id') || is('POST', '/products/merge') || is('POST', '/products/import'))
     return ['catalog.changed'];

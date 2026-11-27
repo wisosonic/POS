@@ -38,6 +38,7 @@ import pingRoutes from './modules/ping/routes';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
 import { assertSaleBranch } from './modules/branch/kind';
+import transferRoutes from './modules/transfers/routes';
 import { runControl } from './modules/sync/control';
 import { fetchMissingImages } from './modules/sync/images';
 import { pullOnce } from './modules/sync/down';
@@ -205,6 +206,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     fetchImages: (link, signal) => fetchMissingImages(app.database, link, app.uploadsDir, { fetchImpl: options.sync?.fetchImpl, signal }),
     onPulled: (tables) => {
       if (tables.includes('exchange_rates')) events.publish('rate.changed');
+      if (tables.some((t) => t === 'incoming_shipments' || t === 'incoming_shipment_items')) events.publish('stock.changed'); // stock is on the way
       if (tables.some((t) => ['categories', 'brands', 'units', 'suppliers', 'products'].includes(t))) events.publish('catalog.changed');
     },
     push: (link, signal) =>
@@ -292,6 +294,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(returnRoutes);
       await api.register(holdRoutes);
       await api.register(purchaseRoutes);
+      await api.register(transferRoutes);
       await api.register(reportRoutes);
       await api.register(backupRoutes);
     },

@@ -26,6 +26,7 @@ beforeAll(async () => {
     ['units', 1],
     ['units', 2],
     ['units', 3],
+    ['branch_directory', 1], // the branch this test added: every branch is told who the others are (docs/15 §4)
   ]);
   base = seeded.next;
 });

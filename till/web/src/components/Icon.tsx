@@ -70,6 +70,7 @@ const PATHS = {
     </>
   ),
   barcode: <path d="M4 5v14M7.5 5v14M11 5v14M15 5v14M18 5v14M21 5v14" />,
+  transfer: <path d="M4 8h13M13 4l4 4-4 4M20 16H7M11 12l-4 4 4 4" />,
   purchases: (
     <>
       <path d="M2.5 6.5h11v9h-11zM13.5 9.5h4l3 3v3h-7" />

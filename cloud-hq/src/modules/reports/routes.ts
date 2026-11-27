@@ -13,6 +13,7 @@ import {
   registersReport,
   salesReport,
   stockReport,
+  transfersReport,
 } from './queries';
 
 const iso = z
@@ -104,6 +105,13 @@ export default async function reportRoutes(app: FastifyInstance) {
     const q = parse(range.extend({ onlyVariance: z.enum(['true', 'false']).default('false') }), req.query);
     const r = resolve(q);
     return { ...r, ...(await registersReport(db, r, { branchId: q.branchId, onlyVariance: q.onlyVariance === 'true' })) };
+  });
+
+  // Shipments between branches: in transit, received (with the difference) or undeliverable (docs/15 §4). `branchId` = sent or received by it.
+  app.get('/reports/transfers', view, async (req) => {
+    const q = parse(range.extend({ status: z.enum(['all', 'in_transit', 'received', 'undeliverable']).default('all') }), req.query);
+    const r = resolve(q);
+    return { ...r, data: await transfersReport(db, { ...r, branchId: q.branchId, status: q.status }) };
   });
 
   // Where HQ and a branch disagree about what the branch holds, day by day (docs/12 §24). `from` and `to` are days (default: the last 30).

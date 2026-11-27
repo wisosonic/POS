@@ -29,6 +29,7 @@ export const NAV: NavSection[] = [
       { to: '/products/lists', label: 'Lists', icon: 'lists', min: 'manager' },
       { to: '/barcodes', label: 'Duplicate barcodes', icon: 'barcode', min: 'manager' },
       { to: '/purchases', label: 'Purchases', icon: 'purchases', min: 'manager' },
+      { to: '/transfers', label: 'Transfers', icon: 'transfer', min: 'manager' },
       { to: '/stocktake', label: 'Stocktake', icon: 'stocktake', min: 'manager' },
     ],
   },

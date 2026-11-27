@@ -1,5 +1,6 @@
 import type { Queryable } from '@pos/core/adapter';
 import { AppError } from '@pos/core/errors';
+import { relayShipments } from './relay';
 import {
   digestRows,
   downTable,
@@ -58,6 +59,8 @@ export async function applyFacts(q: Queryable, branchId: number, facts: Fact[]):
       await q.run(upsertSql(table), [branchId, ...table.columns.map((c) => f.row![c.name] ?? null), received]);
     }
   }
+  // Shipments written by this branch go to their receivers once complete (docs/15 §4).
+  if (facts.some((f) => f.tbl === 'shipments' || f.tbl === 'shipment_items')) await relayShipments(q, branchId);
   return facts.length;
 }
 

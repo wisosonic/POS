@@ -34,6 +34,21 @@ export type BranchKind = 'sale' | 'stock';
 export type Branch = { id: number; code: string; name: string; kind: BranchKind };
 const toBranch = (r: BranchRow): Branch => ({ id: r.id, code: r.code, name: r.name, kind: r.kind });
 
+/**
+ * Tell every branch who the branches are (docs/15 §4): the directory row and a line for everyone in the change log. Call whenever a branch is added or
+ * changed. A branch uses it to choose where to send stock and to know whether it may (a sale branch cannot send to another sale branch).
+ */
+async function syncDirectory(q: Queryable, id: number): Promise<void> {
+  const b = await q.one<BranchRow>('SELECT * FROM branches WHERE id = ?', [id]);
+  if (!b) return;
+  await q.run(
+    `INSERT INTO branch_directory (id, code, name, kind, active) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET code = excluded.code, name = excluded.name, kind = excluded.kind, active = excluded.active`,
+    [b.id, b.code, b.name, b.kind, b.active],
+  );
+  await q.run('INSERT INTO change_log (tbl, pk, op, created_at) VALUES (?, ?, ?, ?)', ['branch_directory', b.id, 'u', nowIso()]);
+}
+
 /** The audit log (staff/context.ts): the actor of the transaction is recorded with each row. */
 export const hqAudit = writeAudit;
 
@@ -86,6 +101,7 @@ export async function createBranch(
     kind,
     nowIso(),
   ]);
+  await syncDirectory(q, created!.id);
   const issued = await issueCode(q, created!.id);
   await hqAudit(q, 'branch.create', 'branch', created!.id, { code, name: input.name, kind });
   return { branch: { id: created!.id, code, name: input.name, kind }, enrolCode: issued.code, expiresAt: issued.expiresAt };
@@ -134,6 +150,7 @@ export async function updateBranch(q: Queryable, id: number, patch: { name?: str
   }
   if (patch.name !== undefined) await q.run('UPDATE branches SET name = ? WHERE id = ?', [patch.name, id]);
   if (patch.active !== undefined) await q.run('UPDATE branches SET active = ? WHERE id = ?', [patch.active ? 1 : 0, id]);
+  await syncDirectory(q, id);
   await hqAudit(q, 'branch.update', 'branch', id, { before: { name: b.name, active: b.active === 1, kind: b.kind }, after: patch });
 }
 

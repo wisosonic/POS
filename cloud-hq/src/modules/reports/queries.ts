@@ -305,11 +305,14 @@ export type StockRow = {
   name: string;
   barcode: string;
   alertMilli: number | null;
+  /** On the shelves of every branch (what the branches' movements add up to). */
   totalMilli: number;
-  byBranch: { branchId: number; qtyMilli: number }[];
+  /** Shipped and not yet confirmed by the receiving branch (docs/15 §4): out of the sender's stock, not yet in the receiver's. */
+  inTransitMilli: number;
+  byBranch: { branchId: number; qtyMilli: number; inTransitMilli: number }[];
 };
 
-/** Stock per product at every branch, derived from the movements the branches sent (a branch's stock is the sum of its movements). */
+/** Stock per product at every branch, derived from the movements the branches sent (a branch's stock is the sum of its movements), and what is on the way. */
 export async function stockReport(q: Queryable, opts: { productId?: number; branchId?: number; lowOnly: boolean; limit: number }) {
   const where: string[] = ['p.active = 1'];
   const params: Param[] = [];
@@ -327,6 +330,16 @@ export async function stockReport(q: Queryable, opts: { productId?: number; bran
     `SELECT product_id, branch_id, SUM(qty_milli_delta) AS qty FROM stock_movements${mv.sql} GROUP BY product_id, branch_id`,
     mv.params,
   );
+  // Shipped and not yet received, by receiving branch and product (a shipment HQ cannot deliver is not counted: nobody is waiting for it).
+  const wait = await q.all<{ branch_id: number; product_id: number; qty: number }>(
+    `SELECT i.to_branch_id AS branch_id, x.product_id, SUM(x.qty_milli) AS qty
+     FROM incoming_shipment_items x JOIN incoming_shipments i ON i.id = x.incoming_id
+          JOIN branch_directory d ON d.id = i.to_branch_id AND d.active = 1 AND d.id <> i.from_branch_id
+     WHERE NOT EXISTS (SELECT 1 FROM receipts r WHERE r.branch_id = i.to_branch_id AND r.incoming_id = i.id)${opts.branchId === undefined ? '' : ' AND i.to_branch_id = ?'}
+     GROUP BY i.to_branch_id, x.product_id`,
+    opts.branchId === undefined ? [] : [opts.branchId],
+  );
+  const transit = new Map<string, number>(wait.map((w) => [`${w.product_id}:${w.branch_id}`, w.qty]));
   const branches = (
     await q.all<{ id: number }>(
       'SELECT id FROM branches WHERE active = 1' + (opts.branchId === undefined ? '' : ' AND id = ?'),
@@ -338,7 +351,11 @@ export async function stockReport(q: Queryable, opts: { productId?: number; bran
   const rows: StockRow[] = [];
   for (const p of products) {
     const m = per.get(p.id) ?? new Map<number, number>();
-    const byBranch = branches.map((branchId) => ({ branchId, qtyMilli: m.get(branchId) ?? 0 }));
+    const byBranch = branches.map((branchId) => ({
+      branchId,
+      qtyMilli: m.get(branchId) ?? 0,
+      inTransitMilli: transit.get(`${p.id}:${branchId}`) ?? 0,
+    }));
     // Low = at or under the product's alert at THAT branch (as at a branch: its own stock against its own alert).
     if (opts.lowOnly && !byBranch.some((x) => p.stock_alert_milli !== null && x.qtyMilli <= p.stock_alert_milli)) continue;
     rows.push({
@@ -347,11 +364,89 @@ export async function stockReport(q: Queryable, opts: { productId?: number; bran
       barcode: p.barcode,
       alertMilli: p.stock_alert_milli,
       totalMilli: byBranch.reduce((sum, x) => sum + x.qtyMilli, 0),
+      inTransitMilli: byBranch.reduce((sum, x) => sum + x.inTransitMilli, 0),
       byBranch,
     });
     if (rows.length >= opts.limit) break;
   }
   return rows;
+}
+
+export type TransferRow = {
+  id: number;
+  fromBranchId: number;
+  from: string;
+  toBranchId: number;
+  to: string;
+  shipmentId: number;
+  reason: string;
+  note: string | null;
+  shippedAt: string;
+  lines: number;
+  qtyMilli: number;
+  /** `in_transit`: shipped, not yet confirmed. `received`: confirmed (with the net difference). `undeliverable`: no branch HQ can deliver it to. */
+  status: 'in_transit' | 'received' | 'undeliverable';
+  receivedAt: string | null;
+  /** counted minus expected over the whole shipment: negative is short */
+  differenceMilli: number | null;
+};
+
+/** Shipments between branches in the range, with where each stands (docs/15 §4). `branchId` keeps those sent or received by that branch. */
+export async function transfersReport(
+  q: Queryable,
+  opts: { from: string; to: string; branchId?: number; status: 'all' | TransferRow['status'] },
+): Promise<TransferRow[]> {
+  const where = ['i.shipped_at >= ?', 'i.shipped_at <= ?'];
+  const params: Param[] = [opts.from, opts.to];
+  if (opts.branchId !== undefined) {
+    where.push('(i.from_branch_id = ? OR i.to_branch_id = ?)');
+    params.push(opts.branchId, opts.branchId);
+  }
+  const rows = await q.all<{
+    id: number;
+    from_branch_id: number;
+    to_branch_id: number;
+    shipment_id: number;
+    reason: string;
+    note: string | null;
+    shipped_at: string;
+    lines: number;
+    qty: number;
+    receipt_id: number | null;
+    received_at: string | null;
+    difference: number | null;
+    deliverable: number | null;
+  }>(
+    `SELECT i.id, i.from_branch_id, i.to_branch_id, i.shipment_id, i.reason, i.note, i.shipped_at,
+            (SELECT COUNT(*) FROM incoming_shipment_items x WHERE x.incoming_id = i.id) AS lines,
+            (SELECT COALESCE(SUM(x.qty_milli), 0) FROM incoming_shipment_items x WHERE x.incoming_id = i.id) AS qty,
+            r.id AS receipt_id, r.created_at AS received_at,
+            (SELECT COALESCE(SUM(ri.qty_counted_milli - ri.qty_expected_milli), 0) FROM receipt_items ri WHERE ri.branch_id = r.branch_id AND ri.receipt_id = r.id) AS difference,
+            d.id AS deliverable
+     FROM incoming_shipments i
+          LEFT JOIN receipts r ON r.branch_id = i.to_branch_id AND r.incoming_id = i.id
+          LEFT JOIN branch_directory d ON d.id = i.to_branch_id AND d.active = 1 AND d.id <> i.from_branch_id
+     WHERE ${where.join(' AND ')} ORDER BY i.shipped_at DESC, i.id DESC LIMIT 500`,
+    params,
+  );
+  const names = await branchNames(q);
+  const out = rows.map((r): TransferRow => ({
+    id: r.id,
+    fromBranchId: r.from_branch_id,
+    from: nameOf(names, r.from_branch_id),
+    toBranchId: r.to_branch_id,
+    to: nameOf(names, r.to_branch_id),
+    shipmentId: r.shipment_id,
+    reason: r.reason,
+    note: r.note,
+    shippedAt: r.shipped_at,
+    lines: r.lines,
+    qtyMilli: r.qty,
+    status: r.receipt_id !== null ? 'received' : r.deliverable === null ? 'undeliverable' : 'in_transit',
+    receivedAt: r.received_at,
+    differenceMilli: r.receipt_id !== null ? r.difference : null,
+  }));
+  return opts.status === 'all' ? out : out.filter((t) => t.status === opts.status);
 }
 
 export type ReconciliationRow = {

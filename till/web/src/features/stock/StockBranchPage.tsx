@@ -24,6 +24,9 @@ export function StockBranchPage() {
             <Link className="btn" to="/products">
               {t('Products')}
             </Link>
+            <Link className="btn" to="/transfers">
+              {t('Transfers')}
+            </Link>
             <Link className="btn" to="/low-stock">
               {t('Low stock')}
             </Link>
