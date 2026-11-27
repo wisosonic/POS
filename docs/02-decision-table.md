@@ -74,7 +74,7 @@ Conditions are evaluated top to bottom. **Y** = true, **N** = false, **–** = i
 
 | # | Register session open | Barcode matches product | Product active | Stock ≥ qty | Action |
 |--:|:-:|:-:|:-:|:-:|---|
-| 1 | N | – | – | – | Block selling. Prompt "Open register": the cashier enters opening balances for **cash, Whish and OMT in USD and LBP**. |
+| 1 | N | – | – | – | Block selling. Prompt "Open register": the cashier enters opening balances for the **cash in the drawer, USD and LBP** (prefilled from what this till counted at its last close). Whish and OMT are the branch's wallets, not the till's (docs/13). |
 | 2 | Y | N | – | – | Error beep, toast "Unknown barcode", offer **Quick-add product** (manager) or manual search. |
 | 3 | Y | Y (multiple) | – | – | Show a picker of the products sharing the code (barcode duplicates are cleaned up last, Q7). |
 | 4 | Y | Y | N | – | Reject, "Product inactive". |
@@ -105,5 +105,5 @@ Product price is shown in the product's own currency. The cart converts every li
 | 19 | A cashier takes goods back, cancels a sale, or sells at another price | The same approval, with its own scope: a return (one sale, up to the value shown), a void (one sale, only while its register is open), a price (one product at exactly one unit price). A manager does any of them without asking. All audited with who approved. |
 | 20 | A product shares its barcode with another | Allowed until the owner has cleaned them up; then the rule is switched on and the database refuses a second **active** product with the same barcode. Merging products never rewrites sale history. |
 | 19 | Return of a completed sale | Manager role. Creates a `return` + positive stock movement + refund from a chosen bucket (or reduces the customer's balance if the sale was unpaid). Never edits the original sale. |
-| 20 | Register close | For **each method × currency bucket** (cash, Whish, OMT × USD, LBP) show opening, expected and counted, and store the variance. The wallet balances at close can pre-fill the next opening. Admin sees variances. |
+| 20 | Register close | For the **cash of each currency** (USD, LBP) show opening, expected and counted, and store the variance. A cashier counts blind unless the shop turned that off (`cashierBlindCount`, default on): the expectation shows once the register is closed. A manager always sees it. Whish and OMT are not counted here: a manager counts the branch wallets on the Wallets page whenever they like (never required, never blocks selling), and the Z-report lists what this till did to each wallet as information. Admin sees variances. |
 | 21 | Exchange rate changed | Affects new sales only. Old sales keep their snapshot. |

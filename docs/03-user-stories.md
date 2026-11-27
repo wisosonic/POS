@@ -24,9 +24,9 @@ Priority: **M** must-have for go-live, **S** should, **C** could. IDs are refere
 
 | ID | Story | Acceptance criteria | P |
 |---|---|---|:-:|
-| US-11 | As a cashier, I open the register and enter **opening balances for cash, Whish and OMT, each in USD and LBP**. | No sale without an open session. **One open session per till.** Any logged-in user can sell in it, and each sale records who sold. Fields default to the last closing counts. | M |
-| US-12 | As a cashier, I close the register and enter what I count in each balance. | For cash, Whish and OMT in USD and LBP the Z-report shows opening, + sales, + customer payments, − refunds, ± cash movements, **expected, counted, variance**. Wallet balances are shown explicitly. Z-report prints. A closed session is immutable. | M |
-| US-13 | As a manager, I record money moved in a session: cash out, expenses, and transfers between balances (for example cash → OMT float). | Reason required. Source and destination bucket chosen. Appears in the Z-report. | S |
+| US-11 | As a cashier, I open the register and enter the **opening cash, in USD and LBP**. (Whish and OMT belong to the branch, not to the till: US-12.) | No sale without an open session. **One open session per till.** Any logged-in user can sell in it, and each sale records who sold. Fields default to the last closing counts. | M |
+| US-12 | As a cashier, I close the register and enter what I count of the cash in each currency. As a manager, I count the branch's Whish and OMT wallets and record changes no till caused. | For the cash in USD and LBP the Z-report shows opening, + sales, + customer payments, − refunds, ± cash movements, **expected, counted, variance**; a cashier counts blind unless the shop turned that off. The Z-report also lists what the till did to each wallet, as information. A manager counts the wallets on the Wallets page: the first count of a wallet is a baseline, each later one records the expected balance, the counted one and the difference; a count is never required and never blocks selling. A closed session is immutable. | M |
+| US-13 | As a manager, I record money moved in a session: cash out, expenses, and transfers between balances (for example cash → OMT float). | Reason required. Source and destination bucket chosen. A transfer to or from a wallet writes the wallet side to the branch ledger in the same transaction, and the Cash page shows the wallet balances beside the drawer. Appears in the Z-report. | S |
 
 ## Epic 3 · Returns
 

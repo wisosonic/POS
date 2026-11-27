@@ -287,6 +287,54 @@ async function main() {
     await until('branch A and HQ agree', () => inSync(url.a, adminA), 60_000);
   });
 
+  await step('through the till: a sale paid by Whish goes to the branch wallet, and the admin counts the wallets (the first count is a baseline, the next shows the difference)', async () => {
+    const adminT = await login(url.till, 'admin', ADMIN_PW);
+    const wallet = (list, method, currency) => list.data.find((w) => w.method === method && w.currency === currency);
+    const sellByWhish = async () =>
+      must(
+        await http('POST', url.till, '/api/v1/sales', {
+          token: cashierA,
+          terminal: terminalToken,
+          body: { ...saleBody(productA.id), payments: [{ method: 'whish', currency: 'LBP', amount: 75000 }] },
+          headers: { 'Idempotency-Key': randomUUID() },
+        }),
+        201,
+        'sell by Whish',
+      );
+    const countAll = async (whishLbp) =>
+      must(
+        await http('POST', url.till, '/api/v1/wallets/counts', {
+          token: adminT,
+          terminal: terminalToken,
+          body: {
+            balances: [
+              { method: 'whish', currency: 'LBP', amount: whishLbp },
+              { method: 'whish', currency: 'USD', amount: 0 },
+              { method: 'omt', currency: 'LBP', amount: 0 },
+              { method: 'omt', currency: 'USD', amount: 0 },
+            ],
+          },
+        }),
+        201,
+        'count the wallets',
+      );
+    const before = must(await http('GET', url.till, '/api/v1/wallets', { token: adminT, terminal: terminalToken }), 200, 'read the wallets');
+    const start = wallet(before, 'whish', 'LBP').expected;
+    await sellByWhish();
+    const after = must(await http('GET', url.till, '/api/v1/wallets', { token: adminT, terminal: terminalToken }), 200, 'read the wallets again');
+    check(wallet(after, 'whish', 'LBP').expected === start + 75000, `the wallet should hold ${start + 75000}, it holds ${wallet(after, 'whish', 'LBP').expected}`);
+    // The cashier may not read or count the branch wallets.
+    check((await http('GET', url.till, '/api/v1/wallets', { token: cashierA, terminal: terminalToken })).status === 403, 'a cashier read the wallets');
+    const baseline = await countAll(start + 75000);
+    check(Object.keys(baseline.variances).length === 0, 'the first count should only set a baseline');
+    await sellByWhish();
+    const second = await countAll(start + 150000 - 5000);
+    check(second.variances['whish/LBP'] === -5000, `expected a difference of -5000, got ${JSON.stringify(second.variances)}`);
+    check(wallet(second, 'whish', 'LBP').expected === start + 150000 - 5000, 'the wallet should start again from what was counted');
+    // Selling by wallet did not touch the till's own cash: the register closes on cash alone.
+    await until('branch A and HQ agree after the wallet sales', () => inSync(url.a, adminA), 60_000);
+  });
+
   let productB;
   await step('branch B sells too: both branches have a sale with the same id, and HQ keeps them apart and agrees with both', async () => {
     productB = must(await http('POST', url.b, '/api/v1/products', { token: adminB, body: { name: 'Sandbox towel', barcode: '5287000107945', priceMinor: 75000, currency: 'LBP' } }), 201, 'B adds the product');

@@ -56,7 +56,9 @@ test('US-13: move money between balances; the same balance twice is refused', as
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('link', { name: 'Cash in and out' }).click();
   await expect(page.getByRole('table', { name: 'Balances now' })).toBeVisible();
-  const cash = await balance(page, 'Cash LBP'); // the Whish wallet is the branch's, not this register's: it is checked in tests/integration/wallets-ledger
+  const cash = await balance(page, 'Cash LBP');
+  const whish = async () => Number(((await page.getByTestId('cash-wallet-whish-LBP').textContent()) ?? '').replace(/[^\d.-]/g, ''));
+  const wallet = await whish(); // the Whish wallet is the branch's, shown beside the drawer
 
   await page.getByRole('button', { name: 'Move money' }).click();
   await page.getByRole('tab', { name: 'Between balances' }).click();
@@ -71,4 +73,5 @@ test('US-13: move money between balances; the same balance twice is refused', as
   await page.getByRole('button', { name: 'Record' }).click();
   await expect(page.getByTestId('movement-row').filter({ hasText: 'Top up the wallet' })).toContainText('Cash LBP → Whish LBP');
   expect(await balance(page, 'Cash LBP')).toBe(cash - 100_000);
+  await expect.poll(whish).toBe(wallet + 100_000); // the wallet side of the transfer is in the branch ledger
 });

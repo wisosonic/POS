@@ -4,7 +4,7 @@ import { Modal } from '../../components/Modal';
 import { useRegister } from '../../hooks/useTillData';
 import { ApiError, get, post } from '../../lib/api';
 import { fmtMoney, parseLbpInput, parseUsdInput } from '../../lib/money';
-import type { CashMovement, Currency, Method } from '../../lib/types';
+import type { CashMovement, Currency, Method, WalletState } from '../../lib/types';
 import { toast } from '../../store/toast';
 import { Icon } from '../../components/Icon';
 
@@ -29,6 +29,9 @@ export function CashPage() {
     queryFn: () => get<{ data: CashMovement[] }>(`/registers/${register!.id}/cash-movements`).then((r) => r.data),
   });
   const rows = movements.data ?? [];
+  // The wallets are the branch's, not this till's: they are shown beside the drawer because a transfer moves money between the two.
+  const wallets =
+    useQuery({ queryKey: ['wallets'], queryFn: () => get<{ data: WalletState[] }>('/wallets').then((r) => r.data) }).data ?? [];
 
   return (
     <main className="page">
@@ -59,6 +62,27 @@ export function CashPage() {
               <tr key={`${b.method}/${b.currency}`}>
                 <td>{`${NAME[b.method]} ${b.currency}`}</td>
                 <td className="num">{fmtMoney(b.expected ?? 0, b.currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {wallets.length > 0 && (
+        <table aria-label="Wallets now">
+          <thead>
+            <tr>
+              <th>Branch wallet</th>
+              <th className="num">Should be</th>
+            </tr>
+          </thead>
+          <tbody>
+            {wallets.map((w) => (
+              <tr key={`${w.method}/${w.currency}`}>
+                <td>{`${w.methodName} ${w.currency}`}</td>
+                <td className="num" data-testid={`cash-wallet-${w.method}-${w.currency}`}>
+                  {fmtMoney(w.expected, w.currency)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -129,7 +153,7 @@ function MoveDialog({ sessionId, onClose }: { sessionId: number; onClose: () => 
         ...(kind !== 'out' ? { to: { method: kind === 'in' ? from : to, currency } } : {}),
       });
       toast.success('Recorded');
-      await Promise.all(['register', 'cash-movements'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
+      await Promise.all(['register', 'cash-movements', 'wallets'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That could not be recorded');
