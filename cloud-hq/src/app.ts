@@ -4,6 +4,7 @@ import { safeEqual } from '@pos/core/credentials';
 import { AppError, errorHandler, notFoundHandler, problem } from '@pos/core/errors';
 import { openDatabase } from '@pos/core/open';
 import { createSqliteDatabase } from '@pos/core/sqlite';
+import { dirname, join, resolve } from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import branchRoutes from './modules/branches/routes';
 import { resolveBranch, type Branch } from './modules/branches/service';
@@ -22,6 +23,8 @@ declare module 'fastify' {
     adminOnly: (req: FastifyRequest) => Promise<void>;
     /** preHandler: a connected branch (`X-Branch-Token`). Sets `request.branch`. */
     branchOnly: (req: FastifyRequest) => Promise<void>;
+    /** The folder product pictures are kept in (named by their content, docs/12 §19). */
+    uploadsDir: string;
   }
   interface FastifyRequest {
     branch: Branch;
@@ -40,6 +43,8 @@ export type CentralOptions = {
   /** Per-IP limits on the open door (/sync/enrol). On in production, off by default elsewhere. */
   rateLimit?: boolean;
   production?: boolean;
+  /** Where product pictures are kept (default: `uploads` next to the database). */
+  uploadsDir?: string;
 };
 
 /**
@@ -60,6 +65,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
   });
   app.decorate('registeredRoutes', registeredRoutes);
   app.decorate('database', createSqliteDatabase(db));
+  app.decorate('uploadsDir', resolve(options.uploadsDir ?? join(dirname(options.databasePath), 'uploads')));
   app.addHook('onClose', async () => db.close());
   app.setErrorHandler(errorHandler);
   app.setNotFoundHandler(notFoundHandler);

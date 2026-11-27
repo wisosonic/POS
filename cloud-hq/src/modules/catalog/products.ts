@@ -23,12 +23,13 @@ export type ProductRow = {
   supplier_id: number | null;
   stock_alert_milli: number | null;
   expiry_date: string | null;
+  image_path: string | null;
   active: number;
   updated_at: string;
 };
 
 const COLUMNS = `id, name, receipt_name, receipt_name_manual, barcode, cost_minor, price_minor, currency, category_id, brand_id, unit_id,
-  supplier_id, stock_alert_milli, expiry_date, active, updated_at`;
+  supplier_id, stock_alert_milli, expiry_date, image_path, active, updated_at`;
 
 export const productJson = (r: ProductRow) => ({
   id: r.id,
@@ -45,6 +46,7 @@ export const productJson = (r: ProductRow) => ({
   supplierId: r.supplier_id,
   stockAlert: r.stock_alert_milli === null ? null : r.stock_alert_milli / 1000,
   expiryDate: r.expiry_date,
+  imagePath: r.image_path,
   active: r.active === 1,
   updatedAt: r.updated_at,
 });
@@ -182,6 +184,16 @@ export async function updateProduct(q: Queryable, id: number, b: ProductInput): 
   const changed: Record<string, { from: unknown; to: unknown }> = {};
   for (const [c, v] of sets) changed[c] = { from: (before as unknown as Record<string, unknown>)[c], to: v };
   await record(q, id, 'product.update', changed);
+  return (await getProduct(q, id))!;
+}
+
+/** Set (or, with null, remove) a product's picture: the name of a file already kept in the pictures folder. A no-op writes nothing. */
+export async function setProductImage(q: Queryable, id: number, imagePath: string | null): Promise<ProductRow> {
+  const before = await getProduct(q, id);
+  if (!before) throw new AppError(404, 'NOT_FOUND', 'No such product');
+  if (before.image_path === imagePath) return before;
+  await q.run('UPDATE products SET image_path = ?, updated_at = ? WHERE id = ?', [imagePath, nowIso(), id]);
+  await record(q, id, imagePath === null ? 'product.image.remove' : 'product.image.update', { from: before.image_path, to: imagePath });
   return (await getProduct(q, id))!;
 }
 

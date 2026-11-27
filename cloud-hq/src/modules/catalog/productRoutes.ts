@@ -4,7 +4,9 @@ import { normalizeBarcode } from '@pos/shared/barcode';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { qtyNumberToMilli } from '../../util/qty';
-import { createProduct, getProduct, listProducts, productJson, updateProduct } from './products';
+import { importBody, importProducts, MAX_IMPORT_BYTES } from './import';
+import { MAX_IMAGE_BYTES, storeImage } from './images';
+import { createProduct, getProduct, listProducts, productJson, setProductImage, updateProduct } from './products';
 
 // A threshold in whole units (up to 3 decimals); null = never alert.
 const stockAlert = z
@@ -57,6 +59,13 @@ export default async function productRoutes(app: FastifyInstance) {
     return { data: r.data.map(productJson), nextCursor: r.nextCursor };
   });
 
+  // Products from a spreadsheet's CSV. dryRun (the default) only says what would happen; a file with any error writes nothing, and applying is
+  // one transaction.
+  app.post('/products/import', { ...admin, bodyLimit: MAX_IMPORT_BYTES + 4096 }, async (req) => {
+    const body = parse(importBody, req.body);
+    return body.dryRun ? importProducts(db, body) : db.tx((tx) => importProducts(tx, body));
+  });
+
   app.get('/products/:id', admin, async (req) => {
     const { id } = parse(idParam, req.params);
     const row = await getProduct(db, id);
@@ -74,6 +83,38 @@ export default async function productRoutes(app: FastifyInstance) {
     const { id } = parse(idParam, req.params);
     const b = parse(patchBody, req.body);
     return productJson(await db.tx((tx) => updateProduct(tx, id, b)));
+  });
+
+  // A picture arrives as the request body itself (not a form). The type the sender claims is not trusted: the bytes decide (storeImage).
+  // octet-stream is accepted for files a browser could not put a type on.
+  app.addContentTypeParser(
+    ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'application/octet-stream'],
+    { parseAs: 'buffer', bodyLimit: MAX_IMAGE_BYTES },
+    (_req, body, done) => done(null, body),
+  );
+
+  // Set or replace a product's picture. The file is kept under a name made from its content and the product just points at it; every
+  // connected branch then fetches the file by that name (`GET /sync/images/:name`).
+  app.post('/products/:id/image', admin, async (req) => {
+    const { id } = parse(idParam, req.params);
+    if (!(await getProduct(db, id))) throw new AppError(404, 'NOT_FOUND', 'No such product');
+    const bytes = req.body;
+    if (!Buffer.isBuffer(bytes) || bytes.length === 0)
+      throw new AppError(422, 'VALIDATION', 'Send the picture file as the body of the request');
+    const stored = storeImage(app.uploadsDir, bytes);
+    if (!stored)
+      throw new AppError(
+        422,
+        'UNSUPPORTED_IMAGE',
+        'That file is not a picture the shop can use. Use a JPEG, PNG, GIF, WebP or AVIF picture.',
+      );
+    return productJson(await db.tx((tx) => setProductImage(tx, id, stored.path)));
+  });
+
+  // Take the picture off a product. The file stays in the folder: another product may use the same one.
+  app.delete('/products/:id/image', admin, async (req) => {
+    const { id } = parse(idParam, req.params);
+    return productJson(await db.tx((tx) => setProductImage(tx, id, null)));
   });
 
   // Retire, never delete: a retired product still goes down to the branches (they hide it), and its history stays whole.

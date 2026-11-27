@@ -167,7 +167,7 @@ export const DOWN_TABLES: readonly DownTable[] = [
   {
     // The products themselves (P3b). `cost_minor` is HQ's starting cost: a branch takes it when it first receives the product and then keeps
     // its own (a purchase received at the branch sets it). `updated_at` is the branch's own (the till's catalog feed follows it). So neither
-    // overwrites what the branch has. Pictures are added with their own migration (P3b2).
+    // overwrites what the branch has. `image_path` names a picture file that the branch fetches from HQ by that name (docs/12 §19).
     name: 'products',
     ids: 'same',
     columns: [
@@ -186,6 +186,7 @@ export const DOWN_TABLES: readonly DownTable[] = [
       int('stock_alert_milli', true),
       text('expiry_date', true),
       int('active'),
+      text('image_path', true),
     ],
   },
 ];

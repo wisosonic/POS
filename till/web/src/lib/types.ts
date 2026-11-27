@@ -291,6 +291,8 @@ export type PublicSettings = {
   receiptWidth: number;
   cashierDiscountLimitPct: number;
   printerConfigured: boolean;
+  /** Connected to HQ: products, categories, brands, units and suppliers are changed there (docs/12 §17). */
+  hqOwnsCatalog?: boolean;
 };
 
 export type HoldSummary = {

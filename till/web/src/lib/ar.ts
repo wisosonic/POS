@@ -413,4 +413,10 @@ export const AR: Record<string, string> = {
   'Something answered, but not a branch server.': 'ردّ شيء ما لكنه ليس خادم فرع.',
   "The branch server does not accept this till's address (ask whoever set it up to add it to ALLOWED_HOSTS).":
     'خادم الفرع لا يقبل عنوان هذا الصندوق (اطلب ممن أعدّه إضافته إلى ALLOWED_HOSTS).',
+  'Managed at HQ': 'تُدار في المقر الرئيسي',
+  'This branch is connected to HQ. {what} are changed at HQ and arrive here by themselves.':
+    'هذا الفرع متصل بالمقر الرئيسي. يتم تعديل {what} في المقر الرئيسي وتصل إلى هنا تلقائيًا.',
+  'the products': 'المنتجات',
+  'categories, brands, units and suppliers': 'الفئات والعلامات التجارية والوحدات والموردون',
+  'the barcode rule': 'قاعدة الباركود',
 };

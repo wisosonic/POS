@@ -16,6 +16,7 @@ const app = await buildCentral({
   adminToken: config.adminToken,
   allowedHosts: config.allowedHosts,
   production: config.production,
+  uploadsDir: config.uploadsDir ? resolve(config.uploadsDir) : undefined,
   logger: true,
 });
 if (applied.length) app.log.info({ migrations: applied }, 'HQ database migrated');

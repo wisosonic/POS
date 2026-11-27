@@ -36,7 +36,11 @@ export async function startFreshBranch(): Promise<FreshBranch> {
   raw.prepare(`INSERT INTO users (username, name, role, password_hash) VALUES ('boss', 'boss', 'admin', ?)`).run(hash);
   raw.prepare(`INSERT INTO users (username, name, role, password_hash) VALUES ('till1', 'till1', 'cashier', ?)`).run(hash);
   raw.close();
-  const app = await buildApp({ databasePath, reports: { worker: false }, sync: { intervalMs: 60, backoffMs: [60, 200], idleMs: 40 } });
+  const app = await buildApp({
+    databasePath,
+    reports: { worker: false },
+    sync: { intervalMs: 60, safetyPullMs: 400, backoffMs: [60, 200], idleMs: 40 },
+  });
   await app.ready();
   await app.listen({ host: '127.0.0.1', port: 0 });
   const http = request(app.server);

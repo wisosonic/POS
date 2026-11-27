@@ -37,6 +37,7 @@ import { TopicVersions } from './events/versions';
 import pingRoutes from './modules/ping/routes';
 import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
+import { fetchMissingImages } from './modules/sync/images';
 import { pullOnce } from './modules/sync/down';
 import { pushOnce } from './modules/sync/up';
 import syncRoutes from './modules/sync/routes';
@@ -196,6 +197,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
     db: app.database,
     onChange: () => events.publish('sync.changed'),
     pull: (link, signal) => pullOnce(app.database, link, { fetchImpl: options.sync?.fetchImpl, signal }),
+    fetchImages: (link, signal) => fetchMissingImages(app.database, link, app.uploadsDir, { fetchImpl: options.sync?.fetchImpl, signal }),
     onPulled: (tables) => {
       if (tables.includes('exchange_rates')) events.publish('rate.changed');
       if (tables.some((t) => ['categories', 'brands', 'units', 'suppliers', 'products'].includes(t))) events.publish('catalog.changed');

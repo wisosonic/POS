@@ -6,6 +6,8 @@ import type { Lookup, LookupKind, SupplierLookup, UnitLookup } from '../../lib/t
 import { toast } from '../../store/toast';
 import { useLookup } from './lookups';
 import { Icon } from '../../components/Icon';
+import { HqNotice, useHqOwnsCatalog } from '../../components/HqNotice';
+import { useT } from '../../store/lang';
 
 const TABS: { kind: LookupKind; label: string; one: string }[] = [
   { kind: 'categories', label: 'Categories', one: 'category' },
@@ -38,7 +40,12 @@ export function ListsPage() {
   );
 }
 
+/** The four lists a connected branch receives from HQ (docs/12 §17). Expense types and service types stay the branch's own. */
+const HQ_LISTS: LookupKind[] = ['categories', 'brands', 'units', 'suppliers'];
+
 function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
+  const t = useT();
+  const readOnly = useHqOwnsCatalog() && HQ_LISTS.includes(kind);
   const queryClient = useQueryClient();
   const list = useLookup<Lookup & Partial<UnitLookup & SupplierLookup>>(kind);
   const [name, setName] = useState('');
@@ -93,7 +100,8 @@ function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
   const rows = list.data ?? [];
   return (
     <>
-      <form className="toolbar" onSubmit={add}>
+      {readOnly && <HqNotice what={t('categories, brands, units and suppliers')} />}
+      <form className="toolbar" onSubmit={add} style={readOnly ? { display: 'none' } : undefined}>
         <label className="field">
           {`New ${one}`}
           <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
@@ -157,6 +165,7 @@ function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
                     <input
                       type="checkbox"
                       checked={!!r.fractional}
+                      disabled={readOnly}
                       onChange={(e) => void setWeight(r as UnitLookup, e.target.checked)}
                       aria-label={`${r.name} is sold by weight or volume`}
                       style={{ width: 20, height: 20 }}
@@ -165,9 +174,11 @@ function LookupList({ kind, one }: { kind: LookupKind; one: string }) {
                 )}
                 {kind === 'suppliers' && <td className="muted">{r.phone ?? ''}</td>}
                 <td className="num">
-                  <button className="btn small" onClick={() => void rename(r)}>
-                    Rename
-                  </button>
+                  {!readOnly && (
+                    <button className="btn small" onClick={() => void rename(r)}>
+                      Rename
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

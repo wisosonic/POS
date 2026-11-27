@@ -27,6 +27,8 @@ export type SyncAgentOptions = {
   push?: (link: Link, signal: AbortSignal) => Promise<PushOutcome>;
   /** Fetch and apply the next page of what HQ owns (modules/sync/down.ts). Called again and again while it says there is more. */
   pull?: (link: Link, signal: AbortSignal) => Promise<PullOutcome>;
+  /** Fetch the product pictures that products name and this branch lacks (modules/sync/images.ts). Never throws. Run after each pull. */
+  fetchImages?: (link: Link, signal: AbortSignal) => Promise<unknown>;
   /** HQ's changes were applied: which tables changed (so the screens can be told). */
   onPulled?: (tables: string[]) => void;
   /** How often to ask while HQ is answering (docs/14 §6: 5 s). */
@@ -112,6 +114,7 @@ export class SyncAgent {
       if (!r.more) break;
       if (i === 39) this.moreWaiting = true;
     }
+    if (pull && this.opts.fetchImages && !this.abort.signal.aborted) await this.opts.fetchImages(link, this.abort.signal);
     const push = this.opts.push;
     if (!push) return null;
     for (let i = 0; i < 40; i++) {

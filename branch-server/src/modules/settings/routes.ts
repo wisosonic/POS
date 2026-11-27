@@ -5,6 +5,7 @@ import { inWriteTransaction } from '../../db/open';
 import { AppError } from '../../errors';
 import { parse } from '../../util/validate';
 import { writeAudit } from '../audit/service';
+import { hqOwnsCatalog } from '../catalog/hqOwned';
 import { PrinterError } from '../printing/driver';
 
 type Row = {
@@ -78,6 +79,8 @@ export default async function settingsRoutes(app: FastifyInstance) {
       receiptWidth,
       cashierDiscountLimitPct,
       printerConfigured: !!printerName?.trim(),
+      // Connected to HQ: the catalog (products and their lists) is changed there, so the screens that edit it say so instead of offering buttons that would be refused.
+      hqOwnsCatalog: hqOwnsCatalog(db),
     };
   });
 

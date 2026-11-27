@@ -28,7 +28,7 @@ export function useLiveUpdates(): void {
       settings: () => invalidate('settings'),
       register: () => invalidate('register'),
       wallets: () => invalidate('wallets'), // a manager counted a wallet or moved money in or out of one
-      sync: () => invalidate('sync'),
+      sync: () => invalidate('sync', 'settings'), // connecting or disconnecting HQ changes who owns the catalog (the settings answer says so)
     };
 
     const stop = watchTopics({

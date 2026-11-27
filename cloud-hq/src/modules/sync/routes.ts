@@ -1,8 +1,12 @@
+import { AppError } from '@pos/core/errors';
 import { parse } from '@pos/core/validate';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { MAX_BATCH_ROWS, MAX_CHANGES_PAGE, type Fact } from '@pos/core/sync';
 import { enrolBranch } from '../branches/service';
+import { mimeOfStored, STORED_NAME } from '../catalog/images';
 import { applyFacts, changesAfter, tableDigest } from '../facts/service';
 
 const LIMIT = { max: 10, timeWindow: '1 minute' };
@@ -47,6 +51,21 @@ export default async function syncRoutes(app: FastifyInstance) {
       req.query,
     );
     return changesAfter(db, q.cursor, q.limit);
+  });
+
+  // A product picture, by the name the product carries (docs/12 §19). The name is made from the file's own content, so the branch can check
+  // what it received against the name. Only names of that one shape are served, never a path.
+  app.get('/sync/images/:name', branch, async (req, reply) => {
+    const { name } = parse(z.object({ name: z.string().max(60) }), req.params);
+    const mime = STORED_NAME.test(name) ? mimeOfStored(name) : null;
+    if (!mime) throw new AppError(404, 'NOT_FOUND', 'No such picture');
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(join(app.uploadsDir, name));
+    } catch {
+      throw new AppError(404, 'NOT_FOUND', 'No such picture');
+    }
+    return reply.header('Cache-Control', 'private, max-age=31536000, immutable').type(mime).send(bytes);
   });
 
   // What HQ holds of one table for the calling branch, as a fingerprint (count, highest id, checksum): the branch compares it with its own.

@@ -7,6 +7,8 @@ import type { Currency } from '../../lib/types';
 import { useSession } from '../../store/session';
 import { toast } from '../../store/toast';
 import { Icon } from '../../components/Icon';
+import { HqNotice, useHqOwnsCatalog } from '../../components/HqNotice';
+import { useT } from '../../store/lang';
 
 type Member = {
   id: number;
@@ -25,6 +27,8 @@ type Report = { data: Group[]; enforced: boolean; duplicateGroups: number; dupli
  * fold the others into it. When none are left, the rule can be turned on and the system refuses new duplicates from then on.
  */
 export function BarcodesPage() {
+  const t = useT();
+  const hqOwns = useHqOwnsCatalog(); // connected to HQ: HQ keeps every barcode unique, so there is nothing to clean up here
   const queryClient = useQueryClient();
   const isAdmin = useSession((s) => s.user?.role === 'admin');
   const report = useQuery({ queryKey: ['barcode-duplicates'], queryFn: () => get<Report>('/barcodes/duplicates') });
@@ -48,6 +52,17 @@ export function BarcodesPage() {
       setBusy(false);
     }
   }
+
+  if (hqOwns)
+    return (
+      <main className="page">
+        <h1>
+          <Icon name="barcode" size={26} />
+          Duplicate barcodes
+        </h1>
+        <HqNotice what={t('the barcode rule')} />
+      </main>
+    );
 
   return (
     <main className="page">

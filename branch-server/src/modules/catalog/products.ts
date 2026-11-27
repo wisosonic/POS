@@ -350,6 +350,7 @@ export default async function productRoutes(app: FastifyInstance) {
 
   // Set or replace a product's picture. The file is kept under a name made from its content and the product just points at it.
   app.post('/products/:id/image', write, async (req) => {
+    refuseIfHqOwnsCatalog(db, 'a product picture');
     const id = Number((req.params as { id: string }).id);
     const before = getRow(db, id);
     if (!before) throw E.notFound('Product');
@@ -378,6 +379,7 @@ export default async function productRoutes(app: FastifyInstance) {
 
   // Take the picture off a product. The file stays in the folder: another product may use the same one.
   app.delete('/products/:id/image', write, async (req) => {
+    refuseIfHqOwnsCatalog(db, 'a product picture');
     const id = Number((req.params as { id: string }).id);
     const before = getRow(db, id);
     if (!before) throw E.notFound('Product');

@@ -173,7 +173,19 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 
 **First sync:** the existing paged log does it: about 8,000 products are 16 pages of 500, each applied in one transaction. `cloud-hq/tests/system/catalog-products.test.ts` connects a fresh branch to an HQ holding 1,200 products and checks the two end with the same count, sum of prices, ids and name lengths.
 
-**Not covered yet:** pictures, the CSV import at HQ (P3b2), the HQ screens (everything is API only), HQ-side stock alerts per branch.
+**Not covered yet:** the HQ screens (everything is API only), HQ-side stock alerts per branch. (Pictures and the CSV import are §19.)
+
+## 19. What P3b2 built (2026-11-27): the CSV import at HQ, pictures, and read-only screens
+
+**The CSV import at HQ** (`cloud-hq/src/modules/catalog/import.ts`, `POST /products/import`, HQ staff). The same rules as the branch's import had (US-15), ported to HQ's adapter: nothing is guessed, every row is checked, **a file with any error writes nothing**, `dryRun` defaults to true, an empty cell leaves a product as it is, units are never created, a barcode shortened by a spreadsheet (`7.6E+12`) is refused, the same barcode or product twice in one file is an error. Applying is **one transaction**: every product, every new list entry (`createMissing`), every `change_log` line and audit row commit together. Differences from the branch's: only **active** products are matched by barcode or name (a retired product's barcode is free, so a row with it adds a new product), and the limits are bigger (20,000 rows, 8 MB) because HQ holds the whole chain. The branch's own import and its screen stay for a branch that is not connected.
+
+**Pictures.** HQ keeps a picture under a name made from its own content (`<24 hex digits>.<ext>`, judged by its bytes, never SVG; `cloud-hq/src/modules/catalog/images.ts` is a copy of the branch's), in `UPLOADS_DIR` (default `uploads` next to the HQ database). `POST /products/:id/image` (the file as the body) and `DELETE /products/:id/image`, HQ staff; a no-op writes nothing. `image_path` is a column of the down list, so it reaches the branch with the product. **The file is fetched by the branch** (`modules/sync/images.ts`, after each pull round): for each picture a product names and the branch does not have, `GET /sync/images/:name` (branch token; only names of that one shape are served), at most 100 per round. **The name is made from the content, so what arrives is checked against it**: a file whose content does not give the name is not kept under it (a damaged or swapped file), and it is asked for again at the next round until HQ's copy is right. A picture that cannot be fetched now never blocks the loop and never fails the product: it shows without its picture until it arrives. The branch serves it from its own `/uploads/<name>` as before (so the tills load it from there).
+
+**Read-only screens.** `GET /settings/public` now says `hqOwnsCatalog` (true while connected; nothing secret). The till's **Products** screen hides *New product*, *Import CSV* and *Edit* (the *Stock* button stays: stock is the branch's), **Lists** hides the add form, *Rename* and the weight checkbox for the four HQ lists (expense and service types stay editable), and **Duplicate barcodes** says HQ keeps every barcode unique; each shows a note "Managed at HQ" (`components/HqNotice.tsx`, Arabic included). The connect or disconnect reaches the screens through the `sync` number of the ping. Branch picture upload and removal answer `409 HQ_OWNS_CATALOG` too.
+
+**Tests:** `cloud-hq/tests/system/catalog-import.test.ts`, `catalog-pictures.test.ts` (new), `till/tests/e2e/hq-owns-catalog.spec.ts` (the screens, with the branch's answer changed on the way).
+
+**Not covered yet:** the HQ screens themselves (the API is all there is), picture resizing, and cleaning pictures nothing points at any more (they stay in the folder, as at a branch).
 
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 

@@ -80,7 +80,10 @@ describe('products reach a fresh branch with HQ’s ids', () => {
   it('connecting takes every product; a change at HQ follows; the screens are told', async () => {
     const heard: string[] = [];
     const stop = b.app.events.tap((e) => heard.push(e.type));
+    const flag = async () => (await b.http.get(`${api}/settings/public`).set(auth(b.cashier))).body.hqOwnsCatalog;
+    expect(await flag()).toBe(false); // the screens offer their edit buttons until the branch is connected
     expect((await b.connect(hq, 'P1')).status).toBe(200);
+    expect(await flag()).toBe(true); // and say "managed at HQ" after
     const hqAll = (await hq.http.get(`${api}/products?active=all&limit=200`).set(adminAuth)).body.data as P[];
     expect(await until(async () => (await branchProducts()).length === hqAll.length)).toBe(true);
     const there = await branchProducts();

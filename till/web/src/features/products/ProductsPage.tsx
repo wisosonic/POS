@@ -10,6 +10,8 @@ import { ProductDialog } from './ProductDialog';
 import { StockDialog } from './StockDialog';
 import { useLookup } from './lookups';
 import { Icon } from '../../components/Icon';
+import { HqNotice, useHqOwnsCatalog } from '../../components/HqNotice';
+import { useT } from '../../store/lang';
 
 type Page = { data: ProductFull[]; nextCursor: number | null };
 
@@ -24,6 +26,8 @@ function useDebounced<T>(value: T, ms: number): T {
 
 /** Every product: find one, add one, change a price or a barcode, hide one that is no longer sold. */
 export function ProductsPage() {
+  const t = useT();
+  const hqOwns = useHqOwnsCatalog(); // connected to HQ: products are changed there, so no add, import or edit here (stock stays local)
   const [q, setQ] = useState('');
   const [showHidden, setShowHidden] = useState(false);
   // The Lists page links here with a category or a brand already chosen (/products?brandId=3).
@@ -99,15 +103,20 @@ export function ProductsPage() {
           Show hidden products
         </label>
         <span className="spacer" />
-        <button className="btn" onClick={() => setImporting(true)}>
-          <Icon name="upload" size={18} />
-          Import CSV…
-        </button>
-        <button className="btn primary" onClick={() => setEditing('new')}>
-          <Icon name="plus" size={18} />
-          New product
-        </button>
+        {!hqOwns && (
+          <>
+            <button className="btn" onClick={() => setImporting(true)}>
+              <Icon name="upload" size={18} />
+              Import CSV…
+            </button>
+            <button className="btn primary" onClick={() => setEditing('new')}>
+              <Icon name="plus" size={18} />
+              New product
+            </button>
+          </>
+        )}
       </div>
+      {hqOwns && <HqNotice what={t('the products')} />}
 
       {products.isLoading ? (
         <p className="muted">Loading…</p>
@@ -153,10 +162,12 @@ export function ProductsPage() {
                       <Icon name="stock" size={16} />
                       Stock
                     </button>{' '}
-                    <button className="btn small" onClick={() => setEditing(p)} aria-label={`Edit ${p.name.trim()}`}>
-                      <Icon name="edit" size={16} />
-                      Edit
-                    </button>
+                    {!hqOwns && (
+                      <button className="btn small" onClick={() => setEditing(p)} aria-label={`Edit ${p.name.trim()}`}>
+                        <Icon name="edit" size={16} />
+                        Edit
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
