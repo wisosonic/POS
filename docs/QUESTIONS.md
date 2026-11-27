@@ -8,6 +8,9 @@ Nothing is open. (New questions for the product owner are added here.)
 
 ## Answered
 
+### Connection and the till's backend (answered 2026-11-27)
+Design note: `docs/14-connection-and-till-backend.md`. (1) **A till stops taking sales while the branch server is unreachable**, shows a message, keeps checking and resumes by itself (no offline selling, no queue). (2) **No WebSocket:** a ping every few seconds, whose answer carries the latest version of each topic, is the heartbeat and the change detector (branch to HQ the same way). (3) **The till's Node backend keeps a copy of the items and prices on disk.** (4) **Users stay on the branch server; sign-in is a JWT there** (as built). Proposed and adopted with them: the branch server never calls a till (no till IP, no push), and the enrolment wizard has no IP field (a till is its device token).
+
 ### 20. Wallets per branch: three choices (answered 2026-11-25, all as proposed)
 Design note: `docs/13-branch-wallets.md`.
 - **After a void or a delete, an earlier wallet count's variance does not change.** A count is a statement made at a moment; the void or delete is a visible correction entry and the next count absorbs it.

@@ -212,6 +212,10 @@ The till PC runs one small Node program, `till/agent/src/tillServer.ts` (`npm ru
 
 **Not done yet:** the sales queue (the outbox) is still in the browser (IndexedDB), not in the till server; the print agent is still a separate command (`print-agent run`); there is no Windows service or startup script for `serve` (only for the print agent); the branch server still serves `till/web/dist` for the old way of working, until step c; not run on a real till PC.
 
+### 8.4a Planned change to the till (2026-11-27)
+
+The till will stop selling while the branch server is unreachable, learn of changes by a **ping** instead of the live-update stream, and its Node backend will keep the **copy of the items on disk**, with sign-in staying on the branch server (JWT). Design and build order: `docs/14-connection-and-till-backend.md`. Not built yet; §8.4 describes the till as it is today.
+
 ### 8.5 The sandbox chain test (2026-11-25)
 
 `npm run test:sandbox` (`scripts/sandbox-chain.mjs`, about two minutes, needs the internet for `npm ci`) is the proof that the projects really are separate. It copies `cloud-hq/`, `branch-server/` and `till/` (without `node_modules`, tests, data or build output) into their own folders under the system temp folder, the way they would be carried to their own machines (`hq/`, `branch-a/`, `branch-b/` (a second copy of the branch server), `till/`), runs `npm ci` in each alone, builds the till, then starts HQ, two branch servers and the till's own server, each from its own sandbox with its own data folder and its own ports (4101, 3101, 3102, 8101). Nothing in it touches the repo's folders. The sync loop runs at its real pace (10 s).

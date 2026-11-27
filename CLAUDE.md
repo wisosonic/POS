@@ -9,6 +9,8 @@ The full design is in `docs/`. **Read the relevant doc before changing a related
 Deployment: a Windows PC runs the API (which owns the SQLite file); the tills are browsers, on that same PC or on others, and a till whose printer is elsewhere runs a print agent (`docs/04-architecture.md` §1, `docs/07-operations.md`). Current state: the single-branch system is built and tested (milestones in `docs/plan.md`), with several tills per branch; it has **not** been run on a real till PC yet. The multi-branch / HQ plan is in `docs/PLAN-MULTI-BRANCH.md`.
 **Growing into a chain (multi-branch, HR, online shop) is planned in `docs/PLAN-MULTI-BRANCH.md` (architecture in `docs/11-multi-branch.md`). Read it before touching the database layer, registers, sync or users, and update its Progress section at the end of every piece of work.** Until a phase there says otherwise, the one-till rules below still hold.
 
+**Planned (decided 2026-11-27, not built; `docs/14-connection-and-till-backend.md`):** a till stops selling while the branch server is unreachable (no offline queue), a ping replaces the live-update stream, the till's Node backend keeps a read-only copy of the items on disk, and sign-in stays a JWT on the branch server. Until a step there is built, the rules below describe the system as it is (the browser queue and `/events` still exist).
+
 ## Layout (docs/11-multi-branch.md §8.2, §8.3)
 
 Five project folders, each complete and able to run alone on its own machine; the top level holds only `docs/`, `scripts/`, `legacy/` and the plan files.
