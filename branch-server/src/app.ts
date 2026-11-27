@@ -77,6 +77,8 @@ export type BuildOptions = {
   sync?: {
     enabled?: boolean;
     intervalMs?: number;
+    /** Pull HQ's changes even when its ping says nothing is new, this often (default 60 s). */
+    safetyPullMs?: number;
     backoffMs?: [number, number];
     refusedRetryMs?: number;
     idleMs?: number;

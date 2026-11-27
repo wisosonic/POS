@@ -29,8 +29,10 @@ export type SyncAgentOptions = {
   pull?: (link: Link, signal: AbortSignal) => Promise<PullOutcome>;
   /** HQ's changes were applied: which tables changed (so the screens can be told). */
   onPulled?: (tables: string[]) => void;
-  /** How often to ask while HQ is answering. */
+  /** How often to ask while HQ is answering (docs/14 §6: 5 s). */
   intervalMs?: number;
+  /** Pull HQ's changes even when the ping says nothing is new, this often (the safety net; 60 s). */
+  safetyPullMs?: number;
   /** The wait after a failed call: starts at the first, doubles up to the second. */
   backoffMs?: [number, number];
   refusedRetryMs?: number;
@@ -47,6 +49,7 @@ export class SyncAgent {
   private lastWrite = 0;
   private nudged = false;
   private moreWaiting = false;
+  private lastPull = 0;
 
   constructor(private readonly opts: SyncAgentOptions) {}
 
@@ -89,9 +92,18 @@ export class SyncAgent {
    * Send batches until nothing is left, or a fair number (so a long backlog does not starve the "are you there?"). Returns what went wrong,
    * or null. A failure is NOT cleared from the outbox: the same batch is simply tried again.
    */
-  private async drain(link: Link): Promise<{ error: string; refused?: boolean } | null> {
+  private async drain(link: Link, changeSeq: number | undefined): Promise<{ error: string; refused?: boolean } | null> {
     // First what HQ has for us (a new exchange rate matters before the next sale), then what we have for HQ.
-    const pull = this.opts.pull;
+    // HQ's ping says how far its change log is: ask for changes only when it is ahead of what was applied (or HQ did not say, or the
+    // safety interval has passed, or the last round left more).
+    let pull = this.opts.pull;
+    if (pull) {
+      const cursor =
+        (await this.opts.db.one<{ down_cursor: number }>('SELECT down_cursor FROM sync_control WHERE id = 1'))?.down_cursor ?? 0;
+      const due = Date.now() - this.lastPull >= (this.opts.safetyPullMs ?? 60_000);
+      if (changeSeq !== undefined && changeSeq <= cursor && !due) pull = undefined;
+      else this.lastPull = Date.now();
+    }
     for (let i = 0; pull && i < 40; i++) {
       if (this.abort.signal.aborted) return null;
       const r = await pull(link, this.abort.signal);
@@ -130,7 +142,7 @@ export class SyncAgent {
   private async loop(): Promise<void> {
     const { db } = this.opts;
     const [minDelay, maxDelay] = this.opts.backoffMs ?? [3_000, 30_000];
-    const interval = this.opts.intervalMs ?? 10_000;
+    const interval = this.opts.intervalMs ?? 5_000;
     let delay = minDelay;
     while (!this.abort.signal.aborted) {
       try {
@@ -152,9 +164,12 @@ export class SyncAgent {
             await db.tx((tx) => recordOk(tx));
             this.lastWrite = Date.now();
           }
-          if (!wasOnline) await this.opts.onReconnect?.(link);
+          if (!wasOnline) {
+            this.lastPull = 0; // a first or renewed connection always pulls
+            await this.opts.onReconnect?.(link);
+          }
           // Send what is waiting: first what changed, then the history from before this branch connected.
-          const failed = await this.drain(link);
+          const failed = await this.drain(link, result.changeSeq);
           if (failed?.refused) {
             this.set('refused', failed.error);
             await db.tx((tx) => recordError(tx, failed.error));

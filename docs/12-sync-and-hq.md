@@ -97,7 +97,7 @@ The sync loop runs inside the branch server. While online it syncs every few sec
 | POST | `/api/v1/branches/{id}/enrol-code` | HQ staff | a fresh one-time code (30 minutes, works once) |
 | POST | `/api/v1/branches/{id}/revoke` | HQ staff | `204`; the branch's token stops working at once |
 | POST | `/api/v1/sync/enrol` | **open, rate limited** | `{ code }` → `{ token, branch }`, the token shown once; `422 ENROL_CODE_INVALID` |
-| GET | `/api/v1/sync/ping` | branch (`X-Branch-Token`) | `{ ok, serverTime, branch }`; `401 BRANCH_UNKNOWN` |
+| GET | `/api/v1/sync/ping` | branch (`X-Branch-Token`) | `{ ok, serverTime, branch, changeSeq }` (`changeSeq` = HQ's latest change number, docs/14 §6); `401 BRANCH_UNKNOWN` |
 
 HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_ADMIN_TOKEN>`, compared in constant time). That is deliberately temporary: HQ users with their own passwords and roles come with P3. Everything HQ changes is written to an append-only `hq_audit`, never a code or a token. Only hashes of codes and tokens are stored. The only open doors are `/healthz` and `/sync/enrol`; `cloud-hq/tests/hq.test.ts` proves every other route refuses an anonymous request and a garbage token.
 
@@ -109,7 +109,7 @@ HQ staff sign in with the **interim admin token** (`Authorization: Bearer <HQ_AD
 | POST | `/api/v1/sync/connect` | admin | `{ url, code }`; `400` for an address that is not `http(s)://host`, `422 ENROL_CODE_INVALID`, `502 HQ_UNREACHABLE` |
 | POST | `/api/v1/sync/disconnect` | admin | back to working alone |
 
-**The loop** (`modules/sync/agent.ts`, inside the branch server, never on the sale path): while HQ answers it asks every 10 s; when a call fails the state becomes `offline` and it asks again after 3 s, 6 s, 12 s ... up to 30 s; **the first answer after an outage starts the catch-up** (`onReconnect`, where P2b/P2c plug in); if HQ says the branch is no longer accepted the state is `refused` and it only checks once a minute. Each state change publishes `sync.changed` on the live-updates stream. The loop stops at once when the server closes (`preClose`).
+**The loop** (`modules/sync/agent.ts`, inside the branch server, never on the sale path): while HQ answers it pings every 5 s and pulls changes only when the ping's `changeSeq` is ahead of what it applied (or every 60 s as a safety net); when a call fails the state becomes `offline` and it asks again after 3 s, 6 s, 12 s ... up to 30 s; **the first answer after an outage starts the catch-up** (`onReconnect`, where P2b/P2c plug in); if HQ says the branch is no longer accepted the state is `refused` and it only checks once a minute. Each state change publishes `sync.changed` on the live-updates stream. The loop stops at once when the server closes (`preClose`).
 
 **Run the whole thing on one machine:** `npm run dev:chain` starts HQ (:4000) and branches A (:3000) and B (:3001), each with its own data folder under `data/chain/`. With `CHAIN_ADMIN_PASSWORD=<any password for this throw-away data>` set it also creates an `admin` in each branch, adds the branches at HQ and connects them. It was run for real: both branches online, HQ saw both, no secret reached the output. To look at a branch's screen: `API_URL=http://127.0.0.1:3000 npm run dev --prefix till/web`.
 

@@ -10,6 +10,7 @@ let c: TestCtx;
 let admin: string;
 let cashier: string;
 let failNext = 0;
+let pulls = 0;
 const api = '/api/v1';
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const status = async () => (await c.http.get(`${api}/sync/status`).set(auth(admin))).body;
@@ -36,6 +37,7 @@ const fetchImpl: typeof fetch = async (input, init) => {
     failNext--;
     throw new TypeError('network down');
   }
+  if (String(input).includes('/sync/changes')) pulls++;
   return fetch(input, init);
 };
 
@@ -95,6 +97,21 @@ describe('the exchange rate comes down from HQ', () => {
     expect(refused.body.code).toBe('HQ_OWNS_RATES');
     await c.http.post(`${api}/sync/disconnect`).set(auth(admin));
     expect((await c.http.post(`${api}/exchange-rates`).set(auth(admin)).send({ rateLbpPerUsd: 91234 })).status).toBe(201);
+  });
+});
+
+describe('the ping decides when to pull (docs/14 step 5)', () => {
+  it('a quiet HQ is not asked for changes again and again; a change is pulled at once', async () => {
+    await connect('P1');
+    expect(await until(async () => (await status()).state === 'online')).toBe(true);
+    await new Promise((r) => setTimeout(r, 400)); // the first catch-up settles
+    const settled = pulls;
+    await new Promise((r) => setTimeout(r, 600)); // about ten pings (every 60 ms) with nothing new
+    expect(pulls).toBe(settled);
+    const target = (await rate()) + 21;
+    await setAtHq(target);
+    expect(await until(async () => (await rate()) === target)).toBe(true);
+    expect(pulls).toBeGreaterThan(settled);
   });
 });
 

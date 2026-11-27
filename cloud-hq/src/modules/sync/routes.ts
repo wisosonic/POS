@@ -56,5 +56,9 @@ export default async function syncRoutes(app: FastifyInstance) {
   });
 
   // "Are you there?" The branch asks every few seconds; the first answer after an outage is the signal to catch up.
-  app.get('/sync/ping', branch, async (req) => ({ ok: true, serverTime: new Date().toISOString(), branch: req.branch }));
+  // docs/14 §6: it also says how far HQ's change log has got (`changeSeq`), so a branch pulls only when that is ahead of what it applied.
+  app.get('/sync/ping', branch, async (req) => {
+    const last = await db.one<{ seq: number | null }>('SELECT MAX(seq) AS seq FROM change_log');
+    return { ok: true, serverTime: new Date().toISOString(), branch: req.branch, changeSeq: last?.seq ?? 0 };
+  });
 }

@@ -42,7 +42,12 @@ export async function enrolAtHq(hqUrl: string, code: string, fetchImpl: Fetch = 
 }
 
 export type PingResult =
-  | { ok: true; serverTime: string; branch: HqBranch }
+  | {
+      ok: true;
+      serverTime: string;
+      branch: HqBranch;
+      /** HQ's latest change number; absent from an older HQ (then the branch always pulls). */ changeSeq?: number;
+    }
   /** HQ does not accept this branch any more (its token was revoked, or the branch was switched off). Retrying will not help. */
   | { ok: false; refused: true; error: string }
   /** The connection, or HQ, is down. Try again later. */
@@ -57,8 +62,9 @@ export async function pingHq(hqUrl: string, token: string, signal: AbortSignal, 
     if (res.status === 401)
       return { ok: false, refused: true, error: 'HQ no longer accepts this branch. Ask HQ for a new code and connect again.' };
     if (!res.ok) return { ok: false, refused: false, error: `HQ answered ${res.status}` };
-    const body = (await res.json()) as { serverTime: string; branch: HqBranch };
-    return { ok: true, serverTime: body.serverTime, branch: body.branch };
+    const body = (await res.json()) as { serverTime: string; branch: HqBranch; changeSeq?: unknown };
+    const changeSeq = Number.isSafeInteger(body.changeSeq) ? (body.changeSeq as number) : undefined;
+    return { ok: true, serverTime: body.serverTime, branch: body.branch, changeSeq };
   } catch (e) {
     return {
       ok: false,

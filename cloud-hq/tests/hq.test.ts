@@ -87,6 +87,15 @@ describe('connecting a branch', () => {
     expect((await hq.http.get(`${api}/sync/ping`).set(adminAuth)).status).toBe(401); // the admin token is not a branch's
   });
 
+  it('the ping says how far the change log has got, and the number only rises (docs/14 step 5)', async () => {
+    const before = (await ping(token)).body.changeSeq as number;
+    expect(Number.isInteger(before)).toBe(true);
+    expect((await hq.http.post(`${api}/exchange-rates`).set(adminAuth).send({ rateLbpPerUsd: 91000 })).status).toBe(201);
+    const after = (await ping(token)).body.changeSeq as number;
+    expect(after).toBeGreaterThan(before);
+    expect((await ping(token)).body.changeSeq).toBe(after);
+  });
+
   it('keeps track of when each branch was last heard from', async () => {
     const branch = (await hq.http.get(`${api}/branches`).set(adminAuth)).body.data.find((b: { code: string }) => b.code === 'B3');
     expect(branch).toMatchObject({ connected: true, enrolPending: false });
