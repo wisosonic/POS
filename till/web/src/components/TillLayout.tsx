@@ -11,6 +11,8 @@ import { useLiveUpdates } from '../hooks/useLiveUpdates';
 import { get } from '../lib/api';
 import type { BackupStatus } from '../lib/types';
 import { useConnection, startConnectionWatch } from '../store/connection';
+import { REASON_TEXT } from '../lib/link';
+import { startLinkWatch, useLink } from '../store/link';
 import { useSession } from '../store/session';
 import { useUi } from '../store/ui';
 import { useT } from '../store/lang';
@@ -44,12 +46,15 @@ export function TillLayout() {
   const holds = useHolds();
   const alerts = useAlerts();
   const { online, waiting, blocked } = useConnection();
+  const stopped = useLink((s) => s.block); // the branch server is not answering: selling is stopped (docs/14)
   const holdsOpen = useUi((s) => s.holdsOpen);
   const [menuOpen, setMenuOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
   const location = useLocation();
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
+
+  useEffect(() => startLinkWatch(), []); // the heartbeat's answer, asked of the till's own server every 2 seconds
 
   // Bring the catalog up to date, and keep trying to send any sale that could not reach the server.
   useEffect(() => {
@@ -220,6 +225,20 @@ export function TillLayout() {
           </Dropdown>
         </div>
       </header>
+
+      {stopped && (
+        <div className="banner warn" role="alert" data-testid="selling-stopped" style={{ margin: '8px 12px 0' }}>
+          <div className="title">
+            {stopped.cause === 'branch'
+              ? t('The branch server is not answering. Selling is stopped until it is back.')
+              : t('The till program on this PC is not answering. Selling is stopped until it is back.')}
+          </div>
+          <div className="muted">
+            {t('Your cart is kept. This screen checks again every few seconds and starts again by itself.')}
+            {stopped.reason && REASON_TEXT[stopped.reason] ? ` ${t(REASON_TEXT[stopped.reason]!)}` : ''}
+          </div>
+        </div>
+      )}
 
       {!needsRegister ? (
         outlet

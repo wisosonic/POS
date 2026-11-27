@@ -10,16 +10,18 @@ const wallet = (countedAt: string | null): WalletState => ({
   expected: 0,
   inSince: 0,
   outSince: 0,
-  lastCount: countedAt && {
-    id: 1,
-    counted: 0,
-    expected: null,
-    variance: null,
-    purpose: 'check',
-    note: null,
-    countedAt,
-    countedByName: null,
-  },
+  lastCount: countedAt
+    ? {
+        id: 1,
+        counted: 0,
+        expected: null,
+        variance: null,
+        purpose: 'check',
+        note: null,
+        countedAt,
+        countedByName: null,
+      }
+    : null,
 });
 const now = new Date(2026, 10, 25, 9, 0); // 25 November 2026, local time
 

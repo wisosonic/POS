@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AR } from '../src/lib/ar';
 import { applyLang, directionOf, readLang, saveLang, translate } from '../src/lib/i18n';
+import { REASON_TEXT } from '../src/lib/link';
 import { NAV, SETTINGS_NAV } from '../src/lib/nav';
 
 // US-37: the screens in English or Arabic. The English text in the code is the key; a text with no Arabic shows in English.
@@ -95,6 +96,7 @@ const markers = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).s
 const FROM_LISTS = [
   ...NAV.flatMap((s) => [s.title, ...s.items.map((i) => i.label)]),
   ...SETTINGS_NAV.map((i) => i.label),
+  ...Object.values(REASON_TEXT), // why the link is down (the selling-stopped banner)
   'Like this computer',
   'Follows the light or dark setting of Windows.',
   'Light',

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { fmtLbp, lbpAsUsd, trimQty } from '../../lib/money';
 import { useCart, type CartLine, type CartTotals } from '../../store/cart';
+import { useLink } from '../../store/link';
 import { toast } from '../../store/toast';
 import { tNow, useT } from '../../store/lang';
 import { Icon } from '../../components/Icon';
@@ -92,6 +93,7 @@ export function CartPanel({
   const t = useT();
   const remove = useCart((s) => s.remove);
   const empty = lines.length === 0;
+  const stopped = useLink((s) => s.block) !== null; // the branch server is not answering: no new payment (docs/14)
   const priced = new Map(totals.lines.map((l) => [l.key, l]));
 
   return (
@@ -200,7 +202,7 @@ export function CartPanel({
           <Icon name="hold" size={22} />
           {t('Hold (F4)')}
         </button>
-        <button className="btn big primary" onClick={onPay} disabled={empty}>
+        <button className="btn big primary" onClick={onPay} disabled={empty || stopped}>
           <Icon name="pay" size={24} />
           {t('PAY (F9)')}
         </button>

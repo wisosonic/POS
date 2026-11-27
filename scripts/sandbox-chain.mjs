@@ -363,13 +363,21 @@ async function main() {
   });
 
   await step('the branch server goes away: the till says so in a way the screens treat as offline; when it is back the till works again', async () => {
+    // The till watches its branch server by itself (docs/14): with its device token it pings, and the answer is what stops selling.
+    const linkOf = async () => (await http('GET', url.till, '/till/link', { terminal: terminalToken })).body;
+    await until('the till reports the branch server as connected, by ping', async () => {
+      const l = await linkOf();
+      return l.state === 'connected' && l.watching === 'ping' && l.blocked === false;
+    }, 20_000);
     await stop('branch-a');
+    await until('the till reports selling blocked once the branch server stops answering', async () => (await linkOf()).blocked === true, 20_000);
     const r = await http('POST', url.till, '/api/v1/sales', { token: cashierA, terminal: terminalToken, body: saleBody(productA.id), headers: { 'Idempotency-Key': randomUUID() } });
     check(r.status === 502 && r.headers.get('x-till-proxy-error') === 'BRANCH_UNREACHABLE', `expected the till's own 502 mark, got ${r.status}`);
     const test = must(await http('POST', url.till, '/till/test', { body: {} }), 200, 'test the address');
     check(test.ok === false && test.reason === 'REFUSED', `the till should report a refused connection, got ${JSON.stringify(test)}`);
     restart('branch-a');
     await until('branch A answers again', () => healthy(url.a), 60_000);
+    await until('the till reports selling allowed again, by itself', async () => (await linkOf()).blocked === false, 20_000);
     const sale = must(await http('POST', url.till, '/api/v1/sales', { token: cashierA, terminal: terminalToken, body: saleBody(productA.id), headers: { 'Idempotency-Key': randomUUID() } }), 201, 'sell after the branch server is back');
     check(!!sale.id, 'no sale after restart');
     await until('branch A and HQ agree at the end', () => inSync(url.a, adminA), 90_000);

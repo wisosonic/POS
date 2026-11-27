@@ -59,6 +59,7 @@ beforeAll(async () => {
     port: 0,
     defaultBranchServer: `http://127.0.0.1:${branchPort}`,
     connectTimeoutMs: 800,
+    link: { enabled: false }, // these tests watch the calls the till passes on: the heartbeat has its own tests (link.test.ts)
   });
   tillPort = await till.listen('127.0.0.1');
 });

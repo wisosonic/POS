@@ -4,6 +4,7 @@ import { ApiError } from '../../lib/api';
 import { fmtLbp, groupThousands, lbpAsUsd } from '../../lib/money';
 import { NO_PAYMENT, analyzePayment, type PayAnalysis, type PayInputs } from '../../lib/payment';
 import type { Customer, Method } from '../../lib/types';
+import { useLink } from '../../store/link';
 import { tNow, useT } from '../../store/lang';
 import { CustomerPicker } from './CustomerPicker';
 
@@ -39,6 +40,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
   const [inputs, setInputs] = useState<PayInputs>(NO_PAYMENT);
   const [active, setActive] = useState<Method>('cash');
   const [busy, setBusy] = useState(false);
+  const stopped = useLink((s) => s.block) !== null; // the link dropped while this dialog was open: nothing more is sent (docs/14)
   const [serverError, setServerError] = useState('');
   const fields = useRef<Partial<Record<keyof PayInputs, HTMLInputElement | null>>>({});
 
@@ -67,7 +69,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (analysis.error || busy) return;
+    if (analysis.error || busy || stopped) return;
     void send(analysis);
   }
 
@@ -77,7 +79,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
     [totalLbp, rate, lbpRounding, customer],
   );
   function putOnAccount() {
-    if (busy || onAccount.error) return;
+    if (busy || stopped || onAccount.error) return;
     setInputs(NO_PAYMENT);
     void send(onAccount);
   }
@@ -199,7 +201,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
 
             {customer && (
               <div className="on-account">
-                <button type="button" className="btn big" disabled={busy || onAccount.error !== null} onClick={putOnAccount}>
+                <button type="button" className="btn big" disabled={busy || stopped || onAccount.error !== null} onClick={putOnAccount}>
                   {t('Put it all on account')}
                 </button>
                 <span className="muted">{t('Nothing is paid now: the whole total is owed by {name}.', { name: customer.name })}</span>
@@ -212,7 +214,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
           <button type="button" className="btn" onClick={onClose}>
             {t('Cancel')}
           </button>
-          <button type="submit" className="btn primary big" disabled={analysis.error !== null || busy}>
+          <button type="submit" className="btn primary big" disabled={analysis.error !== null || busy || stopped}>
             {t('Complete')}
           </button>
         </div>

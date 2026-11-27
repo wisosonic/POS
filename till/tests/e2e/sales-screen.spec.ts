@@ -61,7 +61,8 @@ async function apiAs(request: APIRequestContext, user: 'cashier' | 'manager' | '
 }
 async function closeRegister(request: APIRequestContext) {
   const api = await apiAs(request, 'cashier');
-  const cur = await api.get('/registers/current');
+  // A cashier counts blind (the shop's default, docs/13 D7): the expected figures are read as a manager, to count a perfect close.
+  const cur = await (await apiAs(request, 'manager')).get('/registers/current');
   const counted = (cur.balances as { method: string; currency: string; expected: number }[]).map((b) => ({
     method: b.method,
     currency: b.currency,

@@ -379,4 +379,19 @@ export const AR: Record<string, string> = {
   'Wallets: should be / last counted': 'المحافظ: المفروض / آخر جرد',
   'Count the wallets: {names} not counted since yesterday.': 'جرد المحافظ: لم يُجرد {names} منذ أمس.',
   'Count now': 'جرد الآن',
+  'The branch server is not answering. Selling is stopped until it is back.': 'خادم الفرع لا يردّ. البيع متوقف إلى أن يعود.',
+  'The till program on this PC is not answering. Selling is stopped until it is back.':
+    'برنامج الصندوق على هذا الجهاز لا يردّ. البيع متوقف إلى أن يعود.',
+  'Your cart is kept. This screen checks again every few seconds and starts again by itself.':
+    'السلة محفوظة. تعيد هذه الشاشة الفحص كل بضع ثوانٍ وتستأنف من تلقاء نفسها.',
+  'Selling is stopped until the branch server answers again. Your cart is kept.':
+    'البيع متوقف إلى أن يردّ خادم الفرع من جديد. السلة محفوظة.',
+  'Nothing answered in time: check that the branch server PC is on and on the network.':
+    'لم يردّ أحد في الوقت المناسب: تأكد أن جهاز خادم الفرع يعمل وموصول بالشبكة.',
+  'The PC answered but no branch server is running on it.': 'ردّ الجهاز لكن لا يعمل عليه خادم فرع.',
+  'The branch server name is not known on this network.': 'اسم خادم الفرع غير معروف في هذه الشبكة.',
+  'The branch server cannot be reached.': 'لا يمكن الوصول إلى خادم الفرع.',
+  'Something answered, but not a branch server.': 'ردّ شيء ما لكنه ليس خادم فرع.',
+  "The branch server does not accept this till's address (ask whoever set it up to add it to ALLOWED_HOSTS).":
+    'خادم الفرع لا يقبل عنوان هذا الصندوق (اطلب ممن أعدّه إضافته إلى ALLOWED_HOSTS).',
 };

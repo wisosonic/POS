@@ -37,3 +37,39 @@ export async function testBranchServer(branchServer?: string): Promise<TestResul
     return { ok: false, reason: 'TILL_DOWN', detail: 'The till program on this PC does not answer' };
   }
 }
+
+/** What the till's own server says about the branch server (docs/14 §2): the heartbeat's state, from `GET /till/link`. */
+export type TillLink = {
+  state: 'starting' | 'connected' | 'down' | 'not_a_till' | 'not_configured';
+  /** True while selling must stop: the branch server has not answered twice in a row. */
+  blocked: boolean;
+  since: string;
+  lastOkAt: string | null;
+  reason: string | null;
+  detail: string | null;
+};
+
+/**
+ * Ask the till's own server whether the branch server is answering. The till's device token goes along, so the heartbeat can use the
+ * guarded ping. Three answers: the link; `null` when this app is not served by a till's own server (then there is no heartbeat and
+ * nothing is stopped by it); or `'till-down'` when the till program on this PC does not answer.
+ */
+export async function getTillLink(token: string | null): Promise<TillLink | null | 'till-down'> {
+  let res: Response;
+  try {
+    res = await fetch('/till/link', {
+      headers: { Accept: 'application/json', ...(token ? { 'X-Terminal-Token': token } : {}) },
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+  } catch {
+    return 'till-down';
+  }
+  if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
+  try {
+    const body = (await res.json()) as Partial<TillLink>;
+    return typeof body.state === 'string' && typeof body.blocked === 'boolean' ? (body as TillLink) : null;
+  } catch {
+    return null;
+  }
+}

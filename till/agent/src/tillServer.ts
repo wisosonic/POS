@@ -2,6 +2,7 @@ import { createReadStream, mkdirSync, readFileSync, renameSync, statSync, writeF
 import http, { type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import https from 'node:https';
 import { extname, join, normalize, resolve, sep } from 'node:path';
+import { createLinkMonitor, type LinkMonitor, type LinkSnapshot } from './link';
 
 // The till's own small server (docs/11-multi-branch.md §8.4). It runs on the till PC and does three things:
 //   1. serves the till screens (the built web app, `web/dist`) from this PC;
@@ -27,6 +28,8 @@ export type TillServerOptions = {
   port: number;
   /** Seconds to wait for the branch server to accept a connection before giving up (default 5). */
   connectTimeoutMs?: number;
+  /** How the heartbeat to the branch server runs (docs/14). The defaults are right for a shop; tests use short times. */
+  link?: { intervalMs?: number; timeoutMs?: number; missesToFail?: number; enabled?: boolean };
   log?: (message: string) => void;
 };
 
@@ -142,6 +145,8 @@ export type TillServer = {
   server: Server;
   /** The branch server's address now in use, or null. */
   branchServer(): string | null;
+  /** The heartbeat to the branch server: what `GET /till/link` reports. */
+  link: LinkMonitor;
   listen(host: string): Promise<number>;
   close(): Promise<void>;
 };
@@ -153,6 +158,8 @@ export function createTillServer(opts: TillServerOptions): TillServer {
   const webRoot = opts.webDist ? resolve(opts.webDist) : null;
   const connectTimeout = opts.connectTimeoutMs ?? 5_000;
   let selfPort = opts.port;
+  const linkOpts = opts.link ?? {};
+  const link = createLinkMonitor({ branchServer: () => currentBranchServer().url, ...linkOpts, log });
 
   function loadSaved(): Saved {
     try {
@@ -193,6 +200,14 @@ export function createTillServer(opts: TillServerOptions): TillServer {
     if (!isLoopbackAddress(req.socket.remoteAddress))
       return problem(res, 403, 'LOCAL_ONLY', 'The till settings can only be changed on the till PC itself');
 
+    // What the screens poll: is the branch server answering? The screen sends its device token so the heartbeat can use the guarded ping
+    // (no token: the open health check). The token is kept in memory only, never written to disk or to a log.
+    if (path === '/till/link' && req.method === 'GET') {
+      const sent = req.headers['x-terminal-token'];
+      link.setToken(typeof sent === 'string' && sent ? sent : null);
+      const snap: LinkSnapshot = link.snapshot();
+      return json(res, 200, snap);
+    }
     if (path === '/till/config' && req.method === 'GET') {
       const { url, source } = currentBranchServer();
       return json(res, 200, { branchServer: url, source });
@@ -279,6 +294,8 @@ export function createTillServer(opts: TillServerOptions): TillServer {
     if (!target) return problem(res, 503, 'BRANCH_NOT_CONFIGURED', 'This till does not know its branch server yet', true);
     const base = new URL(target);
     const headers: http.OutgoingHttpHeaders = { ...req.headers };
+    const device = req.headers['x-terminal-token']; // the heartbeat pings as this till (kept in memory only)
+    if (typeof device === 'string' && device) link.setToken(device);
     for (const h of HOP_BY_HOP) delete headers[h];
     // The browser's Origin and Referer name THIS till; the branch server's check is about other websites, and this server already did it.
     delete headers.origin;
@@ -377,17 +394,20 @@ export function createTillServer(opts: TillServerOptions): TillServer {
   return {
     server,
     branchServer: () => currentBranchServer().url,
+    link,
     listen: (host) =>
       new Promise((resolveListen, reject) => {
         server.once('error', reject);
         server.listen(opts.port, host, () => {
           const address = server.address();
           selfPort = typeof address === 'object' && address ? address.port : opts.port;
+          if (linkOpts.enabled !== false) link.start();
           resolveListen(selfPort);
         });
       }),
     close: () =>
       new Promise((resolveClose) => {
+        link.stop();
         // Held connections (the live-update stream) would keep the server open for ever: end them first.
         server.closeAllConnections();
         server.close(() => resolveClose());

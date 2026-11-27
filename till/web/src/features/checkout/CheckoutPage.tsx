@@ -21,6 +21,7 @@ import { CartPanel } from './CartPanel';
 import { DiscountDialog } from './DiscountDialog';
 import { PriceDialog } from './PriceDialog';
 import { PayDialog } from './PayDialog';
+import { useLink } from '../../store/link';
 import { Icon } from '../../components/Icon';
 import { useLookup } from '../products/lookups';
 import { CatalogBrowser } from './CatalogBrowser';
@@ -147,6 +148,11 @@ export function CheckoutPage() {
   const openPay = () => {
     const cart = useCart.getState();
     if (cart.lines.length === 0 || !rate) return;
+    if (useLink.getState().block) {
+      // The banner says why; the F9 key and a double click land here too. The cart stays as it is.
+      toast.warning(tNow('Selling is stopped until the branch server answers again. Your cart is kept.'));
+      return;
+    }
     // A discount above the cashier's limit has to be approved before the customer pays, not discovered when the sale is refused.
     if (cart.discount && needsApproval(role, pct, limitPct) && !(cart.approval && approvalCovers(cart.approval, pct))) {
       toast.warning(tNow('This discount is above your limit: a manager has to approve it before the customer pays.'));
