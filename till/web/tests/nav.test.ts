@@ -30,6 +30,7 @@ describe('the menu', () => {
       'Expenses',
       'Services',
       'Cash in and out',
+      'Wallets',
     ])
       expect(manager).toContain(label);
     expect(visible('admin')).toHaveLength(visible('manager').length);

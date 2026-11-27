@@ -265,12 +265,13 @@ test('US-32: from a customer row, browse the sales behind what they owe', async 
   await expect(dialog).toHaveCount(0);
 });
 
-test('Q6: closing the register shows expected vs counted for the cash of each currency, and no wallet', async ({ page }) => {
+test('Q6: closing the register asks a cashier to count the cash of each currency blind, and no wallet', async ({ page }) => {
   await page.getByRole('button', { name: /Menu/ }).click();
   await page.getByRole('link', { name: 'Close register' }).click();
   for (const cur of ['USD', 'LBP']) {
-    await expect(page.getByTestId(`expected-Cash-${cur}`)).toBeVisible();
     await expect(page.getByLabel(`Cash ${cur} counted`)).toBeVisible();
+    // the shop's default: a cashier types the count before seeing what the till expected (docs/13 D7)
+    await expect(page.getByTestId(`expected-Cash-${cur}`)).toHaveCount(0);
   }
   // the wallets belong to the branch, not to this till
   await expect(page.getByLabel('Whish LBP counted')).toHaveCount(0);

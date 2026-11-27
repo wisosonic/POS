@@ -23,6 +23,7 @@ export function SettingsPage() {
   const [printer, setPrinter] = useState('');
   const [rounding, setRounding] = useState('');
   const [discount, setDiscount] = useState('');
+  const [blind, setBlind] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [openDrawer, setOpenDrawer] = useState(false);
@@ -40,6 +41,7 @@ export function SettingsPage() {
     setPrinter(s.printerName ?? '');
     setRounding(String(s.lbpRounding));
     setDiscount(String(s.cashierDiscountLimitPct));
+    setBlind(s.cashierBlindCount);
   }, [s]);
 
   async function save(e: FormEvent) {
@@ -66,6 +68,7 @@ export function SettingsPage() {
         printerName: blankToNull(printer),
         lbpRounding: roundingN,
         cashierDiscountLimitPct: discountN,
+        cashierBlindCount: blind,
       });
       toast.success('Settings saved');
       await Promise.all(['settings-full', 'settings'].map((k) => queryClient.invalidateQueries({ queryKey: [k] })));
@@ -136,6 +139,11 @@ export function SettingsPage() {
                 <input className="num" inputMode="numeric" value={discount} onChange={(e) => setDiscount(e.target.value)} />
               </label>
             </div>
+            <label className="field" style={{ gridAutoFlow: 'column', justifyContent: 'start', alignItems: 'center', gap: 10 }}>
+              <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} />
+              Cashiers count the drawer blind
+              <span className="hint">When on, a cashier types the count before seeing what the till expected. Managers always see it.</span>
+            </label>
           </section>
         </div>
 

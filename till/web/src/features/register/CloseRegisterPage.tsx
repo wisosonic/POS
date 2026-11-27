@@ -48,6 +48,8 @@ export function CloseRegisterPage() {
   const balances = session
     ? [...session.balances].sort((a, b) => ORDER.indexOf(a.method) - ORDER.indexOf(b.method) || (a.currency === 'USD' ? -1 : 1))
     : [];
+  // A cashier may count blind (the shop's setting): the server then sends no expectation until the register is closed.
+  const blind = balances.some((b) => b.expected === null);
   const parse = (m: Method, c: Currency) =>
     c === 'USD' ? parseUsdInput(counted[keyOf(m, c)] ?? '') : parseLbpInput(counted[keyOf(m, c)] ?? '');
   const typed = (m: Method, c: Currency) => (counted[keyOf(m, c)] ?? '').trim() !== '';
@@ -131,8 +133,9 @@ export function CloseRegisterPage() {
         Close the register
       </h1>
       <p className="muted">
-        Count the cash in the drawer and type what you counted. The till shows what it expected. (Whish and OMT belong to the branch: a
-        manager counts them.)
+        Count the cash in the drawer and type what you counted.{' '}
+        {blind ? 'The till shows what it expected once you close.' : 'The till shows what it expected.'} (Whish and OMT belong to the
+        branch: a manager counts them.)
       </p>
       {waiting > 0 && (
         <div className="warning" role="alert" style={{ marginBottom: 12 }}>
@@ -144,23 +147,25 @@ export function CloseRegisterPage() {
           <tr>
             <th>Balance</th>
             <th className="num">Opening</th>
-            <th className="num">Expected</th>
+            {!blind && <th className="num">Expected</th>}
             <th className="num">Counted</th>
-            <th className="num">Difference</th>
+            {!blind && <th className="num">Difference</th>}
           </tr>
         </thead>
         <tbody>
           {balances.map((b) => {
             const name = `${NAMES[b.method]} ${b.currency}`;
             const value = parse(b.method, b.currency);
-            const diff = typed(b.method, b.currency) && !Number.isNaN(value) ? value - b.expected : null;
+            const diff = b.expected !== null && typed(b.method, b.currency) && !Number.isNaN(value) ? value - b.expected : null;
             return (
               <tr key={keyOf(b.method, b.currency)}>
                 <td>{name}</td>
                 <td className="num">{fmtMoney(b.opening, b.currency)}</td>
-                <td className="num" data-testid={`expected-${NAMES[b.method]}-${b.currency}`}>
-                  {fmtMoney(b.expected, b.currency)}
-                </td>
+                {!blind && (
+                  <td className="num" data-testid={`expected-${NAMES[b.method]}-${b.currency}`}>
+                    {fmtMoney(b.expected!, b.currency)}
+                  </td>
+                )}
                 <td className="num">
                   <input
                     aria-label={`${name} counted`}
@@ -180,13 +185,15 @@ export function CloseRegisterPage() {
                     }}
                   />
                 </td>
-                <td className={`num ${diff === null ? '' : diff === 0 ? 'variance-ok' : 'variance-bad'}`}>
-                  {diff === null
-                    ? ''
-                    : diff === 0
-                      ? 'OK'
-                      : `${diff > 0 ? '+' : ''}${b.currency === 'USD' ? fmtUsd(diff) : groupThousands(diff)}`}
-                </td>
+                {!blind && (
+                  <td className={`num ${diff === null ? '' : diff === 0 ? 'variance-ok' : 'variance-bad'}`}>
+                    {diff === null
+                      ? ''
+                      : diff === 0
+                        ? 'OK'
+                        : `${diff > 0 ? '+' : ''}${b.currency === 'USD' ? fmtUsd(diff) : groupThousands(diff)}`}
+                  </td>
+                )}
               </tr>
             );
           })}

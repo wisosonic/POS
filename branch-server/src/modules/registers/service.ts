@@ -231,7 +231,8 @@ export async function computeBreakdown(q: Queryable, sessionId: number): Promise
 
 type BalanceRow = Bucket & { opening: number; expected: number; counted: number | null; variance: number | null };
 
-export async function sessionJson(q: Queryable, s: SessionRow) {
+/** `hideExpected`: a cashier counting blind is not shown what the drawer should hold (it is `null`). A closed session shows everything. */
+export async function sessionJson(q: Queryable, s: SessionRow, opts: { hideExpected?: boolean } = {}) {
   const balances = await q.all<BalanceRow>(
     'SELECT method, currency, opening, expected, counted, variance FROM register_balances WHERE session_id = ? ORDER BY method, currency',
     [s.id],
@@ -249,7 +250,7 @@ export async function sessionJson(q: Queryable, s: SessionRow) {
       method: b.method,
       currency: b.currency,
       opening: b.opening,
-      expected: b.expected,
+      expected: opts.hideExpected && !closed ? null : b.expected,
       ...(closed ? { counted: b.counted, variance: b.variance } : {}),
     })),
   };

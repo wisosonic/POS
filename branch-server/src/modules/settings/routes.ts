@@ -17,6 +17,7 @@ type Row = {
   receipt_width: number;
   printer_name: string | null;
   cashier_discount_limit_pct: number;
+  cashier_blind_count: number;
 };
 
 const toJson = (r: Row) => ({
@@ -29,6 +30,7 @@ const toJson = (r: Row) => ({
   receiptWidth: r.receipt_width,
   printerName: r.printer_name,
   cashierDiscountLimitPct: r.cashier_discount_limit_pct,
+  cashierBlindCount: r.cashier_blind_count === 1,
 });
 
 const patchBody = z
@@ -42,6 +44,7 @@ const patchBody = z
     receiptWidth: z.number().int().min(20).max(80),
     printerName: z.string().max(200).nullable(),
     cashierDiscountLimitPct: z.number().int().min(0).max(100),
+    cashierBlindCount: z.boolean(),
   })
   .partial();
 
@@ -55,6 +58,7 @@ const COLUMN: Record<keyof z.infer<typeof patchBody>, string> = {
   receiptWidth: 'receipt_width',
   printerName: 'printer_name',
   cashierDiscountLimitPct: 'cashier_discount_limit_pct',
+  cashierBlindCount: 'cashier_blind_count',
 };
 
 export default async function settingsRoutes(app: FastifyInstance) {
@@ -119,7 +123,7 @@ export default async function settingsRoutes(app: FastifyInstance) {
       const entries = Object.entries(b) as [keyof typeof COLUMN, unknown][];
       if (entries.length) {
         db.prepare(`UPDATE store_settings SET ${entries.map(([k]) => `${COLUMN[k]} = ?`).join(', ')} WHERE id = 1`).run(
-          ...entries.map(([, v]) => v),
+          ...entries.map(([, v]) => (typeof v === 'boolean' ? (v ? 1 : 0) : v)),
         );
       }
       writeAudit(db, { userId: req.auth.id, action: 'settings.update', entity: 'settings', entityId: 1, before, after: b });

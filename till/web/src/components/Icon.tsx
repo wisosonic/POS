@@ -90,6 +90,13 @@ const PATHS = {
     </>
   ),
   services: <path d="M14.5 6.2a4 4 0 0 0 5.2 5.2L21 12.7 12.7 21 3 11.3 11.3 3z M7 14l3 3" />,
+  wallet: (
+    <>
+      <path d="M3.5 7.5A2 2 0 0 1 5.5 5.5H17a2 2 0 0 1 2 2" />
+      <rect x="3.5" y="7.5" width="17" height="12" rx="2" />
+      <path d="M16.5 13.5h.1" />
+    </>
+  ),
   cash: (
     <>
       <rect x="2.5" y="6" width="19" height="12" rx="2" />

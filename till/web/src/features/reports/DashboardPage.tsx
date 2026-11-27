@@ -1,14 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { useT } from '../../store/lang';
+import { staleWallets } from '../../lib/wallets';
 import { get } from '../../lib/api';
-import { fmtLbp, fmtUsd, trimQty } from '../../lib/money';
-import type { Dashboard } from '../../lib/types';
+import { fmtLbp, fmtMoney, fmtUsd, trimQty } from '../../lib/money';
+import type { Dashboard, WalletState } from '../../lib/types';
 import { Icon } from '../../components/Icon';
 
 const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
 /** How the day is going, with what was taken back already off. Refreshes itself every half minute. */
 export function DashboardPage() {
+  const t = useT();
+  const wallets =
+    useQuery({ queryKey: ['wallets'], queryFn: () => get<{ data: WalletState[] }>('/wallets').then((r) => r.data) }).data ?? [];
+  const stale = staleWallets(wallets);
   const dash = useQuery({ queryKey: ['dashboard'], queryFn: () => get<Dashboard>('/reports/dashboard'), refetchInterval: 30_000 });
   const d = dash.data;
   if (!d) return <main className="page muted">{dash.isError ? 'The dashboard could not be loaded.' : 'Loading…'}</main>;
@@ -77,7 +83,28 @@ export function DashboardPage() {
           <div className="big-number num">{d.lowStockCount}</div>
           <Link to="/low-stock">See the list</Link>
         </div>
+        {wallets.length > 0 && (
+          <div className="card stat">
+            <div className="muted">{t('Wallets: should be / last counted')}</div>
+            {wallets.map((w) => (
+              <div key={`${w.method}/${w.currency}`} className="num" data-testid={`dash-wallet-${w.method}-${w.currency}`}>
+                {`${w.methodName} ${w.currency}: ${fmtMoney(w.expected, w.currency)} / ${w.lastCount ? fmtMoney(w.lastCount.counted, w.currency) : '–'}`}
+              </div>
+            ))}
+            <Link to="/wallets">{t('Wallets')}</Link>
+          </div>
+        )}
       </div>
+      {stale.length > 0 && (
+        <div className="banner warn" role="status" data-testid="wallet-reminder" style={{ marginBottom: 12 }}>
+          <span>
+            {t('Count the wallets: {names} not counted since yesterday.', {
+              names: [...new Set(stale.map((w) => w.methodName))].join(', '),
+            })}
+          </span>{' '}
+          <Link to="/wallets">{t('Count now')}</Link>
+        </div>
+      )}
 
       <h2>By the hour</h2>
       <div className="card bars" role="img" aria-label="Takings for each hour of the day">

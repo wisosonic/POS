@@ -154,6 +154,7 @@ export type FullSettings = {
   receiptWidth: number;
   printerName: string | null;
   cashierDiscountLimitPct: number;
+  cashierBlindCount: boolean;
 };
 export type RateRow = { id: number; rateLbpPerUsd: number; effectiveFrom: string; createdAt: string };
 
@@ -277,7 +278,8 @@ export type SaleResult = {
   lowStock: LowStockItem[];
 };
 
-export type Balance = { method: Method; currency: Currency; opening: number; expected: number };
+/** `expected` is `null` while a cashier counts blind (the shop's setting): the till then shows no expectation until the register is closed. */
+export type Balance = { method: Method; currency: Currency; opening: number; expected: number | null };
 export type RegisterSession = { id: number; terminalId: string; status: 'open' | 'closed'; openedAt: string; balances: Balance[] };
 
 export type PublicSettings = {
@@ -315,4 +317,49 @@ export type RecalledHold = {
     priceChanged: boolean;
     active: boolean;
   }[];
+};
+
+/** One branch wallet (Whish, OMT) in one currency, as `GET /wallets` gives it (docs/13). */
+export type WalletState = {
+  method: Method;
+  methodName: string;
+  currency: Currency;
+  expected: number;
+  inSince: number;
+  outSince: number;
+  lastCount: {
+    id: number;
+    counted: number;
+    expected: number | null;
+    variance: number | null;
+    purpose: string;
+    note: string | null;
+    countedAt: string;
+    countedByName: string | null;
+  } | null;
+};
+export type WalletEntry = {
+  id: number;
+  method: Method;
+  currency: Currency;
+  amount: number;
+  kind: 'sale' | 'customer_payment' | 'refund' | 'movement' | 'correction';
+  refType: string | null;
+  refId: number | null;
+  sessionId: number | null;
+  reason: string | null;
+  userName: string | null;
+  createdAt: string;
+};
+export type WalletCount = {
+  id: number;
+  method: Method;
+  currency: Currency;
+  counted: number;
+  expected: number | null;
+  variance: number | null;
+  purpose: string;
+  note: string | null;
+  countedAt: string;
+  countedByName: string | null;
 };

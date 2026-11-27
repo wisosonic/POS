@@ -39,6 +39,8 @@ export async function startCtx(
     reports?: BuildOptions['reports'];
     /** The loop that keeps the branch in touch with HQ stays off in tests; a test that exercises it turns it on. */
     sync?: BuildOptions['sync'];
+    /** A cashier counts the drawer blind by default (the shop's setting). Most tests read a cashier's expected figures, so they start with it off. */
+    blindCount?: boolean;
   } = {},
 ): Promise<TestCtx> {
   const dir = mkdtempSync(join(tmpdir(), 'pos-it-'));
@@ -57,6 +59,7 @@ export async function startCtx(
     sync: options.sync ?? { enabled: false },
   });
   await app.ready();
+  if (!options.blindCount) await app.database.run('UPDATE store_settings SET cashier_blind_count = 0 WHERE id = 1');
   // Listen once on a free port. Letting supertest start and stop the server per request breaks requests that are
   // built before an `await` (it closes the server under them).
   await app.listen({ host: '127.0.0.1', port: 0 });

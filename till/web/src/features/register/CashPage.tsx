@@ -58,7 +58,7 @@ export function CashPage() {
             {register.balances.map((b) => (
               <tr key={`${b.method}/${b.currency}`}>
                 <td>{`${NAME[b.method]} ${b.currency}`}</td>
-                <td className="num">{fmtMoney(b.expected, b.currency)}</td>
+                <td className="num">{fmtMoney(b.expected ?? 0, b.currency)}</td>
               </tr>
             ))}
           </tbody>

@@ -51,6 +51,9 @@ export default async function registerRoutes(app: FastifyInstance) {
   const user = { preHandler: app.authenticate };
   const atTerminal = { preHandler: [app.authenticate, app.withTerminal] };
   const manager = { preHandler: app.requireRole('manager') };
+  // A cashier counts the drawer blind unless the shop turned that off (Settings); managers and admins always see the expectation.
+  const blindFor = async (role: string) =>
+    role === 'cashier' && (await db.one<{ b: number }>('SELECT cashier_blind_count AS b FROM store_settings WHERE id = 1'))!.b === 1;
 
   // ---------------------------------------------------------------- open (US-11)
   app.post('/registers/open', atTerminal, async (req, reply) => {
@@ -92,13 +95,13 @@ export default async function registerRoutes(app: FastifyInstance) {
       });
       return sessionId;
     });
-    return reply.status(201).send(await sessionJson(db, (await getSession(db, id))!));
+    return reply.status(201).send(await sessionJson(db, (await getSession(db, id))!, { hideExpected: await blindFor(req.auth.role) }));
   });
 
   app.get('/registers/current', atTerminal, async (req) => {
     const s = await getOpenSession(db, req.terminal.code);
     if (!s) throw new AppError(404, 'NO_OPEN_REGISTER', 'The register is not open');
-    return sessionJson(db, s);
+    return sessionJson(db, s, { hideExpected: await blindFor(req.auth.role) });
   });
 
   // Pre-fills the opening dialog with what was counted at the last close.

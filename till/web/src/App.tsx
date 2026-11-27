@@ -24,6 +24,7 @@ const SettingsLayout = page(() => import('./features/settings/SettingsLayout'), 
 const LanguagePage = page(() => import('./features/settings/LanguagePage'), 'LanguagePage');
 const AppearancePage = page(() => import('./features/settings/AppearancePage'), 'AppearancePage');
 const SettingsPage = page(() => import('./features/settings/SettingsPage'), 'SettingsPage');
+const WalletsPage = page(() => import('./features/wallets/WalletsPage'), 'WalletsPage');
 const CashPage = page(() => import('./features/register/CashPage'), 'CashPage');
 const CloseRegisterPage = page(() => import('./features/register/CloseRegisterPage'), 'CloseRegisterPage');
 const ExpensesPage = page(() => import('./features/expenses/ExpensesPage'), 'ExpensesPage');
@@ -110,6 +111,7 @@ export function App() {
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/services" element={<ServicesPage />} />
               <Route path="/cash" element={<CashPage />} />
+              <Route path="/wallets" element={<WalletsPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/reports" element={<ReportsPage />} />
             </Route>

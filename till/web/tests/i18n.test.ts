@@ -116,6 +116,14 @@ const FROM_LISTS = [
   'Select a registered customer to leave a balance on account',
   'A Whish or OMT payment cannot be more than the total, because change can only be given in cash',
   'This payment cannot be used',
+  // The wallet ledger's kinds and the movement choices (WalletsPage)
+  'Sale',
+  'Customer payment',
+  'Refund',
+  'Movement',
+  'Correction',
+  'Money in',
+  'Money out',
 ];
 
 describe('the Arabic dictionary', () => {

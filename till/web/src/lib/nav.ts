@@ -39,6 +39,7 @@ export const NAV: NavSection[] = [
       { to: '/expenses', label: 'Expenses', icon: 'expenses', min: 'manager' },
       { to: '/services', label: 'Services', icon: 'services', min: 'manager' },
       { to: '/cash', label: 'Cash in and out', icon: 'cash', min: 'manager' },
+      { to: '/wallets', label: 'Wallets', icon: 'wallet', min: 'manager' },
     ],
   },
 ];
