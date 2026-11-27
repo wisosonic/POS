@@ -139,7 +139,7 @@ One repository, five things that are installed or hosted separately. They share 
 | 4 | **Marketplace** (`marketplace/`) | cloud, separate from HQ | The public site and its API: browse a published catalog, sign up, order. Nothing else of HQ is reachable from the internet. | HQ only, over a narrow API |
 | 5 | **Mobile app** (`mobile-app/`) | customers' phones | The same ordering as the storefront. | The marketplace API (a driver app can follow the same way) |
 
-**The till does not decide a sale.** Totals, approvals, the register, credit and idempotency stay in the branch server (rules 2, 3, 6, 20). The till's agent only queues a sale it could not deliver and sends it when the branch server answers: until the branch server accepts it, a queued sale is not in the system (as the browser outbox already works). While the branch server is unreachable a till sells from the prices it last downloaded; credit sales and manager approvals wait for the server. A full sales engine with its own database on every till was rejected: two sources of truth and conflicts to merge, for little gain.
+**The till does not decide a sale.** Totals, approvals, the register, credit and idempotency stay in the branch server (rules 2, 3, 6, 20). The till keeps the one sale that was in flight when the link dropped in a journal on its own disk and sends it again with the same key until the branch server answers (docs/14 §4.3): until the branch server accepts it, it is not in the system, and no new sale is taken. While the branch server is unreachable a till does not sell at all (docs/14). A full sales engine with its own database on every till was rejected: two sources of truth and conflicts to merge, for little gain.
 
 **Mapping from today's code:** `till/web` is split by role into the till screens and the branch manager screens (the till build stays small and offline-first); the print agent grows into the till agent; `branch-server` and `cloud-hq` keep their names until the rename is worth its churn. The marketplace is its own server instead of public routes inside HQ (this replaces the P9a placement in the plan), so the only internet-facing part is isolated from HQ's data.
 
@@ -210,7 +210,7 @@ The till PC runs one small Node program, `till/agent/src/tillServer.ts` (`npm ru
 
 **Done and tested:** `till/agent/tests/till-server.test.ts` (22), `till/web/tests/till-connection.test.ts`, and the `production-build` browser project now runs the built app through the till server in front of a branch server that serves no screens (a whole shift, the cookie, the policy, the offline start, the new page). `scripts/check-alone.mjs` starts the till alone.
 
-**Not done yet:** the sales queue (the outbox) is still in the browser (IndexedDB), not in the till server; the print agent is still a separate command (`print-agent run`); there is no Windows service or startup script for `serve` (only for the print agent); the branch server still serves `till/web/dist` for the old way of working, until step c; not run on a real till PC.
+**Not done yet:** the print agent is still a separate command (`print-agent run`); there is no Windows service or startup script for `serve` (only for the print agent); the branch server still serves `till/web/dist` for the old way of working, until step c; not run on a real till PC.
 
 ### 8.4a Planned change to the till (2026-11-27)
 

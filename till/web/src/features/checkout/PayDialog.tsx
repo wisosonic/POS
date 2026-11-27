@@ -4,7 +4,7 @@ import { ApiError } from '../../lib/api';
 import { fmtLbp, groupThousands, lbpAsUsd } from '../../lib/money';
 import { NO_PAYMENT, analyzePayment, type PayAnalysis, type PayInputs } from '../../lib/payment';
 import type { Customer, Method } from '../../lib/types';
-import { useLink } from '../../store/link';
+import { useSellingStopped } from '../../store/link';
 import { tNow, useT } from '../../store/lang';
 import { CustomerPicker } from './CustomerPicker';
 
@@ -40,7 +40,7 @@ export function PayDialog({ totalLbp, rate, lbpRounding, customer, onCustomer, o
   const [inputs, setInputs] = useState<PayInputs>(NO_PAYMENT);
   const [active, setActive] = useState<Method>('cash');
   const [busy, setBusy] = useState(false);
-  const stopped = useLink((s) => s.block) !== null; // the link dropped while this dialog was open: nothing more is sent (docs/14)
+  const stopped = useSellingStopped(); // the link dropped while this dialog was open, or a sale is unconfirmed: nothing more is sent (docs/14)
   const [serverError, setServerError] = useState('');
   const fields = useRef<Partial<Record<keyof PayInputs, HTMLInputElement | null>>>({});
 

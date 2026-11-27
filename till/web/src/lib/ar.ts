@@ -93,10 +93,21 @@ export const AR: Record<string, string> = {
   'Print receipt': 'طباعة الإيصال',
   'Print again': 'طباعة مرة أخرى',
   Dismiss: 'إخفاء',
-  'Saved offline': 'محفوظ دون اتصال',
-  'Sale saved on this computer': 'تم حفظ البيع على هذا الجهاز',
-  '{amount}. It will be sent automatically when the connection is back. You can keep selling.':
-    '{amount}. سيُرسل تلقائياً عند عودة الاتصال. يمكنك متابعة البيع.',
+  'Not confirmed yet': 'غير مؤكد بعد',
+  'This sale is not confirmed yet': 'هذا البيع لم يؤكَّد بعد',
+  '{amount}. The server did not answer, so it may or may not have recorded it. It is kept on this PC and sent again by itself with the same number: it cannot be recorded twice. Do not ring it up again. Selling resumes when the server confirms it.':
+    '{amount}. لم يردّ الخادم، فقد يكون سجّله وقد لا يكون. هو محفوظ على هذا الجهاز ويُعاد إرساله تلقائياً بالرقم نفسه، فلا يمكن تسجيله مرتين. لا تُدخله مرة أخرى. يعود البيع عندما يؤكده الخادم.',
+  'There is no connection to the server, so nothing was sent. Your cart is kept: complete the sale when it is back.':
+    'لا يوجد اتصال بالخادم، لذلك لم يُرسل شيء. السلة محفوظة: أكمل البيع عند عودة الاتصال.',
+  'A sale is not confirmed yet. Selling resumes when the server confirms it. Your cart is kept.':
+    'هناك بيع لم يؤكَّد بعد. يعود البيع عندما يؤكده الخادم. السلة محفوظة.',
+  'A sale is not confirmed yet. Do not ring it up again: selling resumes when the server confirms it.':
+    'هناك بيع لم يؤكَّد بعد. لا تُدخله مرة أخرى: يعود البيع عندما يؤكده الخادم.',
+  'The server refused a sale. Selling resumes when someone has dealt with it.': 'رفض الخادم بيعاً. يعود البيع عندما يعالجه أحد.',
+  'It is sent again by itself with the same number, so it cannot be recorded twice.':
+    'يُعاد إرساله تلقائياً بالرقم نفسه، فلا يمكن تسجيله مرتين.',
+  'See it': 'عرضه',
+  'The sale was confirmed by the server. Selling can continue.': 'أكّد الخادم البيع. يمكن متابعة البيع.',
   'Last item': 'آخر منتج',
   'Quantity {qty}': 'الكمية {qty}',
   'Cart held. The discount is not kept with a held cart: give it again when you bring it back.':
@@ -106,8 +117,6 @@ export const AR: Record<string, string> = {
   'Could not hold the cart': 'تعذّر تعليق السلة',
   'This discount is above your limit: a manager has to approve it before the customer pays.':
     'هذا الخصم أعلى من حدّك: يجب أن يوافق عليه المدير قبل أن يدفع الزبون.',
-  "A discount or price that needed a manager's approval can only be completed while the connection to the server works. Wait for it, or go back to the normal price.":
-    'الخصم أو السعر الذي احتاج إلى موافقة المدير لا يمكن إكماله إلا عند عمل الاتصال بالخادم. انتظر الاتصال أو ارجع إلى السعر العادي.',
   'Low stock: {name} ({qty} left)': 'مخزون منخفض: {name} (بقي {qty})',
   'A price changed while you were selling. The cart has been updated: check the total and complete again.':
     'تغيّر سعر أثناء البيع. تم تحديث السلة: راجع المجموع وأكمل من جديد.',

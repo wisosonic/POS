@@ -3,6 +3,7 @@ import http, { type IncomingMessage, type Server, type ServerResponse } from 'no
 import https from 'node:https';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { createCatalogCopy, type CatalogCopy } from './catalogCopy';
+import { type Journal, MAX_JOURNAL_BYTES, openJournal } from './journal';
 import { createLinkMonitor, type LinkMonitor, type LinkSnapshot } from './link';
 
 // The till's own small server (docs/11-multi-branch.md §8.4). It runs on the till PC and does three things:
@@ -162,6 +163,9 @@ export function createTillServer(opts: TillServerOptions): TillServer {
   const webRoot = opts.webDist ? resolve(opts.webDist) : null;
   const connectTimeout = opts.connectTimeoutMs ?? 5_000;
   let selfPort = opts.port;
+  // The sale journal is opened the first time it is needed, so a till server that is made and never used holds no file open.
+  let journalOpened: Journal | null = null;
+  const theJournal = (): Journal => (journalOpened ??= openJournal(join(opts.dataDir, 'journal.db'), log));
   const linkOpts = opts.link ?? {};
   // The catalog copy on this PC's disk (docs/14 §4), kept current by the heartbeat.
   const catalogOpts = opts.catalog ?? {};
@@ -222,6 +226,23 @@ export function createTillServer(opts: TillServerOptions): TillServer {
       link.setToken(typeof sent === 'string' && sent ? sent : null);
       const snap: LinkSnapshot = link.snapshot();
       return json(res, 200, snap);
+    }
+    // The sale in doubt (docs/14 §4.3): a list the screen keeps here so it survives a closed page or a restart. This program only keeps
+    // it; the screen does the sending, because only the screen has the signed-in person's token.
+    if (path === '/till/journal' && req.method === 'GET') return json(res, 200, { items: theJournal().list() });
+    if (path === '/till/journal' && req.method === 'PUT') {
+      let body: unknown;
+      try {
+        body = await readJson(req, MAX_JOURNAL_BYTES + 4096);
+      } catch {
+        return problem(res, 400, 'VALIDATION', 'The request was not valid JSON, or was too large');
+      }
+      try {
+        theJournal().replace((body as { items?: unknown }).items);
+      } catch (e) {
+        return problem(res, 400, 'VALIDATION', (e as Error).message);
+      }
+      return json(res, 200, { items: theJournal().list() });
     }
     // How the copy of the catalog on this PC is doing (this PC only; no product data, no token).
     if (path === '/till/catalog' && req.method === 'GET')
@@ -457,7 +478,14 @@ export function createTillServer(opts: TillServerOptions): TillServer {
         link.stop();
         // Held connections (the live-update stream) would keep the server open for ever: end them first.
         server.closeAllConnections();
-        server.close(() => void (catalogCopy?.close() ?? Promise.resolve()).finally(() => resolveClose()));
+        server.close(
+          () =>
+            void (catalogCopy?.close() ?? Promise.resolve()).finally(() => {
+              journalOpened?.close();
+              journalOpened = null;
+              resolveClose();
+            }),
+        );
       }),
   };
 }

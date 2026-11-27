@@ -71,6 +71,42 @@ test('a whole shift works under the policy: sign in, sell, pay, see the figures,
   expect(await violations()).toEqual([]);
 });
 
+test('US-10: a sale with no answer is kept on the till PC (not in the browser), survives a reload, and is confirmed once (docs/14 §4.3)', async ({
+  page,
+  request,
+}) => {
+  await signIn(page);
+  await expect.poll(async () => ((await (await request.get('/till/journal')).json()) as { items: unknown[] }).items.length).toBe(0);
+
+  // The sale leaves, but its answer never comes back (and the server never gets it, so the sale is really in doubt).
+  let blocking = true;
+  await page.route('**/api/v1/sales', (route) =>
+    blocking && route.request().method() === 'POST' ? route.abort('connectionreset') : route.continue(),
+  );
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.type(CHOC, { delay: 5 });
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: /PAY/ }).click();
+  await page.getByLabel('Cash LBP').fill('50000');
+  await page.getByRole('button', { name: 'Complete' }).click();
+  await expect(page.getByTestId('sale-in-doubt')).toBeVisible();
+
+  // It is in the till program's own file, with the sale's key, and holds no sign-in or device token.
+  const kept = await (await request.get('/till/journal')).text();
+  expect(JSON.parse(kept).items).toHaveLength(1);
+  expect(kept).toContain('clientSaleId');
+  expect(kept).not.toMatch(/Bearer|X-Terminal-Token|pos_refresh/i);
+
+  // The page is closed and opened again: the sale is still known (it does not live in this browser tab).
+  await page.reload();
+  await expect(page.getByTestId('sale-in-doubt')).toBeVisible();
+  await expect(page.getByRole('button', { name: /PAY/ })).toBeDisabled();
+
+  blocking = false; // the link is back: it is sent again with the same key
+  await expect(page.getByTestId('sale-in-doubt')).toHaveCount(0, { timeout: 20_000 });
+  await expect.poll(async () => ((await (await request.get('/till/journal')).json()) as { items: unknown[] }).items.length).toBe(0);
+});
+
 test('a refresh on a page of the app keeps the session (the cookie works) and shows that page', async ({ page }) => {
   const violations = await watchCsp(page);
   await signIn(page);

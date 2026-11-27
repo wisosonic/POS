@@ -75,8 +75,9 @@ Cashier presses PAY ─▶ client builds sale draft + Idempotency-Key (uuid)
    ├─ online : POST /api/v1/sales ─▶ server recomputes ─▶ TX{ sale, items, payments,
    │            stock_movements, register totals, audit } ─▶ 201 {sale, receipt}
    │            └▶ SSE "sale.completed" to dashboards / other tills' stock
-   └─ API down: write to IndexedDB outbox, show "Pending N"
-               background sync replays POSTs; 200/201 clear the outbox; 409/422 surface to the manager
+   └─ no answer: the sale was written to the till PC's journal BEFORE it was sent (docs/14 §4.3), so it stays;
+               the screen sends it again with the same key; 200/201 clear it; 409/422 surface to the manager;
+               no new sale is taken until it is settled
 Receipt: POST /api/v1/sales/{id}/print (server sends ASCII ESC/POS to the USB printer) or client window.print()
 ```
 

@@ -21,7 +21,7 @@ import { CartPanel } from './CartPanel';
 import { DiscountDialog } from './DiscountDialog';
 import { PriceDialog } from './PriceDialog';
 import { PayDialog } from './PayDialog';
-import { useLink } from '../../store/link';
+import { sellingStoppedNow, useLink } from '../../store/link';
 import { Icon } from '../../components/Icon';
 import { useLookup } from '../products/lookups';
 import { CatalogBrowser } from './CatalogBrowser';
@@ -148,9 +148,13 @@ export function CheckoutPage() {
   const openPay = () => {
     const cart = useCart.getState();
     if (cart.lines.length === 0 || !rate) return;
-    if (useLink.getState().block) {
+    if (sellingStoppedNow()) {
       // The banner says why; the F9 key and a double click land here too. The cart stays as it is.
-      toast.warning(tNow('Selling is stopped until the branch server answers again. Your cart is kept.'));
+      toast.warning(
+        useLink.getState().block
+          ? tNow('Selling is stopped until the branch server answers again. Your cart is kept.')
+          : tNow('A sale is not confirmed yet. Selling resumes when the server confirms it. Your cart is kept.'),
+      );
       return;
     }
     // A discount above the cashier's limit has to be approved before the customer pays, not discovered when the sale is refused.
@@ -198,62 +202,72 @@ export function CheckoutPage() {
       ...(cart.discount && cart.approval ? { approvalToken: cart.approval.token } : {}),
     };
 
-    const saveOffline = async () => {
-      // Kept on this computer and sent when the server answers again. The same id is the Idempotency-Key, so it can never be recorded twice.
-      await outbox.add(clientSaleId, body);
-      cart.clear();
-      setPaying(false);
-      setDone({ kind: 'offline', total: totals.totalLbp });
-    };
+    // Selling stops while the branch server is away (docs/14), so nothing is sent without a connection: the cart is kept.
+    if (!navigator.onLine)
+      throw new ApiError(
+        0,
+        'NO_CONNECTION',
+        tNow('There is no connection to the server, so nothing was sent. Your cart is kept: complete the sale when it is back.'),
+      );
 
-    if (!navigator.onLine) {
-      // An approval is checked by the server, once, within minutes: it cannot wait in the queue for the connection.
-      if (cart.approval || cart.lines.some((l) => l.price?.token))
-        throw new ApiError(
-          0,
-          'APPROVAL_NEEDS_SERVER',
-          tNow(
-            "A discount or price that needed a manager's approval can only be completed while the connection to the server works. Wait for it, or go back to the normal price.",
-          ),
-        );
-      return saveOffline();
-    }
+    // The sale in doubt (docs/14 §4.3): it is written down BEFORE it is sent and taken out once the server has answered. If no
+    // answer comes (the link drops, the page closes, the PC restarts) the entry is still there and is sent again by itself with the
+    // same key (the clientSaleId), which the server recognises, so it can never be recorded twice. If it cannot be written down, nothing is sent.
+    await outbox.add(clientSaleId, body, { active: true });
+    let sale: SaleResult;
     try {
-      const sale = await post<SaleResult>('/sales', body, { idempotencyKey: clientSaleId });
-      cart.clear();
-      setPaying(false);
-      void queryClient.invalidateQueries({ queryKey: ['register'] });
-      void queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      for (const item of sale.lowStock)
-        toast.warning(tNow('Low stock: {name} ({qty} left)', { name: item.name.trim(), qty: trimQty(item.qty) }), 6000);
-      setDone({ kind: 'sale', sale, print: 'idle' });
-      if (printerAvailable) void print(sale);
+      sale = await post<SaleResult>('/sales', body, { idempotencyKey: clientSaleId });
     } catch (e) {
-      if (e instanceof ApiError && e.isNetwork) return saveOffline();
-      if (e instanceof ApiError && e.code === 'PRICE_MISMATCH') {
-        await catalog.sync().catch(() => undefined); // a price changed since this till last looked: fetch the new ones
-        useUi.setState((s) => ({ catalogVersion: s.catalogVersion + 1 }));
-        throw new ApiError(
-          e.status,
-          e.code,
-          tNow('A price changed while you were selling. The cart has been updated: check the total and complete again.'),
-        );
-      }
-      if (e instanceof ApiError && e.code === 'DISCOUNT_OVER_LIMIT') {
-        // Expired, already used, or for a smaller discount: the approval is spent. Ask again rather than retry the same one.
-        useCart.getState().setApproval(null);
-        throw new ApiError(
-          e.status,
-          e.code,
-          tNow("The manager's approval is no longer valid (it may have expired). Close this, press Discount and ask a manager again."),
-        );
-      }
-      if (e instanceof ApiError && e.code === 'REGISTER_CLOSED') {
-        void queryClient.invalidateQueries({ queryKey: ['register'] });
+      const unanswered = !(e instanceof ApiError) || e.isNetwork || e.status >= 500;
+      if (unanswered) {
+        // The server may or may not have recorded it. It stays in the journal and selling pauses until the server confirms it.
+        outbox.release(clientSaleId);
+        cart.clear();
         setPaying(false);
+        setDone({ kind: 'offline', total: totals.totalLbp });
+        return;
       }
-      throw e;
+      await outbox.discard(clientSaleId); // a refusal is an answer: the server recorded nothing
+      outbox.release(clientSaleId);
+      return handleRefusal(e);
     }
+    await outbox.discard(clientSaleId);
+    outbox.release(clientSaleId);
+    cart.clear();
+    setPaying(false);
+    void queryClient.invalidateQueries({ queryKey: ['register'] });
+    void queryClient.invalidateQueries({ queryKey: ['alerts'] });
+    for (const item of sale.lowStock)
+      toast.warning(tNow('Low stock: {name} ({qty} left)', { name: item.name.trim(), qty: trimQty(item.qty) }), 6000);
+    setDone({ kind: 'sale', sale, print: 'idle' });
+    if (printerAvailable) void print(sale);
+  }
+
+  /** The server refused the sale: say why in words the cashier can act on. Always throws, so the dialog shows it. */
+  async function handleRefusal(e: unknown): Promise<never> {
+    if (e instanceof ApiError && e.code === 'PRICE_MISMATCH') {
+      await catalog.sync().catch(() => undefined); // a price changed since this till last looked: fetch the new ones
+      useUi.setState((s) => ({ catalogVersion: s.catalogVersion + 1 }));
+      throw new ApiError(
+        e.status,
+        e.code,
+        tNow('A price changed while you were selling. The cart has been updated: check the total and complete again.'),
+      );
+    }
+    if (e instanceof ApiError && e.code === 'DISCOUNT_OVER_LIMIT') {
+      // Expired, already used, or for a smaller discount: the approval is spent. Ask again rather than retry the same one.
+      useCart.getState().setApproval(null);
+      throw new ApiError(
+        e.status,
+        e.code,
+        tNow("The manager's approval is no longer valid (it may have expired). Close this, press Discount and ask a manager again."),
+      );
+    }
+    if (e instanceof ApiError && e.code === 'REGISTER_CLOSED') {
+      void queryClient.invalidateQueries({ queryKey: ['register'] });
+      setPaying(false);
+    }
+    throw e;
   }
 
   async function print(sale: SaleResult, duplicate = false) {
@@ -389,12 +403,13 @@ export function CheckoutPage() {
         )}
 
         {text.trim() === '' && done?.kind === 'offline' && (
-          <section className="banner warn" aria-label={t('Saved offline')}>
-            <div className="title">{t('Sale saved on this computer')}</div>
+          <section className="banner warn" aria-label={t('Not confirmed yet')}>
+            <div className="title">{t('This sale is not confirmed yet')}</div>
             <div>
-              {t('{amount}. It will be sent automatically when the connection is back. You can keep selling.', {
-                amount: fmtLbp(done.total),
-              })}
+              {t(
+                '{amount}. The server did not answer, so it may or may not have recorded it. It is kept on this PC and sent again by itself with the same number: it cannot be recorded twice. Do not ring it up again. Selling resumes when the server confirms it.',
+                { amount: fmtLbp(done.total) },
+              )}
             </div>
             <div className="buttons">
               <button className="btn small ghost" onClick={() => setDone(null)}>

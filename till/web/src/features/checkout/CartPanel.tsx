@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { fmtLbp, lbpAsUsd, trimQty } from '../../lib/money';
 import { useCart, type CartLine, type CartTotals } from '../../store/cart';
-import { useLink } from '../../store/link';
+import { useSellingStopped } from '../../store/link';
 import { toast } from '../../store/toast';
 import { tNow, useT } from '../../store/lang';
 import { Icon } from '../../components/Icon';
@@ -93,7 +93,7 @@ export function CartPanel({
   const t = useT();
   const remove = useCart((s) => s.remove);
   const empty = lines.length === 0;
-  const stopped = useLink((s) => s.block) !== null; // the branch server is not answering: no new payment (docs/14)
+  const stopped = useSellingStopped(); // the branch server is not answering, or a sale is not confirmed yet: no new payment (docs/14)
   const priced = new Map(totals.lines.map((l) => [l.key, l]));
 
   return (

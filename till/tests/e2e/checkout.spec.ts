@@ -1,8 +1,23 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 
 // Runs against the API + web app started on a seeded throwaway SQLite file (see tests/helpers/app.ts). Barcodes come from the test seed.
 const TOWEL = '5287000107945'; // 75,000 LBP
 const CHOC = '9342390005250'; // 50,000 LBP
+
+/**
+ * The answer to every sale this page sends is lost on the way back (docs/14 §4.3: the link dropped after the request left). With
+ * `recorded` the server does get the sale and records it, and only the answer is lost; without it the sale never arrives. Returns
+ * the function that lets answers through again.
+ */
+async function loseSaleAnswers(page: Page, recorded: boolean): Promise<() => Promise<void>> {
+  const handler = async (route: Route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    if (recorded) await route.fetch();
+    return route.abort('connectionreset');
+  };
+  await page.route('**/api/v1/sales', handler);
+  return () => page.unroute('**/api/v1/sales', handler);
+}
 
 async function login(page: Page, user = 'cashier') {
   await page.goto('/login');
@@ -86,26 +101,36 @@ test('US-07: hold and recall a cart', async ({ page }) => {
   await expect(page.getByTestId('cart-row')).toHaveCount(1);
 });
 
-test('US-10: sale made offline is queued and synced exactly once', async ({ page, context }) => {
-  await scan(page, TOWEL); // warm: the catalog copy is on this computer before the connection drops
+test('US-10: a sale whose answer is lost is kept, selling pauses, and the sale is confirmed exactly once', async ({ page }) => {
+  await scan(page, TOWEL);
   await page.getByRole('button', { name: /Clear/ }).click();
   const before = (await mySales(page)).length;
 
-  await context.setOffline(true);
-  await expect(page.getByText(/Offline/)).toBeVisible();
-  await scan(page, TOWEL); // still works: the catalog is local
-  await expect(page.getByTestId('cart-row')).toHaveCount(1);
+  // The server records the sale, but the answer never reaches the till (the link dropped at that moment).
+  const letAnswersThrough = await loseSaleAnswers(page, true);
+  await scan(page, TOWEL);
   await page.getByRole('button', { name: /PAY/ }).click();
   await page.getByLabel('Cash LBP').fill('75000');
   await page.getByRole('button', { name: 'Complete' }).click();
+  await expect(page.getByLabel('Not confirmed yet')).toContainText('Do not ring it up again');
+  await expect(page.getByTestId('sale-in-doubt')).toBeVisible();
   await expect(page.getByText(/1 pending/)).toBeVisible();
-  await expect(page.getByTestId('cart-row')).toHaveCount(0); // the cashier is free to serve the next customer
+  await expect(page.getByTestId('cart-row')).toHaveCount(0);
 
-  await context.setOffline(false);
+  // A new sale is not taken while this one is unconfirmed: the cart can be filled, but not paid.
+  await scan(page, TOWEL);
+  await expect(page.getByRole('button', { name: /PAY/ })).toBeDisabled();
+  await page.keyboard.press('F9');
+  await expect(page.getByLabel('Cash LBP')).toHaveCount(0);
+
+  await letAnswersThrough(); // the link is back: it is sent again with the same key
   await expect(page.getByText(/pending/)).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByTestId('sale-in-doubt')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /PAY/ })).toBeEnabled();
+  await expect(page.getByTestId('cart-row')).toHaveCount(1); // the cart kept while it waited
 
   const after = await mySales(page);
-  expect(after.length).toBe(before + 1); // sent once, not twice
+  expect(after.length).toBe(before + 1); // recorded once, not twice
   expect(new Set(after.map((s) => s.clientSaleId)).size).toBe(after.length);
 });
 

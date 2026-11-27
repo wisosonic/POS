@@ -1,9 +1,12 @@
 import { ApiError, post } from './api';
 import { indexedDbKV, type KV } from './kv';
+import { tillJournalKV, usesTillJournal } from './journal';
 
-// Sales that could not reach the server wait here, on this computer, and are sent when it answers again (US-10).
+// The sale in doubt (US-10, docs/14 §4.3). A sale is written down BEFORE it is sent and removed when the server has answered, so one
+// that never got an answer (the link dropped, the page closed, the PC restarted) is still here and is sent again by itself.
 // A sale carries its own Idempotency-Key, so sending it twice (a flaky connection, a retry after a crash) is harmless:
-// the server recognises it and records it once.
+// the server recognises it and records it once. This is not an offline queue: selling stops while the server is away, and a new
+// sale is not taken while one is still unconfirmed.
 
 export type Queued = {
   /** Also the clientSaleId and the Idempotency-Key. */
@@ -21,6 +24,8 @@ export class Outbox {
   private items: Queued[] | null = null;
   private lock: Promise<unknown> = Promise.resolve();
   private listeners = new Set<() => void>();
+  /** Sales the screen is sending itself at this moment (memory only, on purpose: see `add`). */
+  private active = new Set<string>();
 
   constructor(
     private readonly kv: KV,
@@ -58,11 +63,32 @@ export class Outbox {
     return { waiting: all.filter((i) => !i.blocked).length, blocked: all.filter((i) => i.blocked).length };
   }
 
-  add(id: string, body: unknown): Promise<void> {
+  /**
+   * Write a sale down. With `active` the screen is sending it right now and will say how it went (`release`): the re-send loop leaves it
+   * alone until then, so the same sale is not sent twice at once. After a restart nothing is active, so an entry that was never settled
+   * is picked up and sent again with its own key.
+   */
+  add(id: string, body: unknown, opts: { active?: boolean } = {}): Promise<void> {
     return this.exclusive(async () => {
+      if (opts.active) this.active.add(id);
       const items = await this.load();
       if (items.some((i) => i.id === id)) return; // already queued
       await this.save([...items, { id, body, createdAt: new Date().toISOString(), attempts: 0 }]);
+    });
+  }
+
+  /** The screen has its answer for this sale (or gave up waiting): the re-send loop may take it from here. */
+  release(id: string): void {
+    this.active.delete(id);
+  }
+
+  /** Take in entries kept somewhere else (the old browser queue), keeping their time, tries and reason. Ones already here are left. */
+  adopt(entries: Queued[]): Promise<number> {
+    return this.exclusive(async () => {
+      const items = await this.load();
+      const fresh = entries.filter((e) => e && typeof e.id === 'string' && !items.some((i) => i.id === e.id));
+      if (fresh.length) await this.save([...items, ...fresh]);
+      return fresh.length;
     });
   }
 
@@ -94,7 +120,7 @@ export class Outbox {
       let sent = 0;
       let blocked = 0;
       let items = [...(await this.load())];
-      for (const item of items.filter((i) => !i.blocked)) {
+      for (const item of items.filter((i) => !i.blocked && !this.active.has(i.id))) {
         try {
           await this.send(item);
           items = items.filter((i) => i.id !== item.id);
@@ -118,7 +144,22 @@ export class Outbox {
   }
 }
 
-/** The till's outbox: kept on this computer, sending to POST /sales. */
-export const outbox = new Outbox(indexedDbKV('till-outbox'), (item) =>
-  post('/sales', item.body, { idempotencyKey: item.id }).then(() => undefined),
-);
+/** The till's sale journal (the sales in doubt): kept on the till PC's disk when there is a till program, sending to POST /sales. */
+export const outbox = new Outbox(tillJournalKV(), (item) => post('/sales', item.body, { idempotencyKey: item.id }).then(() => undefined));
+
+/**
+ * The first time a till starts after the upgrade, sales left in the browser's old queue (IndexedDB `till-outbox`) are taken into the
+ * journal and only then removed from the old place: they are never dropped, and each still goes with its own key. Returns how many.
+ */
+export async function adoptOldBrowserQueue(
+  target: Outbox = outbox,
+  old: KV = indexedDbKV('till-outbox'),
+  usesTill: () => Promise<boolean> = usesTillJournal,
+): Promise<number> {
+  if (!(await usesTill())) return 0;
+  const items = (await old.get<Queued[]>('outbox')) ?? [];
+  if (items.length === 0) return 0;
+  const adopted = await target.adopt(items);
+  await old.delete('outbox'); // after they are safely in the journal
+  return adopted;
+}

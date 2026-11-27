@@ -400,6 +400,17 @@ async function main() {
     await until('branch A and HQ agree at the end', () => inSync(url.a, adminA), 90_000);
   });
 
+  await step('the till keeps the sale in doubt on its own disk (docs/14 step 4): written, read back, and empty again', async () => {
+    const put = (items) => fetch(`${url.till}/till/journal`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
+    const get = async () => (await (await fetch(`${url.till}/till/journal`)).json()).items;
+    check((await get()).length === 0, 'the journal should start empty');
+    check((await put([{ id: randomUUID(), body: { clientSaleId: 'x' }, createdAt: new Date().toISOString(), attempts: 0 }])).status === 200, 'the till did not keep the sale');
+    check((await get()).length === 1, 'the journal should hold the sale');
+    check((await put('not a list')).status === 400, 'a list that is not valid must be refused');
+    check((await get()).length === 1, 'a refused write must keep what was there');
+    check((await put([])).status === 200 && (await get()).length === 0, 'the journal should be empty again');
+  });
+
   await step('the till still serves its screens and the live-update stream reaches a screen through it', async () => {
     const page = await fetch(`${url.till}/`, { headers: { Accept: 'text/html' } });
     check(page.status === 200 && (await page.text()).includes('<div id="root">'), 'the till did not serve its screens');

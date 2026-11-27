@@ -1,10 +1,25 @@
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page, type Route } from '@playwright/test';
 
 // US-06 / US-10 / US-35: finding a sale again, reprinting it, and the sales that have not reached the server yet.
 // Same throwaway stack as the other specs (a fake USB printer that records everything it is sent).
 const TOWEL = '5287000107945'; // 75,000
 const CHOC = '9342390005250'; // 50,000
 const PRINTS = '/__e2e/prints';
+
+/**
+ * The answer to every sale this page sends is lost on the way back (docs/14 §4.3: the link dropped after the request left). With
+ * `recorded` the server does get the sale and records it, and only the answer is lost; without it the sale never arrives. Returns
+ * the function that lets answers through again.
+ */
+async function loseSaleAnswers(page: Page, recorded: boolean): Promise<() => Promise<void>> {
+  const handler = async (route: Route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    if (recorded) await route.fetch();
+    return route.abort('connectionreset');
+  };
+  await page.route('**/api/v1/sales', handler);
+  return () => page.unroute('**/api/v1/sales', handler);
+}
 
 async function signIn(page: Page, user: 'cashier' | 'manager') {
   await page.goto('/login');
@@ -153,9 +168,8 @@ test('US-14: a cashier sees the return link; a manager goes from the receipt str
   await expect(manager.getByText(new RegExp(`Sale ${ref}`))).toBeVisible();
 });
 
-test('US-10: a sale made offline is listed as not in the system yet, and disappears into the sales list once sent', async ({
+test('US-10: a sale that got no answer is listed as not confirmed, and disappears into the sales list once the server confirms it', async ({
   page,
-  context,
 }) => {
   await signIn(page, 'cashier');
   await scan(page, TOWEL); // warm the catalog copy before the connection drops
@@ -167,19 +181,18 @@ test('US-10: a sale made offline is listed as not in the system yet, and disappe
   await page.getByRole('link', { name: 'Checkout', exact: true }).click();
   await expect(page.getByTestId('checkout')).toBeVisible();
 
-  await context.setOffline(true);
-  await expect(page.getByText(/Offline/)).toBeVisible();
+  const letAnswersThrough = await loseSaleAnswers(page, false); // the sale never reaches the server
   await sellOne(page, TOWEL, '75000');
   await expect(page.getByText(/1 pending/)).toBeVisible();
 
-  await openSales(page); // moving around the app works without the server
+  await openSales(page);
   const queued = page.getByTestId('queued-sale');
   await expect(queued).toHaveCount(1);
   await expect(queued).toContainText('1 item');
   await expect(queued).toContainText('Cash 75,000 LL');
   await expect(page.getByTestId('not-sent')).toContainText('in no report and not in the register');
 
-  await context.setOffline(false);
+  await letAnswersThrough();
   await expect(page.getByTestId('not-sent')).toHaveCount(0, { timeout: 20_000 });
   await page.reload();
   await expect(page.getByTestId('sale-row').first()).toContainText('75,000 LL');
@@ -187,19 +200,17 @@ test('US-10: a sale made offline is listed as not in the system yet, and disappe
 
 test('US-10: a sale the server refuses stays in view with the reason, and Try again sends it once the cause is fixed', async ({
   page,
-  context,
   request,
 }) => {
   await signIn(page, 'cashier');
   await scan(page, TOWEL);
   await page.getByRole('button', { name: /Clear/ }).click();
-  await context.setOffline(true);
-  await expect(page.getByText(/Offline/)).toBeVisible();
+  const letAnswersThrough = await loseSaleAnswers(page, false); // the sale never reaches the server
   await sellOne(page, TOWEL, '75000');
   await expect(page.getByText(/1 pending/)).toBeVisible();
 
-  await closeRegister(request); // while the till was offline, someone closed the register
-  await context.setOffline(false);
+  await closeRegister(request); // while the sale was unconfirmed, someone closed the register
+  await letAnswersThrough();
   await expect(page.getByText(/1 need attention/)).toBeVisible({ timeout: 20_000 });
 
   await page.goto('/sales');
@@ -215,20 +226,15 @@ test('US-10: a sale the server refuses stays in view with the reason, and Try ag
   await expect(page.getByTestId('sale-row').first()).toContainText('75,000 LL');
 });
 
-test('US-10: a manager can discard a refused sale, but must say why, and the server keeps a note of it', async ({
-  page,
-  context,
-  request,
-}) => {
+test('US-10: a manager can discard a refused sale, but must say why, and the server keeps a note of it', async ({ page, request }) => {
   await signIn(page, 'cashier');
   await scan(page, TOWEL);
   await page.getByRole('button', { name: /Clear/ }).click();
-  await context.setOffline(true);
-  await expect(page.getByText(/Offline/)).toBeVisible();
+  const letAnswersThrough = await loseSaleAnswers(page, false); // the sale never reaches the server
   await sellOne(page, TOWEL, '75000');
   await expect(page.getByText(/1 pending/)).toBeVisible();
   await closeRegister(request);
-  await context.setOffline(false);
+  await letAnswersThrough();
   await expect(page.getByText(/1 need attention/)).toBeVisible({ timeout: 20_000 });
 
   // the manager signs in at the same till (the waiting sale belongs to the till, not to the cashier)

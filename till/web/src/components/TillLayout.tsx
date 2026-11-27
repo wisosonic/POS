@@ -15,7 +15,8 @@ import { REASON_TEXT } from '../lib/link';
 import { startLinkWatch, useLink } from '../store/link';
 import { useSession } from '../store/session';
 import { useUi } from '../store/ui';
-import { useT } from '../store/lang';
+import { tNow, useT } from '../store/lang';
+import { toast } from '../store/toast';
 import { LanguageSwitch } from './LanguageSwitch';
 import { Drawer } from './Drawer';
 import { Dropdown } from './Dropdown';
@@ -60,6 +61,7 @@ export function TillLayout() {
   useEffect(() => {
     void useUi.getState().loadCatalog();
     return startConnectionWatch(() => {
+      toast.success(tNow('The sale was confirmed by the server. Selling can continue.'));
       void queryClient.invalidateQueries({ queryKey: ['register'] });
       void queryClient.invalidateQueries({ queryKey: ['alerts'] });
     });
@@ -236,6 +238,24 @@ export function TillLayout() {
           <div className="muted">
             {t('Your cart is kept. This screen checks again every few seconds and starts again by itself.')}
             {stopped.reason && REASON_TEXT[stopped.reason] ? ` ${t(REASON_TEXT[stopped.reason]!)}` : ''}
+          </div>
+        </div>
+      )}
+
+      {waiting + blocked > 0 && (
+        <div className="banner warn" role="alert" data-testid="sale-in-doubt" style={{ margin: '8px 12px 0' }}>
+          <div className="title">
+            {waiting > 0
+              ? t('A sale is not confirmed yet. Do not ring it up again: selling resumes when the server confirms it.')
+              : t('The server refused a sale. Selling resumes when someone has dealt with it.')}
+          </div>
+          <div className="buttons">
+            <span className="muted">
+              {waiting > 0 ? t('It is sent again by itself with the same number, so it cannot be recorded twice.') : ''}
+            </span>
+            <Link className="btn small" to="/sales">
+              {t('See it')}
+            </Link>
           </div>
         </div>
       )}
