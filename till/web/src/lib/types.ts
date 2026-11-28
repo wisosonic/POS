@@ -262,6 +262,8 @@ export type Customer = {
   address?: string | null;
   email?: string | null;
   balanceLbp: number;
+  /** What the same person owes at the OTHER branches, as HQ last said (a hint, never a limit). Absent or 0 when nothing. */
+  othersLbp?: number;
   isWalkIn: boolean;
 };
 

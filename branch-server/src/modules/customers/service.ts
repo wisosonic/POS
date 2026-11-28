@@ -1,4 +1,4 @@
-import { usdToLbp } from '@pos/shared';
+import { phoneKey, usdToLbp } from '@pos/shared';
 import { z } from 'zod';
 import type { Database, Queryable } from '../../db/adapter';
 import { E } from '../../errors';
@@ -14,6 +14,8 @@ export const customerPaymentBody = z.object({
   method: z.enum(['cash', 'whish', 'omt']),
   currency: z.enum(['USD', 'LBP']),
   amount: z.number().int().positive(),
+  /** Pay the person's debt at the OTHER branches too (docs/15 §7.2): what this branch's own sales do not take is passed to HQ. */
+  acrossChain: z.boolean().optional(),
 });
 export type CustomerPaymentBody = z.infer<typeof customerPaymentBody>;
 
@@ -26,6 +28,8 @@ export type CustomerRow = {
   balance_lbp: number;
   is_walk_in: number;
   created_at: string;
+  /** What the same person owes at the other branches (HQ's hint; only a connected branch has it). */
+  others_lbp?: number;
 };
 
 export const customerJson = (c: CustomerRow) => ({
@@ -35,13 +39,18 @@ export const customerJson = (c: CustomerRow) => ({
   address: c.address,
   email: c.email,
   balanceLbp: c.balance_lbp,
+  othersLbp: c.others_lbp ?? 0,
   isWalkIn: c.is_walk_in === 1,
   createdAt: c.created_at,
 });
 
 /** A customer who has not been deleted. A deleted one is as good as not there (their old sales keep pointing at the row). */
 export const getCustomer = (q: Queryable, id: number) =>
-  q.one<CustomerRow>('SELECT * FROM customers WHERE id = ? AND deleted_at IS NULL', [id]);
+  q.one<CustomerRow>(
+    `SELECT c.*, COALESCE((SELECT h.others_lbp FROM customer_chain h WHERE h.customer_id = c.id), 0) AS others_lbp
+       FROM customers c WHERE c.id = ? AND c.deleted_at IS NULL`,
+    [id],
+  );
 
 /**
  * Take a payment on a customer's account (US-32). The amount reduces their balance and is applied to their oldest open
@@ -66,7 +75,26 @@ export function receiveCustomerPayment(
     const session = await requireOpenSession(q, terminal);
     const rate = await currentRateQ(q);
     const amountLbp = body.currency === 'LBP' ? body.amount : usdToLbp(body.amount, rate);
-    if (amountLbp > customer.balance_lbp) {
+    // The part this branch's own sales take (applied now, offline-safe), and, when paying across the chain, the part left for HQ to place at other branches.
+    let localLbp = amountLbp;
+    let chainLbp = 0;
+    let key: string | null = null;
+    if (body.acrossChain) {
+      if (!(await q.one('SELECT 1 AS x FROM hq_link WHERE id = 1')))
+        throw E.unprocessable('NOT_CONNECTED', 'This branch is not connected to HQ, so there is no debt at other branches to pay');
+      key = phoneKey(customer.phone);
+      if (!key) throw E.unprocessable('CUSTOMER_NEEDS_PHONE', 'Only a customer with a phone number can pay a debt at other branches');
+      const chain = await q.one<{ o: number }>('SELECT others_lbp AS o FROM customer_chain WHERE customer_id = ?', [customerId]);
+      const owed = customer.balance_lbp + (chain?.o ?? 0);
+      if (amountLbp > owed) {
+        throw E.unprocessable(
+          'PAYMENT_EXCEEDS_BALANCE',
+          `The customer owes ${owed.toLocaleString('en-US')} LBP across the chain, which is less than this payment`,
+        );
+      }
+      localLbp = Math.min(amountLbp, customer.balance_lbp);
+      chainLbp = amountLbp - localLbp;
+    } else if (amountLbp > customer.balance_lbp) {
       throw E.unprocessable(
         'PAYMENT_EXCEEDS_BALANCE',
         `The customer owes ${customer.balance_lbp.toLocaleString('en-US')} LBP, which is less than this payment`,
@@ -97,7 +125,7 @@ export function receiveCustomerPayment(
       'SELECT id, ref, rest_lbp FROM sales WHERE customer_id = ? AND rest_lbp > 0 ORDER BY created_at, id',
       [customerId],
     );
-    let remaining = amountLbp;
+    let remaining = localLbp;
     const allocations: { saleId: number; ref: number; amountLbp: number }[] = [];
     for (const sale of open) {
       if (remaining === 0) break;
@@ -117,7 +145,13 @@ export function receiveCustomerPayment(
     }
     // The balance is the sum of the open sales' rests. If they disagree, the data is corrupt: stop and roll back.
     if (remaining !== 0) throw new Error(`Customer ${customerId} balance does not match their open sales (short by ${remaining})`);
-    await q.run('UPDATE customers SET balance_lbp = balance_lbp - ? WHERE id = ?', [amountLbp, customerId]);
+    await q.run('UPDATE customers SET balance_lbp = balance_lbp - ? WHERE id = ?', [localLbp, customerId]);
+    if (chainLbp > 0) {
+      await q.run(
+        'INSERT INTO chain_payments (customer_id, customer_payment_id, phone_key, amount_lbp, created_at) VALUES (?, ?, ?, ?, ?)',
+        [customerId, paymentId, key, chainLbp, new Date().toISOString()],
+      );
+    }
 
     const response = {
       id: paymentId,
@@ -127,7 +161,8 @@ export function receiveCustomerPayment(
       amount: body.amount,
       amountLbp,
       allocations,
-      balanceLbp: customer.balance_lbp - amountLbp,
+      balanceLbp: customer.balance_lbp - localLbp,
+      chainLbp,
       sessionId: session.id,
       createdAt: new Date().toISOString(),
     };

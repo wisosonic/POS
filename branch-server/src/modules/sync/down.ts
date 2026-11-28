@@ -1,4 +1,5 @@
 import { downTable, validateRow, type Change } from '@pos/core/sync';
+import { applyPaymentOrders } from '../customers/chain';
 import type { Database, Queryable } from '../../db/adapter';
 import { nowIso } from '../../util/time';
 import type { Link } from './service';
@@ -122,6 +123,8 @@ export async function pullOnce(db: Database, link: Link, opts: PullOptions = {})
         return;
       }
       for (const c of page.changes) await applyChange(tx, c);
+      // Payment orders for this branch's sales are applied in the same transaction, and answered (docs/15 §7.2).
+      if (page.changes.some((c) => c.tbl === 'payment_orders')) await applyPaymentOrders(tx);
       await tx.run('UPDATE sync_control SET down_cursor = ? WHERE id = 1', [page.next]);
     });
   }

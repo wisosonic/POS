@@ -58,7 +58,8 @@ export default async function customerRoutes(app: FastifyInstance) {
       params.push(q.cursor);
     }
     const rows = await db.all<CustomerRow>(
-      `SELECT * FROM customers ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id LIMIT ?`,
+      `SELECT customers.*, COALESCE((SELECT h.others_lbp FROM customer_chain h WHERE h.customer_id = customers.id), 0) AS others_lbp
+         FROM customers ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id LIMIT ?`,
       [...params, q.limit + 1],
     );
     const page = rows.slice(0, q.limit);

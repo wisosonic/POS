@@ -291,6 +291,10 @@ The detail is in `docs/15` §6.1. In sync terms: two more tables go UP (`po_rece
 
 The detail is in `docs/15` §7.1. In sync terms: `customers` is the 30th table that goes UP (an edited-in-place table: all three capture triggers, a balance moves with every credit sale and payment) and has a mirror at HQ plus `customer_keys`, the phone key HQ derives on arrival. Nothing new goes down yet (step 2).
 
+## 30. What P5e step 2 built (2026-11-28): payment orders
+
+Detail in `docs/15` §7.2. Up (32 tables now, each in the daily control): `chain_payments`, `payment_order_results`. Down, to ONE branch each under HQ's own ids: `payment_orders` (a branch applies it to its own sale in the transaction that brought the page, then answers) and `customer_chain` (what the same person owes at the other branches). HQ's own: `chain_payment_state`, `payment_order_settled`.
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

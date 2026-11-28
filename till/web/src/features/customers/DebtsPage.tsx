@@ -91,6 +91,8 @@ function PaymentDialog({ customer, onClose }: { customer: Customer; onClose: () 
   const [currency, setCurrency] = useState<Currency>('LBP');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const others = customer.othersLbp ?? 0;
+  const [acrossChain, setAcrossChain] = useState(false);
   // One id for this dialog: pressing Confirm twice (or a retry after a hiccup) can never take the payment twice.
   const [key] = useState(() => crypto.randomUUID());
 
@@ -99,12 +101,16 @@ function PaymentDialog({ customer, onClose }: { customer: Customer; onClose: () 
     const value = currency === 'USD' ? parseUsdInput(amount) : parseLbpInput(amount);
     if (!(value > 0)) return setError('Enter the amount received');
     const inLbp = currency === 'USD' ? usdToLbp(value, rate ?? 90000) : value;
-    if (inLbp > customer.balanceLbp)
-      return setError(`${customer.name} owes ${fmtLbp(customer.balanceLbp)}, which is less than this payment`);
+    const owed = customer.balanceLbp + (acrossChain ? others : 0);
+    if (inLbp > owed) return setError(`${customer.name} owes ${fmtLbp(owed)}, which is less than this payment`);
     setBusy(true);
     setError('');
     try {
-      await post(`/customers/${customer.id}/payments`, { method, currency, amount: value }, { idempotencyKey: key });
+      await post(
+        `/customers/${customer.id}/payments`,
+        { method, currency, amount: value, ...(acrossChain ? { acrossChain: true } : {}) },
+        { idempotencyKey: key },
+      );
       toast.success(`Payment recorded: ${currency === 'USD' ? fmtUsd(value) : fmtLbp(value)} from ${customer.name}`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['customers'] }),
@@ -154,6 +160,12 @@ function PaymentDialog({ customer, onClose }: { customer: Customer; onClose: () 
             </select>
           </label>
         </div>
+        {others > 0 && (
+          <label className="field" style={{ gridAutoFlow: 'column', justifyContent: 'start', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={acrossChain} onChange={(e) => setAcrossChain(e.target.checked)} />
+            {`Also pay what they owe at other branches (${fmtLbp(others)})`}
+          </label>
+        )}
         <p className="muted" style={{ margin: 0 }}>
           It goes against their oldest unpaid sale first.
         </p>

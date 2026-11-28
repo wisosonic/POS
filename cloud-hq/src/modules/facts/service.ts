@@ -4,6 +4,7 @@ import { relayShipments } from './relay';
 import { processPoReceipts } from '../purchasing/service';
 import { processResults, routeNewRequests } from './routing';
 import { indexCustomers } from '../customers/service';
+import { placeUnplaced, registerChainPayments, settleResults } from '../customers/chain';
 import {
   digestRows,
   downTable,
@@ -64,6 +65,10 @@ export async function applyFacts(q: Queryable, branchId: number, facts: Fact[]):
   }
   // A customer's phone key says which customers at other branches are the same person (docs/15 §7).
   if (facts.some((f) => f.tbl === 'customers')) await indexCustomers(q, branchId, facts);
+  // Paying across branches: leftovers are remembered, answers taken in, and what is unplaced is placed on the person's sales elsewhere (docs/15 §7.2).
+  if (facts.some((f) => f.tbl === 'chain_payments')) await registerChainPayments(q, branchId, facts);
+  if (facts.some((f) => f.tbl === 'payment_order_results')) await settleResults(q, branchId, facts);
+  if (facts.some((f) => ['chain_payments', 'payment_order_results', 'sales', 'customers'].includes(f.tbl))) await placeUnplaced(q);
   // Shipments written by this branch go to their receivers once complete (docs/15 §4).
   if (facts.some((f) => f.tbl === 'shipments' || f.tbl === 'shipment_items')) await relayShipments(q, branchId);
   // Requests from a shop are routed once complete, and a stock branch's answer is taken in (docs/15 §5).

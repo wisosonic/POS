@@ -348,6 +348,13 @@ export const SYNC_TABLES: readonly SyncTable[] = [
       text('deleted_at', true),
     ],
   },
+  // What is left of a customer's payment after this branch's own sales (P5e step 2): HQ places it on the person's sales at other branches.
+  {
+    name: 'chain_payments',
+    columns: [int('id'), int('customer_id'), int('customer_payment_id'), text('phone_key'), int('amount_lbp'), text('created_at')],
+  },
+  // A branch's answer to a payment order: how much it really applied to its sale.
+  { name: 'payment_order_results', columns: [int('id'), int('order_id'), int('applied_lbp'), text('created_at')] },
 ];
 
 export const syncTable = (name: string): SyncTable | undefined => SYNC_TABLES.find((t) => t.name === name);
@@ -392,6 +399,8 @@ export const CONTROLS: readonly ControlSpec[] = [
   { name: 'po_receipts', day: 'created_at', amount: 'x.item_count' },
   { name: 'po_receipt_items', day: 'created_at', amount: 'x.qty_milli', parent: { table: 'po_receipts', fk: 'receipt_id' } },
   { name: 'customers', day: 'created_at', amount: '0' }, // a balance changes after the day it was made, so only the count is compared
+  { name: 'chain_payments', day: 'created_at', amount: 'x.amount_lbp' },
+  { name: 'payment_order_results', day: 'created_at', amount: 'x.applied_lbp' },
 ];
 
 /** One number pair: rows and their summed amount. */
@@ -597,6 +606,21 @@ export const DOWN_TABLES: readonly DownTable[] = [
     ids: 'same',
     columns: [int('id'), int('delivery_id'), int('line_id'), int('product_id'), int('qty_milli'), int('unit_cost_minor')],
   },
+  // Paying across branches (P5e step 2): what HQ tells ONE branch to apply to one of its own sales, and what the same person owes elsewhere.
+  {
+    name: 'payment_orders',
+    ids: 'same',
+    columns: [
+      int('id'),
+      int('customer_id'),
+      int('sale_id'),
+      int('amount_lbp'),
+      int('from_branch_id'),
+      int('chain_payment_id'),
+      int('to_branch_id'),
+    ],
+  },
+  { name: 'customer_chain', ids: 'same', columns: [int('id'), int('branch_id'), int('customer_id'), int('others_lbp')] },
 ];
 export const downTable = (name: string): DownTable | undefined => DOWN_TABLES.find((t) => t.name === name);
 
