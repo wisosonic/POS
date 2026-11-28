@@ -31,6 +31,7 @@ const CloseRegisterPage = page(() => import('./features/register/CloseRegisterPa
 const ExpensesPage = page(() => import('./features/expenses/ExpensesPage'), 'ExpensesPage');
 const BarcodesPage = page(() => import('./features/products/BarcodesPage'), 'BarcodesPage');
 const ListsPage = page(() => import('./features/products/ListsPage'), 'ListsPage');
+const AttendancePage = page(() => import('./features/attendance/AttendancePage'), 'AttendancePage');
 const TransfersPage = page(() => import('./features/transfers/TransfersPage'), 'TransfersPage');
 const DashboardPage = page(() => import('./features/reports/DashboardPage'), 'DashboardPage');
 const ReportsPage = page(() => import('./features/reports/ReportsPage'), 'ReportsPage');
@@ -111,6 +112,7 @@ export function App() {
               <Route path="/barcodes" element={<BarcodesPage />} />
               <Route path="/purchases" element={<PurchasesPage />} />
               <Route path="/transfers" element={<TransfersPage />} />
+              <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/stocktake" element={<StocktakePage />} />
               <Route path="/stocktake/:id" element={<StocktakeCountPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />

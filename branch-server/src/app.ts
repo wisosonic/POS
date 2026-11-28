@@ -39,6 +39,7 @@ import { ReportRunner } from './modules/reports/runner';
 import { SyncAgent } from './modules/sync/agent';
 import { assertSaleBranch } from './modules/branch/kind';
 import deliveryRoutes from './modules/deliveries/routes';
+import attendanceRoutes from './modules/attendance/routes';
 import requestRoutes from './modules/requests/routes';
 import transferRoutes from './modules/transfers/routes';
 import { runControl } from './modules/sync/control';
@@ -312,6 +313,7 @@ export async function buildApp(options: BuildOptions): Promise<FastifyInstance> 
       await api.register(transferRoutes);
       await api.register(requestRoutes);
       await api.register(deliveryRoutes);
+      await api.register(attendanceRoutes);
       await api.register(reportRoutes);
       await api.register(backupRoutes);
     },

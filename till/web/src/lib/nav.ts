@@ -18,6 +18,7 @@ export const NAV: NavSection[] = [
       { to: '/customers', label: 'Customer accounts', icon: 'customers', min: 'cashier' },
       { to: '/debts', label: 'Debts', icon: 'pay', min: 'cashier' },
       { to: '/low-stock', label: 'Low stock', icon: 'lowstock', min: 'cashier' },
+      { to: '/attendance', label: 'Attendance', icon: 'users', min: 'cashier' },
       { to: '/register/close', label: 'Close register', icon: 'register', min: 'cashier' },
     ],
   },

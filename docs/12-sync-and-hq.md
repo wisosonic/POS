@@ -295,6 +295,10 @@ The detail is in `docs/15` §7.1. In sync terms: `customers` is the 30th table t
 
 Detail in `docs/15` §7.2. Up (32 tables now, each in the daily control): `chain_payments`, `payment_order_results`. Down, to ONE branch each under HQ's own ids: `payment_orders` (a branch applies it to its own sale in the transaction that brought the page, then answers) and `customer_chain` (what the same person owes at the other branches). HQ's own: `chain_payment_state`, `payment_order_settled`.
 
+## 31. What P6a-1 built (2026-11-28): employees down, punches up
+
+Detail in `docs/16`. Up (33 tables, each in the daily control): `attendance_punches`. Down, to the branches an employee is assigned to ONLY (a change-log line per branch; a removed assignment is a delete line to that branch): `employees` (id, code, name, active, PIN hash). HQ's own: `employee_branches`, `attendance_adjustments`. No pay data ever goes down.
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

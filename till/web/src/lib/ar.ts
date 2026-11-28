@@ -509,4 +509,19 @@ export const AR: Record<string, string> = {
   Deliveries: 'الشحنات',
   'HQ buys for the chain. The goods are delivered to the stock branches, which receive them under Transfers. This list is what this branch bought before.':
     'المقر الرئيسي يشتري للسلسلة. تُسلَّم البضاعة إلى فروع المخزون التي تستلمها من «التحويلات». هذه القائمة هي ما اشتراه هذا الفرع سابقاً.',
+  Attendance: 'الحضور',
+  '{name} is in at {time}': '{name} حضر الساعة {time}',
+  '{name} is out at {time}': '{name} انصرف الساعة {time}',
+  'Type your code and your attendance PIN. The first press clocks you in, the next clocks you out.':
+    'اكتب رمزك ورقم الحضور السري. الضغطة الأولى تسجّل حضورك والتالية تسجّل انصرافك.',
+  'Employee code': 'رمز الموظف',
+  'Attendance PIN': 'الرقم السري للحضور',
+  Clock: 'تسجيل',
+  'Who is in': 'من الحاضر الآن',
+  'No employees are set up for this branch. Employees are managed at HQ.': 'لا يوجد موظفون لهذا الفرع. يُدار الموظفون من المقر الرئيسي.',
+  Employee: 'الموظف',
+  Since: 'منذ',
+  In: 'حاضر',
+  Out: 'منصرف',
+  'Not yet today': 'لم يسجّل اليوم',
 };

@@ -355,6 +355,8 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   },
   // A branch's answer to a payment order: how much it really applied to its sale.
   { name: 'payment_order_results', columns: [int('id'), int('order_id'), int('applied_lbp'), text('created_at')] },
+  // Clock in and clock out (P6a-1, docs/16): a branch fact, append-only; HQ pairs them into worked time.
+  { name: 'attendance_punches', columns: [int('id'), int('employee_id'), text('kind'), int('user_id', true), text('created_at')] },
 ];
 
 export const syncTable = (name: string): SyncTable | undefined => SYNC_TABLES.find((t) => t.name === name);
@@ -401,6 +403,7 @@ export const CONTROLS: readonly ControlSpec[] = [
   { name: 'customers', day: 'created_at', amount: '0' }, // a balance changes after the day it was made, so only the count is compared
   { name: 'chain_payments', day: 'created_at', amount: 'x.amount_lbp' },
   { name: 'payment_order_results', day: 'created_at', amount: 'x.applied_lbp' },
+  { name: 'attendance_punches', day: 'created_at', amount: 'x.employee_id' },
 ];
 
 /** One number pair: rows and their summed amount. */
@@ -621,6 +624,8 @@ export const DOWN_TABLES: readonly DownTable[] = [
     ],
   },
   { name: 'customer_chain', ids: 'same', columns: [int('id'), int('branch_id'), int('customer_id'), int('others_lbp')] },
+  // The employees assigned to THIS branch (P6a-1): enough to clock in and out. No pay data ever goes down.
+  { name: 'employees', ids: 'same', columns: [int('id'), text('code'), text('name'), int('active'), text('pin_hash', true)] },
 ];
 export const downTable = (name: string): DownTable | undefined => DOWN_TABLES.find((t) => t.name === name);
 
