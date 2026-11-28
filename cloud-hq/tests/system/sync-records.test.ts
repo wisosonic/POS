@@ -84,7 +84,7 @@ async function aDay(tag: string, withPurchase = true) {
     await c.http
       .post(`${api}/customers`)
       .set(auth(cashier))
-      .send({ name: `Credit ${tag}` })
+      .send({ name: `Credit ${tag}`, phone: tag === 'before' ? '03 111 222' : '03 333 444' })
   ).body as { id: number };
   expect((await sell({ customerId: who.id, payments: [] })).status).toBe(201); // on account
   expect(

@@ -287,6 +287,10 @@ The detail is in `docs/15` §5.1. In sync terms: four more tables go UP (`stock_
 
 The detail is in `docs/15` §6.1. In sync terms: two more tables go UP (`po_receipts`, `po_receipt_items`: 29 in all, each in the daily control) and two go DOWN, each to ONE stock branch under HQ's own ids (`expected_deliveries`, `expected_delivery_items`). HQ's own tables (`purchase_orders`, `purchase_order_lines`, `supplier_payments`) are not sent anywhere. Taking a stock branch's receipt in (`processPoReceipts`) runs inside `applyFacts`, like the shipment relay and the request routing.
 
+## 29. What P5e step 1 built (2026-11-28): customers go up
+
+The detail is in `docs/15` §7.1. In sync terms: `customers` is the 30th table that goes UP (an edited-in-place table: all three capture triggers, a balance moves with every credit sale and payment) and has a mirror at HQ plus `customer_keys`, the phone key HQ derives on arrival. Nothing new goes down yet (step 2).
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

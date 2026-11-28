@@ -3,6 +3,7 @@ import { AppError } from '@pos/core/errors';
 import { relayShipments } from './relay';
 import { processPoReceipts } from '../purchasing/service';
 import { processResults, routeNewRequests } from './routing';
+import { indexCustomers } from '../customers/service';
 import {
   digestRows,
   downTable,
@@ -61,6 +62,8 @@ export async function applyFacts(q: Queryable, branchId: number, facts: Fact[]):
       await q.run(upsertSql(table), [branchId, ...table.columns.map((c) => f.row![c.name] ?? null), received]);
     }
   }
+  // A customer's phone key says which customers at other branches are the same person (docs/15 §7).
+  if (facts.some((f) => f.tbl === 'customers')) await indexCustomers(q, branchId, facts);
   // Shipments written by this branch go to their receivers once complete (docs/15 §4).
   if (facts.some((f) => f.tbl === 'shipments' || f.tbl === 'shipment_items')) await relayShipments(q, branchId);
   // Requests from a shop are routed once complete, and a stock branch's answer is taken in (docs/15 §5).

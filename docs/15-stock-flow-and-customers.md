@@ -81,6 +81,19 @@ Two documents, each written by one party, mirrored up like any fact:
 - **One balance (rule 15 becomes chain-wide):** `balance = Σ open sales' rest across branches`. HQ is the authority. A customer's payment received at any branch is applied **oldest sale first across the whole chain** by HQ; each branch then reduces the `rest` of ITS OWN sales when HQ tells it to (a down message, applied in the branch's own transaction: one writer per row). A branch shows "last synced balance plus what happened here since" and reconciles on sync. No credit limit (a standing decision), so a stale balance is a bookkeeping reconcile, not a block.
 - **One company** (decision #23): no settlement between branches. A sale belongs to the branch that made it; cash to the branch that received it.
 
+### 7.1 The two steps, and what step 1 built (2026-11-28)
+
+Slice 5e is built in two steps, because recognising the person and moving a debt are different risks.
+
+**5e-1: recognition and the one view (built).**
+- **The phone key** (`phoneKey` in `shared/src/phone.ts`, a copy in every project): digits only, Lebanon's code 961 in front. "03 123 456", "+961 3 123456", "00961-3-123-456" and "+961 03 123 456" are one key (9613123456); another country's number is kept as typed; a number too short or too long has no key.
+- **Customers go up** like any fact (the 30th synced table, with its three capture triggers in branch migration 0028 and a mirror at HQ, migration 0015; the daily control compares the count only, because a balance changes after the day the customer was made). HQ keeps `customer_keys` (branch, customer, key), re-made every time the customer arrives, so a changed phone moves the person. Walk-In and a customer with no usable phone have no key.
+- **HQ's view** (staff, any role): `GET /customers?q=&owing=` lists one person per key with what they owe at each branch and in all; `GET /customers/by-phone/:phone` finds one in any spelling; the list also says how many customers have no phone (they stay at their branch). It is a read of the mirror: HQ computes nothing it stores.
+- **The credit rule at a connected branch:** a sale with an unpaid rest needs a customer with a phone key (`422 CUSTOMER_NEEDS_PHONE`); a branch that is not connected is unchanged.
+- **Not built in step 1:** the branch does not yet see the chain balance, and a payment at one branch does not pay a debt at another: each branch's `customers.balance_lbp` is still the sum of ITS OWN open sales, so rule 15 holds as it was.
+
+**5e-2: paying across branches (next, to be designed before it is built).** HQ allocates a payment oldest sale first over the whole chain and tells each branch which of its own sales to reduce (a down message, applied in the branch's own transaction and acknowledged); the branch shows the last synced chain balance plus what happened here since. Open points: the order of two sales made in the same minute at two branches, what a branch does with an allocation for a sale it has since voided or deleted, and where the cash of a payment taken at branch B for a debt at A is counted (decision #23: at B, the branch that received it).
+
 ## 8. Slice 5f: the central stock view
 
 Stock per product per branch and **in transit** (from the movements and the shipments); low stock against HQ's alerts; **reorder suggestions** for stock branches; **rebalancing suggestions** (slow at one sale branch, fast at another: HQ only suggests, never forces, decision #32); the **unmet-demand** report.

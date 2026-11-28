@@ -10,7 +10,8 @@
     "./pricing": "./src/pricing.ts",
     "./barcode": "./src/barcode.ts",
     "./receipt": "./src/receipt.ts",
-    "./translit": "./src/translit.ts"
+    "./translit": "./src/translit.ts",
+    "./phone": "./src/phone.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

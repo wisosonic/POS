@@ -332,6 +332,22 @@ export const SYNC_TABLES: readonly SyncTable[] = [
     name: 'po_receipt_items',
     columns: [int('id'), int('receipt_id'), int('item_id'), int('product_id'), int('qty_milli')],
   },
+  // The branch's customers (P5e, docs/15 §7). HQ recognises the same person at several branches by phone key and adds their balances up.
+  {
+    name: 'customers',
+    columns: [
+      int('id'),
+      text('name'),
+      text('phone', true),
+      text('address', true),
+      text('email', true),
+      int('balance_lbp'),
+      int('is_walk_in'),
+      int('legacy_id', true),
+      text('created_at'),
+      text('deleted_at', true),
+    ],
+  },
 ];
 
 export const syncTable = (name: string): SyncTable | undefined => SYNC_TABLES.find((t) => t.name === name);
@@ -375,6 +391,7 @@ export const CONTROLS: readonly ControlSpec[] = [
   { name: 'pick_result_items', day: 'created_at', amount: 'x.qty_shipped_milli', parent: { table: 'pick_results', fk: 'result_id' } },
   { name: 'po_receipts', day: 'created_at', amount: 'x.item_count' },
   { name: 'po_receipt_items', day: 'created_at', amount: 'x.qty_milli', parent: { table: 'po_receipts', fk: 'receipt_id' } },
+  { name: 'customers', day: 'created_at', amount: '0' }, // a balance changes after the day it was made, so only the count is compared
 ];
 
 /** One number pair: rows and their summed amount. */

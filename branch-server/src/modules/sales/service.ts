@@ -4,6 +4,7 @@ import {
   computeCart,
   lineTotal,
   parseQtyMilli,
+  phoneKey,
   toReceiptName,
   usdToLbp,
   type CartLine,
@@ -267,9 +268,10 @@ export function createSale(
     const walkInId = await walkInCustomerIdQ(q);
 
     const customerId = body.customerId ?? walkInId;
-    const customer = await q.one<{ id: number; name: string }>('SELECT id, name FROM customers WHERE id = ? AND deleted_at IS NULL', [
-      customerId,
-    ]);
+    const customer = await q.one<{ id: number; name: string; phone: string | null }>(
+      'SELECT id, name, phone FROM customers WHERE id = ? AND deleted_at IS NULL',
+      [customerId],
+    );
     if (!customer) throw E.unprocessable('INVALID_REFERENCE', 'That customer does not exist');
 
     const methods = await activeMethods(q);
@@ -355,6 +357,14 @@ export function createSale(
     } catch (e) {
       if (e instanceof AppError) throw e;
       return pricingToAppError(e);
+    }
+
+    // Connected to HQ, a customer is recognised across the chain by their phone, so credit needs a customer with one (docs/15 §7, decision #22).
+    if (tender.restLbp > 0 && !phoneKey(customer.phone) && (await q.one('SELECT 1 AS x FROM hq_link WHERE id = 1'))) {
+      throw E.unprocessable(
+        'CUSTOMER_NEEDS_PHONE',
+        'This branch is connected to the chain: a sale on account needs a customer with a phone number',
+      );
     }
 
     const appliedLbp = cart.totalLbp - tender.restLbp;
