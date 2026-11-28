@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { ago, bpText, flagText, hm, money, parseBp, parseMinor, problemText, usd, lbp } from '../../web/src/lib/format';
+import {
+  addDays,
+  ago,
+  bpText,
+  flagText,
+  hm,
+  lbp,
+  minuteText,
+  money,
+  parseBp,
+  parseMinor,
+  parseTime,
+  problemText,
+  scheduleStatusText,
+  shiftText,
+  usd,
+  weekStart,
+  weekdayName,
+} from '../../web/src/lib/format';
 
 // The little helpers the HQ screen shows figures with (docs/18): money is whole units, "how long ago" is plain words, every problem code HQ reports has a sentence.
 describe('the HQ screen helpers (US-HQ-screen)', () => {
@@ -60,5 +78,38 @@ describe('the HR and payroll helpers (US-HQ-screen)', () => {
     expect(hm(0)).toBe('0 h 00');
     for (const f of ['double_in', 'out_without_in', 'open']) expect(flagText(f)).not.toBe(f);
     expect(flagText('NEW_ONE')).toBe('NEW_ONE');
+  });
+});
+
+// The schedule pages (docs/18): times are typed as text, weeks start on Monday, and every plan status HQ reports has a sentence.
+describe('the schedule helpers (US-HQ-screen)', () => {
+  it('reads and shows times of day', () => {
+    expect(parseTime('08:30')).toBe(510);
+    expect(parseTime('8:30')).toBe(510);
+    expect(parseTime('23:59')).toBe(1439);
+    for (const bad of ['', '24:00', '8', '08:60', '8:5', 'ab:cd', '-1:00']) expect(parseTime(bad)).toBeNull();
+    expect(parseTime('24:00', true)).toBe(1440); // a length may be a whole day
+    expect(parseTime('24:01', true)).toBeNull();
+    expect(minuteText(510)).toBe('08:30');
+    expect(minuteText(0)).toBe('00:00');
+  });
+
+  it('says a shift in words, including one that ends the next day', () => {
+    expect(shiftText(480, 480)).toBe('08:00 to 16:00');
+    expect(shiftText(1320, 480)).toBe('22:00 to 06:00 (next day)');
+  });
+
+  it('moves days exactly and finds the Monday of a week', () => {
+    expect(addDays('2026-11-28', 3)).toBe('2026-12-01');
+    expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
+    expect(weekStart('2026-11-28')).toBe('2026-11-23'); // a Saturday
+    expect(weekStart('2026-11-23')).toBe('2026-11-23'); // a Monday
+    expect(weekStart('2026-11-29')).toBe('2026-11-23'); // a Sunday belongs to the week before it
+    expect(weekdayName('2026-11-23')).toBe('Mon');
+  });
+
+  it('has a sentence for every plan status, and shows an unknown one as it is', () => {
+    for (const st of ['worked', 'absent', 'on_leave', 'holiday', 'unscheduled', 'scheduled']) expect(scheduleStatusText(st)).not.toBe(st);
+    expect(scheduleStatusText('NEW')).toBe('NEW');
   });
 });

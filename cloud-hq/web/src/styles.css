@@ -393,3 +393,36 @@ textarea {
   max-inline-size: 760px;
   margin-inline: auto;
 }
+
+/* Schedule page */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tab {
+  font: inherit;
+  padding: 10px 16px;
+  min-block-size: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.tab.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--brand-text);
+  font-weight: 600;
+}
+.tab:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+table.grid select {
+  min-inline-size: 110px;
+}
+.holiday {
+  background: var(--warn-bg, transparent);
+}

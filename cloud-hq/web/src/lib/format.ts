@@ -92,3 +92,47 @@ export const RUN_WORDS: Record<string, string> = {
   paid: 'Paid: lock it when the books agree',
   locked: 'Locked: final',
 };
+
+/** Minutes after midnight as a clock time: 510 -> "08:30". */
+export const minuteText = (m: number): string => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/** "8:30" or "08:30" as minutes (510). null when it is not a time of day. With `length`, "10:00" and up to "24:00" are allowed. */
+export function parseTime(text: string, length = false): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (min > 59) return null;
+  const total = h * 60 + min;
+  return total <= (length ? 1440 : 1439) ? total : null;
+}
+
+/** A shift as people say it: "08:00 to 16:00", "22:00 to 06:00 (next day)". */
+export function shiftText(startMinute: number, lengthMinutes: number): string {
+  const end = startMinute + lengthMinutes;
+  return `${minuteText(startMinute)} to ${minuteText(end)}${end >= 1440 ? ' (next day)' : ''}`;
+}
+
+/** A shop day moved by n days (days are plain dates, so this is exact: no time zone is involved). */
+export const addDays = (day: string, n: number): string =>
+  new Date(Date.parse(`${day}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/** The Monday of the week a day is in. */
+export function weekStart(day: string): string {
+  const dow = new Date(`${day}T12:00:00Z`).getUTCDay(); // 0 = Sunday
+  return addDays(day, -((dow + 6) % 7));
+}
+
+/** Mon, Tue ... for a day. */
+export const weekdayName = (day: string): string =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+
+const SCHEDULE_STATUS: Record<string, string> = {
+  worked: 'Worked',
+  absent: 'Absent',
+  on_leave: 'On leave',
+  holiday: 'Holiday',
+  unscheduled: 'Not on the roster',
+  scheduled: 'Still to come',
+};
+export const scheduleStatusText = (s: string): string => SCHEDULE_STATUS[s] ?? s;

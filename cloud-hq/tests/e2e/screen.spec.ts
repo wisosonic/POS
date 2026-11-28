@@ -81,7 +81,14 @@ test('a viewer sees the chain but none of the admin or pay pages, and is stopped
   await expect(vp.getByRole('heading', { name: 'The chain today' })).toBeVisible();
   for (const hidden of ['Staff', 'Backups', 'Payroll', 'Pay setup'])
     await expect(vp.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
-  for (const shown of ['Branches', 'People', 'Attendance']) await expect(vp.getByRole('link', { name: shown, exact: true })).toBeVisible();
+  for (const shown of ['Branches', 'People', 'Attendance', 'Schedule'])
+    await expect(vp.getByRole('link', { name: shown, exact: true })).toBeVisible();
+  // the schedule is readable, but a viewer is offered no way to change it
+  await vp.getByRole('link', { name: 'Schedule', exact: true }).click();
+  await expect(vp.getByRole('heading', { name: 'Schedule', level: 1 })).toBeVisible();
+  await vp.getByRole('tab', { name: 'Shifts and holidays' }).click();
+  await expect(vp.getByRole('button', { name: 'Add the shift' })).toHaveCount(0);
+  await expect(vp.getByRole('button', { name: 'Add the holiday' })).toHaveCount(0);
   await vp.goto('/payroll');
   await expect(vp.getByRole('heading', { name: 'The chain today' })).toBeVisible(); // sent home, not shown the page
   expect(problems).toEqual([]);

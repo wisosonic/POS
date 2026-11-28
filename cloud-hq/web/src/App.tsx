@@ -13,6 +13,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { PayrollPage } from './pages/PayrollPage';
 import { PaySetupPage } from './pages/PaySetupPage';
 import { PeoplePage } from './pages/PeoplePage';
+import { SchedulePage } from './pages/SchedulePage';
 import { StaffPage } from './pages/StaffPage';
 
 export function App() {
@@ -69,6 +70,7 @@ export function App() {
         <NavLink to="/branches">Branches</NavLink>
         <NavLink to="/people">People</NavLink>
         <NavLink to="/attendance">Attendance</NavLink>
+        <NavLink to="/schedule">Schedule</NavLink>
         {canPayroll(me) && <NavLink to="/payroll">Payroll</NavLink>}
         {canPayroll(me) && <NavLink to="/pay-setup">Pay setup</NavLink>}
         {isAdmin(me) && <NavLink to="/backups">Backups</NavLink>}
@@ -88,6 +90,7 @@ export function App() {
           <Route path="/branches" element={<BranchesPage me={me} />} />
           <Route path="/people" element={<PeoplePage me={me} />} />
           <Route path="/attendance" element={<AttendancePage me={me} />} />
+          <Route path="/schedule" element={<SchedulePage me={me} />} />
           <Route path="/payroll" element={canPayroll(me) ? <PayrollPage /> : <Navigate to="/" replace />} />
           <Route path="/pay-setup" element={canPayroll(me) ? <PaySetupPage /> : <Navigate to="/" replace />} />
           <Route path="/backups" element={isAdmin(me) ? <BackupsPage /> : <Navigate to="/" replace />} />
