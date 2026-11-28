@@ -16,7 +16,7 @@ Branches always call HQ, never the other way, so a branch behind a home router n
 
 ## 2. Installing HQ
 
-On the HQ machine, in `cloud-hq`: `npm install`, then in an administrator PowerShell:
+On the HQ machine, in `cloud-hq`: `npm install`, then `npm run build` (this builds **the HQ screen**, `docs/18`; without it HQ answers the API only), then in an administrator PowerShell:
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts\windows\install-service.ps1 -BackupDir D:\HQ-backups -BackupCopyDir E:\HQ-backups -PublicName hq.example.com -BindAll
@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\install-service.ps1 -Ba
 
 `-DryRun` shows every step and changes nothing. It makes `C:\POS-HQ\service.env` (only administrators can read it), asks for the **backup passphrase** (write it down and keep it away from this machine: without it no backup can be restored), registers the scheduled task **Chain HQ** (starts at boot, restarts after 5 seconds if it stops) and waits for `GET /api/v1/healthz`. Logs: `C:\POS-HQ\logs\hq.log`, `hq.err.log`, `launcher.log`.
 
-Then make the first admin: `npm run create-admin --prefix cloud-hq -- <name> <a long password>`. Leave `HQ_ADMIN_TOKEN` unset. Sign in with `POST /auth/login`, set the exchange rate (`POST /exchange-rates`) and make the staff accounts: an admin, the **payroll** and **hr** people if there are any, and viewers (`POST /users`; each must choose their own password at first sign-in).
+HQ then serves its screen at its own address (`https://<its name>/`). Make the first admin: `npm run create-admin --prefix cloud-hq -- <name> <a long password>`. Leave `HQ_ADMIN_TOKEN` unset. Sign in with `POST /auth/login`, set the exchange rate (`POST /exchange-rates`) and make the staff accounts: an admin, the **payroll** and **hr** people if there are any, and viewers (`POST /users`; each must choose their own password at first sign-in).
 
 ## 3. Adding a branch
 
@@ -59,7 +59,7 @@ A backup is a consistent copy made while the server works (SQLite's online backu
 | `NOT_PULLING` | HQ has changes for it and it has not asked for a while | restart the branch server; look at its log |
 | `MISMATCH` | a day where the branch and HQ hold different amounts | the branch re-sends: `POST /sync/resync`; the branch page "HQ link" shows it |
 
-and `backup.problem` (`BACKUP_NOT_CONFIGURED`, `BACKUP_STALE` after 36 hours, `BACKUP_FAILED`). There is no screen for it yet and no outbound alert (e-mail, SMS): check it each morning, or point a monitor at it. This is an owner decision to take once the chain is running (`docs/QUESTIONS.md`).
+and `backup.problem` (`BACKUP_NOT_CONFIGURED`, `BACKUP_STALE` after 36 hours, `BACKUP_FAILED`). It is the **Overview** page of the HQ screen (`docs/18`); there is no outbound alert (e-mail, SMS): look at it each morning, or point a monitor at the API. Whether to add messages is an owner decision (`docs/QUESTIONS.md` #33).
 
 ## 6. The restore drill (HQ)
 
@@ -84,4 +84,4 @@ HQ first, then the branches, one at a time, in a quiet hour: stop the service (`
 
 ## 9. Not built
 
-An HQ screen for monitoring and a push alert; backups of HQ to a cloud store (copy the folder with the tool the customer already uses); rebuilding a lost branch PC from HQ's copy of its history (HQ holds a mirror of everything a branch recorded, but a tool that puts it back is not built); a script that provisions a branch end to end (today the steps in §3 are done by hand); PostgreSQL (P8).
+a push alert (the screen exists: `docs/18`); backups of HQ to a cloud store (copy the folder with the tool the customer already uses); rebuilding a lost branch PC from HQ's copy of its history (HQ holds a mirror of everything a branch recorded, but a tool that puts it back is not built); a script that provisions a branch end to end (today the steps in §3 are done by hand); PostgreSQL (P8).

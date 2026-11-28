@@ -1,0 +1,24 @@
+{
+  "name": "@pos/hq-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The HQ screen: sign in, the chain at a glance, branches, backups, staff. Built into dist and served by cloud-hq (docs/18-hq-screen.md).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.104.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
+  }
+}

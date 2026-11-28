@@ -11,7 +11,7 @@ Context (P7, 2026-11-28): HQ now answers "is the chain healthy?" (`GET /monitori
 - **B. A message** (e-mail or WhatsApp/SMS) when a problem appears or a backup is overdue. Needs an outside service and its credentials, which is a decision of its own (what to send, to whom, how often).
 - **C. Both.**
 **Recommended:** **A first**, because HQ needs a screen anyway for orders, employees, payroll and this, and a screen costs no outside service. Add B when the chain has more branches than the owner can check by eye.
-Answer:
+Answer: **A is built** (2026-11-28: the HQ screen, `docs/18`, Overview page). B (a message) is still open: say if you want it.
 
 ### 21. Once branches are connected to HQ, who creates the branch staff (cashiers, managers)?
 

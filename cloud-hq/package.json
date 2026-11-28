@@ -18,10 +18,12 @@
     "format:check": "prettier --check .",
     "create-admin": "tsx src/cli/create-admin.ts",
     "backup": "tsx src/cli/backup.ts",
-    "restore": "tsx src/cli/restore.ts"
+    "restore": "tsx src/cli/restore.ts",
+    "build": "npm run build --prefix web"
   },
   "dependencies": {
     "@fastify/rate-limit": "^11.2.1",
+    "@fastify/static": "^10.1.12",
     "@node-rs/argon2": "^2.2.2",
     "@pos/core": "*",
     "@pos/shared": "*",
@@ -45,6 +47,7 @@
   },
   "workspaces": [
     "core",
-    "shared"
+    "shared",
+    "web"
   ]
 }

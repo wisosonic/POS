@@ -35,6 +35,7 @@ export async function startHq(
     rateLimit?: boolean;
     allowedHosts?: string[];
     backup?: { dir?: string; copyDir?: string; passphrase?: string; keep?: number };
+    webDist?: string;
   } = {},
 ): Promise<Hq> {
   const dir = options.databasePath ? undefined : mkdtempSync(join(tmpdir(), 'pos-hq-'));
@@ -45,6 +46,7 @@ export async function startHq(
     adminToken: ADMIN_TOKEN,
     rateLimit: options.rateLimit,
     allowedHosts: options.allowedHosts,
+    webDist: options.webDist,
     backup: options.backup ? { at: '02:00', keep: 30, schedule: false, ...options.backup } : undefined,
   });
   await app.ready();

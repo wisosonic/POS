@@ -15,6 +15,8 @@ export type CentralConfig = {
    * which blocks "DNS rebinding" (a web page pointing its own name at this server).
    */
   allowedHosts: string[];
+  /** The built HQ screen (cloud-hq/web/dist). Without it HQ answers the API only. */
+  webDist?: string;
   /** Backups (docs/07 §3): without a folder there are none. The same settings as a branch's. */
   backupDir?: string;
   backupCopyDir?: string;
@@ -42,6 +44,7 @@ export function loadCentralConfig(env: NodeJS.ProcessEnv = process.env): Central
     adminToken,
     production: env.NODE_ENV === 'production',
     uploadsDir: env.UPLOADS_DIR || undefined,
+    webDist: env.WEB_DIST || undefined,
     backupDir: env.BACKUP_DIR || undefined,
     backupCopyDir: env.BACKUP_COPY_DIR || undefined,
     backupPassphrase: env.BACKUP_PASSPHRASE || undefined,

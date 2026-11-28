@@ -1,4 +1,6 @@
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import { existsSync } from 'node:fs';
 import type { Database } from '@pos/core/adapter';
 import { safeEqual } from '@pos/core/credentials';
 import type { Queryable } from '@pos/core/adapter';
@@ -73,6 +75,8 @@ export type CentralOptions = {
   production?: boolean;
   /** Where product pictures are kept (default: `uploads` next to the database). */
   uploadsDir?: string;
+  /** The built HQ screen (cloud-hq/web/dist). Without it HQ answers the API only. */
+  webDist?: string;
   /** Backups (docs/07 §3). Without a folder there are none. `schedule: false` keeps the timer off (tests). */
   backup?: Omit<BackupSettings, 'uploadsDir'> & { schedule?: boolean };
 };
@@ -107,7 +111,15 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
   app.addHook('preClose', async () => backups.stop());
   app.addHook('onClose', async () => db.close());
   app.setErrorHandler(errorHandler);
-  app.setNotFoundHandler(notFoundHandler);
+  // The HQ screen is a single-page app: a page address such as /branches belongs to its router, so a browser asking for it gets the app.
+  // The API keeps its JSON 404s.
+  const webRoot = options.webDist ? resolve(options.webDist) : undefined;
+  const serveWeb = !!webRoot && existsSync(resolve(webRoot, 'index.html'));
+  app.setNotFoundHandler((req, reply) => {
+    if (serveWeb && req.method === 'GET' && !req.url.startsWith('/api/') && (req.headers.accept ?? '').includes('text/html'))
+      return reply.type('text/html').header('Cache-Control', 'no-cache').sendFile('index.html');
+    return notFoundHandler(req, reply);
+  });
 
   // Only answer to this server's own names (and the configured public ones): a web page on the internet can point its own name at
   // this address and then talk to it from someone's browser. Its requests carry that foreign name in Host and Origin.
@@ -136,13 +148,23 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
           .send(problem(403, 'ORIGIN_NOT_ALLOWED', 'Requests from other websites are not accepted'));
     }
   });
-  app.addHook('onSend', async (_req, reply) => {
+  // The API answers with private data: never cached, never framed, and it may load nothing. A route that needs different headers (the payslip page
+  // needs its own inline style) sets them itself and is not overridden. The HQ screen's own files may load scripts and styles from this server only.
+  app.addHook('onSend', async (req, reply) => {
+    void reply.header('X-Content-Type-Options', 'nosniff').header('X-Frame-Options', 'DENY').header('Referrer-Policy', 'no-referrer');
+    if (req.url.startsWith('/api/')) {
+      if (!reply.hasHeader('Cache-Control')) void reply.header('Cache-Control', 'no-store');
+      if (!reply.hasHeader('Content-Security-Policy'))
+        void reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+      return;
+    }
     void reply
-      .header('X-Content-Type-Options', 'nosniff')
-      .header('X-Frame-Options', 'DENY')
-      .header('Referrer-Policy', 'no-referrer')
-      .header('Cache-Control', 'no-store')
-      .header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+      .header('Cross-Origin-Opener-Policy', 'same-origin')
+      .header('Cross-Origin-Resource-Policy', 'same-origin')
+      .header(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      );
   });
 
   if (options.rateLimit ?? options.production) await app.register(rateLimit, { global: false });
@@ -194,5 +216,16 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
     },
     { prefix: '/api/v1' },
   );
+  if (serveWeb) {
+    await app.register(fastifyStatic, {
+      root: webRoot!,
+      wildcard: false,
+      setHeaders(res, path) {
+        const immutable = /[\\/]assets[\\/]/.test(path);
+        void res.header('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
+      },
+    });
+  }
+
   return app;
 }

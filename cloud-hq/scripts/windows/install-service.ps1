@@ -63,6 +63,7 @@ if ($nodeVersion -notmatch '^v(\d+)\.') { throw "Could not read the Node.js vers
 if ([int]$Matches[1] -lt 22) { throw "Node.js 22 or newer is needed; this PC has $nodeVersion." }
 
 if (-not (Test-Path (Join-Path $InstallDir 'node_modules'))) { throw "Run 'npm install' in $InstallDir first." }
+if (-not (Test-Path (Join-Path $InstallDir 'web\dist\index.html'))) { Write-Host "NOTE: the HQ screen is not built (run 'npm run build' in $InstallDir). HQ will answer the API only until it is." -ForegroundColor Yellow }
 if ($BackupAt -notmatch '^([01]\d|2[0-3]):[0-5]\d$') { throw "-BackupAt must be a time such as 02:00." }
 if ($BackupCopyDir -and -not $BackupDir) { throw '-BackupCopyDir needs -BackupDir as well.' }
 
