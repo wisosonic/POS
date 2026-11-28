@@ -70,7 +70,15 @@ export default async function syncRoutes(app: FastifyInstance) {
       }),
       req.query,
     );
-    return changesAfter(db, req.branch.id, q.cursor, q.limit);
+    // Remember how far this branch has been SERVED (the page's `next`; it applies the page in one transaction and asks again from there, so a
+    // lower number next time means it did not apply it): monitoring says how far behind a branch is from this.
+    const page = await changesAfter(db, req.branch.id, q.cursor, q.limit);
+    await db.run('UPDATE branches SET down_cursor = ?, down_cursor_at = ? WHERE id = ?', [
+      page.next,
+      new Date().toISOString(),
+      req.branch.id,
+    ]);
+    return page;
   });
 
   // A product picture, by the name the product carries (docs/12 §19). The name is made from the file's own content, so the branch can check

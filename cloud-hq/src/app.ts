@@ -17,6 +17,9 @@ import priceRoutes from './modules/catalog/priceRoutes';
 import reportRoutes from './modules/reports/routes';
 import purchasingRoutes from './modules/purchasing/routes';
 import customerRoutes from './modules/customers/routes';
+import { BackupService, type BackupSettings } from './backup/service';
+import backupRoutes from './modules/backup/routes';
+import monitoringRoutes from './modules/monitoring/routes';
 import hrRoutes from './modules/hr/routes';
 import payrollRoutes from './modules/payroll/routes';
 import scheduleRoutes from './modules/hr/scheduleRoutes';
@@ -43,6 +46,8 @@ declare module 'fastify' {
     branchOnly: (req: FastifyRequest) => Promise<void>;
     /** The folder product pictures are kept in (named by their content, docs/12 §19). */
     uploadsDir: string;
+    /** Backups of HQ's database: scheduled, on demand, and reported (docs/07 §3). */
+    backups: BackupService;
   }
   interface FastifyRequest {
     branch: Branch;
@@ -68,6 +73,8 @@ export type CentralOptions = {
   production?: boolean;
   /** Where product pictures are kept (default: `uploads` next to the database). */
   uploadsDir?: string;
+  /** Backups (docs/07 §3). Without a folder there are none. `schedule: false` keeps the timer off (tests). */
+  backup?: Omit<BackupSettings, 'uploadsDir'> & { schedule?: boolean };
 };
 
 /**
@@ -90,6 +97,14 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
   app.decorate('registeredRoutes', registeredRoutes);
   app.decorate('database', createSqliteDatabase(db));
   app.decorate('uploadsDir', resolve(options.uploadsDir ?? join(dirname(options.databasePath), 'uploads')));
+  const backups = new BackupService(
+    db,
+    { at: '02:00', keep: 30, ...options.backup, uploadsDir: resolve(options.uploadsDir ?? join(dirname(options.databasePath), 'uploads')) },
+    { info: (o, m) => app.log.info(o, m), error: (o, m) => app.log.error(o, m) },
+  );
+  app.decorate('backups', backups);
+  if (options.backup?.schedule !== false) backups.start();
+  app.addHook('preClose', async () => backups.stop());
   app.addHook('onClose', async () => db.close());
   app.setErrorHandler(errorHandler);
   app.setNotFoundHandler(notFoundHandler);
@@ -170,6 +185,8 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
       await api.register(supplyRoutes);
       await api.register(purchasingRoutes);
       await api.register(customerRoutes);
+      await api.register(backupRoutes);
+      await api.register(monitoringRoutes);
       await api.register(hrRoutes);
       await api.register(payrollRoutes);
       await api.register(scheduleRoutes);

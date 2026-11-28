@@ -17,6 +17,13 @@ const app = await buildCentral({
   allowedHosts: config.allowedHosts,
   production: config.production,
   uploadsDir: config.uploadsDir ? resolve(config.uploadsDir) : undefined,
+  backup: {
+    dir: config.backupDir ? resolve(config.backupDir) : undefined,
+    copyDir: config.backupCopyDir ? resolve(config.backupCopyDir) : undefined,
+    passphrase: config.backupPassphrase,
+    at: config.backupAt,
+    keep: config.backupKeep,
+  },
   logger: true,
 });
 if (applied.length) app.log.info({ migrations: applied }, 'HQ database migrated');

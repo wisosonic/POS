@@ -299,6 +299,10 @@ Detail in `docs/15` §7.2. Up (32 tables now, each in the daily control): `chain
 
 Detail in `docs/16`. Up (33 tables, each in the daily control): `attendance_punches`. Down, to the branches an employee is assigned to ONLY (a change-log line per branch; a removed assignment is a delete line to that branch): `employees` (id, code, name, active, PIN hash). HQ's own: `employee_branches`, `attendance_adjustments`. No pay data ever goes down.
 
+## 32. What P7 built (2026-11-28): monitoring
+
+`branches` gained `down_cursor` and `down_cursor_at`: when a branch asks for HQ's changes, HQ records how far it has served it (the page's `next`), so `GET /monitoring/branches` can say how many changes a branch has not yet applied. Nothing else is stored: reachability is `last_seen_at`, agreement is the daily control (§24). Detail and what to do about each problem is `docs/17` §5.
+
 ## 13. Shared code (`branch-server/core`, `@pos/core`)
 
 The branch server and HQ share the database adapter and its SQLite driver, the migrations runner (each server has its own folder), RFC 7807 errors, input validation, and the credential helpers (one-time codes, tokens, constant-time compare). The old file locations in `branch-server` are one-line re-exports, so no import in the branch server changed; the full test suite passed unchanged after the move.

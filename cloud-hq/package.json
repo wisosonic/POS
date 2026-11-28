@@ -16,7 +16,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "create-admin": "tsx src/cli/create-admin.ts"
+    "create-admin": "tsx src/cli/create-admin.ts",
+    "backup": "tsx src/cli/backup.ts",
+    "restore": "tsx src/cli/restore.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "^11.2.1",

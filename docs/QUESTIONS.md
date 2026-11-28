@@ -4,6 +4,15 @@ Questions for the owner. Answer under each one (write after "Answer:"). New ques
 
 ## Open
 
+### 33. How should the owner be told when something in the chain is wrong?
+
+Context (P7, 2026-11-28): HQ now answers "is the chain healthy?" (`GET /monitoring/branches`, docs/17 §5): a branch that never connected, went silent, stopped pulling or disagrees with HQ, and HQ's own backup. Today it is only an answer someone has to ask for: nothing is sent.
+- **A. A screen at HQ** that shows it (needs an HQ screen, which does not exist yet: HQ is API only). The owner looks each morning.
+- **B. A message** (e-mail or WhatsApp/SMS) when a problem appears or a backup is overdue. Needs an outside service and its credentials, which is a decision of its own (what to send, to whom, how often).
+- **C. Both.**
+**Recommended:** **A first**, because HQ needs a screen anyway for orders, employees, payroll and this, and a screen costs no outside service. Add B when the chain has more branches than the owner can check by eye.
+Answer:
+
 ### 21. Once branches are connected to HQ, who creates the branch staff (cashiers, managers)?
 
 Context (P3d, 2026-11-27): HQ now has its own staff accounts (name, password, role: viewer, catalog, admin). The people who work at a branch (cashiers, branch managers, the branch admin) are still made **at each branch**, in its own database, with ids of its own. The catalog already comes from HQ (P3a to P3c); this is the last thing the old plan said HQ would own.

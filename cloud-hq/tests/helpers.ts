@@ -29,7 +29,13 @@ export type Hq = {
  * to bring the same HQ back (an outage and a recovery).
  */
 export async function startHq(
-  options: { databasePath?: string; port?: number; rateLimit?: boolean; allowedHosts?: string[] } = {},
+  options: {
+    databasePath?: string;
+    port?: number;
+    rateLimit?: boolean;
+    allowedHosts?: string[];
+    backup?: { dir?: string; copyDir?: string; passphrase?: string; keep?: number };
+  } = {},
 ): Promise<Hq> {
   const dir = options.databasePath ? undefined : mkdtempSync(join(tmpdir(), 'pos-hq-'));
   const databasePath = options.databasePath ?? join(dir!, 'hq.db');
@@ -39,6 +45,7 @@ export async function startHq(
     adminToken: ADMIN_TOKEN,
     rateLimit: options.rateLimit,
     allowedHosts: options.allowedHosts,
+    backup: options.backup ? { at: '02:00', keep: 30, schedule: false, ...options.backup } : undefined,
   });
   await app.ready();
   await app.listen({ host: '127.0.0.1', port: options.port ?? 0 });
