@@ -11,7 +11,8 @@
     "./barcode": "./src/barcode.ts",
     "./receipt": "./src/receipt.ts",
     "./translit": "./src/translit.ts",
-    "./phone": "./src/phone.ts"
+    "./phone": "./src/phone.ts",
+    "./payroll": "./src/payroll.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
