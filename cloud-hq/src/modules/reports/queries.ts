@@ -1,5 +1,6 @@
 import type { Queryable } from '@pos/core/adapter';
 import { localDay } from '../../util/time';
+import { onOrder } from './restock';
 
 // The chain's reports (docs/12 §23, P4b): read-only figures over what the branches have sent (the mirror tables) and HQ's own catalog. The rules
 // are the branch's own (branch-server/src/modules/reports): a sale counts on the day it was made, a return on the day it was taken back, voided
@@ -309,7 +310,9 @@ export type StockRow = {
   totalMilli: number;
   /** Shipped and not yet confirmed by the receiving branch (docs/15 §4): out of the sender's stock, not yet in the receiver's. */
   inTransitMilli: number;
-  byBranch: { branchId: number; qtyMilli: number; inTransitMilli: number }[];
+  /** Ordered by HQ for a stock branch and not yet received (docs/15 §6). */
+  onOrderMilli: number;
+  byBranch: { branchId: number; qtyMilli: number; inTransitMilli: number; onOrderMilli: number }[];
 };
 
 /** Stock per product at every branch, derived from the movements the branches sent (a branch's stock is the sum of its movements), and what is on the way. */
@@ -340,6 +343,7 @@ export async function stockReport(q: Queryable, opts: { productId?: number; bran
     opts.branchId === undefined ? [] : [opts.branchId],
   );
   const transit = new Map<string, number>(wait.map((w) => [`${w.product_id}:${w.branch_id}`, w.qty]));
+  const ordered = await onOrder(q); // placed orders not yet received at a stock branch (docs/15 §6, §8)
   const branches = (
     await q.all<{ id: number }>(
       'SELECT id FROM branches WHERE active = 1' + (opts.branchId === undefined ? '' : ' AND id = ?'),
@@ -355,6 +359,7 @@ export async function stockReport(q: Queryable, opts: { productId?: number; bran
       branchId,
       qtyMilli: m.get(branchId) ?? 0,
       inTransitMilli: transit.get(`${p.id}:${branchId}`) ?? 0,
+      onOrderMilli: ordered.get(`${p.id}:${branchId}`) ?? 0,
     }));
     // Low = at or under the product's alert at THAT branch (as at a branch: its own stock against its own alert).
     if (opts.lowOnly && !byBranch.some((x) => p.stock_alert_milli !== null && x.qtyMilli <= p.stock_alert_milli)) continue;
@@ -365,6 +370,7 @@ export async function stockReport(q: Queryable, opts: { productId?: number; bran
       alertMilli: p.stock_alert_milli,
       totalMilli: byBranch.reduce((sum, x) => sum + x.qtyMilli, 0),
       inTransitMilli: byBranch.reduce((sum, x) => sum + x.inTransitMilli, 0),
+      onOrderMilli: byBranch.reduce((sum, x) => sum + x.onOrderMilli, 0),
       byBranch,
     });
     if (rows.length >= opts.limit) break;

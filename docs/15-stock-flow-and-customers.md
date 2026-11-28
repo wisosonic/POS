@@ -108,6 +108,15 @@ Slice 5e is built in two steps, because recognising the person and moving a debt
 
 Stock per product per branch and **in transit** (from the movements and the shipments); low stock against HQ's alerts; **reorder suggestions** for stock branches; **rebalancing suggestions** (slow at one sale branch, fast at another: HQ only suggests, never forces, decision #32); the **unmet-demand** report.
 
+### 8.1 What was built (2026-11-28)
+
+Nothing is stored: every figure is read from what the branches sent (movements, sales, shipments, requests) and from HQ's own orders (`cloud-hq/src/modules/reports/restock.ts`). HQ only SUGGESTS; it never buys, ships or moves anything.
+
+- **Already there from earlier slices:** `GET /reports/stock` (per product per branch, in transit, low against the alert) and `/reports/unmet-demand`. 5f adds `onOrderMilli` to the stock report: goods HQ ordered for a stock branch and not yet received.
+- **`GET /reports/reorder`:** for each STOCK branch and each product that has an alert, the **position** is what it holds + what is on the way to it + what is still to arrive on placed orders. At or under the alert, it is **low**, and the suggestion brings the position back to **twice the alert**. A product with no alert is never suggested (the alert is how the owner says "tell me"). Each row also carries the chain's **unmet demand** of the last 30 days for the product (a reason to buy more). Counting what is already on order is what stops the same goods being bought twice. The target of twice the alert is a starting rule, not a setting yet.
+- **`GET /reports/rebalance`:** stock never goes from shop to shop, so the report has two lists. **`sendBack`:** a shop whose stock lasts more than `slowDays` (default 60) at the pace of the last `windowDays` (30) could send back what is over `targetDays` (30) of cover, never going under the product's alert. **`requestMore`:** a shop whose stock lasts `fastDays` (7) or less could ask a stock branch for enough to reach `targetDays`, less what is on the way to it and what it has already asked for and not received. The branch manager decides (decision #32). Sales are gross of returns, voided sales are out. Days are 1 to 365.
+- **Not built:** an HQ screen; a per-product target level or lead time (the reorder target is twice the alert); sales seasonality; acting on a suggestion in one click (a manager sends back with a transfer and asks with a request, as before).
+
 ## 9. Order of work
 
 5a branch kind (built) → 5b shipments and receipts → 5c requests and routing → 5d central purchasing → 5e shared customers → 5f the central stock view. Each slice ends with the suites green, the sandbox chain passing and the docs updated.

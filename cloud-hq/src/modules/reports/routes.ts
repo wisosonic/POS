@@ -3,6 +3,7 @@ import { parse } from '@pos/core/validate';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { shopDayStart } from '../../util/time';
+import { rebalanceSuggestions, reorderSuggestions } from './restock';
 import {
   branchNames,
   expensesReport,
@@ -150,6 +151,33 @@ export default async function reportRoutes(app: FastifyInstance) {
     const to = q.to ?? new Date().toISOString().slice(0, 10);
     const from = q.from ?? new Date(Date.parse(`${to}T00:00:00Z`) - 30 * 86_400_000).toISOString().slice(0, 10);
     return { from, to, data: await reconciliationReport(db, { from, to, branchId: q.branchId, onlyMismatch: q.onlyMismatch === 'true' }) };
+  });
+
+  // What to buy: stock branches whose stock, with what is on the way and on order, is at or under the product's alert (docs/15 §8).
+  app.get('/reports/reorder', view, async (req) => {
+    const q = parse(
+      z.object({ branchId: z.coerce.number().int().positive().optional(), limit: z.coerce.number().int().min(1).max(500).default(100) }),
+      req.query,
+    );
+    return { data: await reorderSuggestions(db, q) };
+  });
+
+  // Slow at one shop, fast at another: what a shop could send back to a stock branch and what a fast shop could ask for. HQ only suggests (docs/15 §8).
+  app.get('/reports/rebalance', view, async (req) => {
+    const days = z.coerce.number().int().min(1).max(365);
+    const q = parse(
+      z.object({
+        branchId: z.coerce.number().int().positive().optional(),
+        limit: z.coerce.number().int().min(1).max(500).default(100),
+        windowDays: days.optional(),
+        slowDays: days.optional(),
+        fastDays: days.optional(),
+        targetDays: days.optional(),
+      }),
+      req.query,
+    );
+    const { branchId, limit, ...cover } = q;
+    return rebalanceSuggestions(db, { branchId, limit, cover });
   });
 
   // Stock per product at every branch, derived from the movements the branches sent. `lowOnly=true`: at or under the product's alert somewhere.

@@ -255,13 +255,13 @@ describe('tills, stock and the chain at a glance', () => {
     const towel = r.data.find((p: { name: string }) => p.name === 'Towel');
     expect(towel).toMatchObject({ totalMilli: 10500, alertMilli: 8000 });
     expect(towel.byBranch).toEqual([
-      { branchId: b1, qtyMilli: 7500, inTransitMilli: 0 },
-      { branchId: b2, qtyMilli: 3000, inTransitMilli: 0 },
+      { branchId: b1, qtyMilli: 7500, inTransitMilli: 0, onOrderMilli: 0 },
+      { branchId: b2, qtyMilli: 3000, inTransitMilli: 0, onOrderMilli: 0 },
     ]);
     const low = await get('/reports/stock?lowOnly=true');
     expect(low.data.map((p: { name: string }) => p.name)).toEqual(['Towel']); // the chair has no alert
     const justTwo = await get(`/reports/stock?branchId=${b2}&productId=1`);
-    expect(justTwo.data[0].byBranch).toEqual([{ branchId: b2, qtyMilli: 3000, inTransitMilli: 0 }]);
+    expect(justTwo.data[0].byBranch).toEqual([{ branchId: b2, qtyMilli: 3000, inTransitMilli: 0, onOrderMilli: 0 }]);
   });
 
   it('overview: each branch’s figures, its open tills, its spending, and whether it has been heard from lately', async () => {
