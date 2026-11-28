@@ -45,3 +45,6 @@ export const isAdmin = (me: Me | null): boolean => me?.role === 'admin';
 /** What the menu shows: HR changes people, payroll reads pay, an admin does both (the server enforces each; this only hides buttons and pages). */
 export const canHr = (me: Me | null): boolean => me?.role === 'admin' || me?.role === 'hr';
 export const canPayroll = (me: Me | null): boolean => me?.role === 'admin' || me?.role === 'payroll';
+
+/** The catalog role (and admin) makes and places purchase orders; paying a supplier is admin only. */
+export const canCatalog = (me: Me | null): boolean => me?.role === 'admin' || me?.role === 'catalog';

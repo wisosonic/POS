@@ -6,12 +6,17 @@ import {
   flagText,
   hm,
   lbp,
+  milliToQty,
+  minorText,
   minuteText,
   money,
+  orderStatusText,
   parseBp,
   parseMinor,
+  parseQty,
   parseTime,
   problemText,
+  qtyText,
   scheduleStatusText,
   shiftText,
   usd,
@@ -111,5 +116,37 @@ describe('the schedule helpers (US-HQ-screen)', () => {
   it('has a sentence for every plan status, and shows an unknown one as it is', () => {
     for (const st of ['worked', 'absent', 'on_leave', 'holiday', 'unscheduled', 'scheduled']) expect(scheduleStatusText(st)).not.toBe(st);
     expect(scheduleStatusText('NEW')).toBe('NEW');
+  });
+});
+
+// The purchasing pages (docs/18): quantities are thousandths, typed as text with at most three decimals and never through floating point.
+describe('the purchasing helpers (US-HQ-screen)', () => {
+  it('shows thousandths as a quantity and gives them back as typed text', () => {
+    expect(qtyText(12500)).toBe('12.5');
+    expect(qtyText(3000)).toBe('3');
+    expect(qtyText(1)).toBe('0.001');
+    expect(qtyText(1234567)).toBe('1,234.567');
+    expect(qtyText(0)).toBe('0');
+    expect(qtyText(-2500)).toBe('-2.5');
+    expect(milliToQty(1234567)).toBe('1234.567');
+    expect(milliToQty(20000)).toBe('20');
+  });
+
+  it('accepts a quantity only when it is a positive number with at most three decimals', () => {
+    for (const ok of ['1', '12', '2.5', '0.001', '100000']) expect(parseQty(ok)).toBe(ok);
+    for (const bad of ['', '0', '0.0', '-1', '1.2345', '1,5', '1e3', 'abc', '.5', '5.', '1 2']) expect(parseQty(bad)).toBeNull();
+    expect(parseQty('  7 ')).toBe('7');
+  });
+
+  it('writes a cost the way it is typed in a money field', () => {
+    expect(minorText(350, 'USD')).toBe('3.50');
+    expect(minorText(5, 'USD')).toBe('0.05');
+    expect(minorText(150050, 'USD')).toBe('1500.50');
+    expect(minorText(90000, 'LBP')).toBe('90000');
+  });
+
+  it('has a sentence for every order state', () => {
+    for (const st of ['draft', 'ordered', 'closed', 'cancelled']) expect(orderStatusText(st)).not.toBe(st);
+    expect(orderStatusText('NEW')).toBe('NEW');
   });
 });

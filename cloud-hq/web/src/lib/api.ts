@@ -19,9 +19,9 @@ export async function api<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
-  opts: { auth?: boolean } = {},
+  opts: { auth?: boolean; headers?: Record<string, string> } = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
   const token = getToken();
   if (token && opts.auth !== false) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -54,3 +54,7 @@ export async function api<T>(
 export const get = <T>(path: string) => api<T>('GET', path);
 export const post = <T>(path: string, body?: unknown) => api<T>('POST', path, body ?? {});
 export const patch = <T>(path: string, body: unknown) => api<T>('PATCH', path, body);
+
+/** A POST that must happen once however many times it is sent (a payment): the key is the same for the same attempt. */
+export const postOnce = <T>(path: string, body: unknown, key: string) =>
+  api<T>('POST', path, body, { headers: { 'Idempotency-Key': key } });

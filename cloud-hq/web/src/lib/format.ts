@@ -136,3 +136,35 @@ const SCHEDULE_STATUS: Record<string, string> = {
   scheduled: 'Still to come',
 };
 export const scheduleStatusText = (s: string): string => SCHEDULE_STATUS[s] ?? s;
+
+/** Thousandths as a quantity people read: 12500 -> "12.5", 3000 -> "3". */
+export function qtyText(milli: number): string {
+  const sign = milli < 0 ? '-' : '';
+  const abs = Math.abs(milli);
+  const frac = String(abs % 1000)
+    .padStart(3, '0')
+    .replace(/0+$/, '');
+  return `${sign}${Math.floor(abs / 1000).toLocaleString('en-US')}${frac ? `.${frac}` : ''}`;
+}
+
+/** A typed quantity ("12", "2.5") as the text HQ expects, or null: a positive number with at most three decimals, nothing else. */
+export function parseQty(text: string): string | null {
+  const t = text.trim();
+  return /^\d{1,9}(\.\d{1,3})?$/.test(t) && Number(t) > 0 ? t : null;
+}
+
+/** Thousandths as the text a quantity field takes, never in floating point: 12500 -> "12.5". */
+export const milliToQty = (milli: number): string => qtyText(milli).replace(/,/g, '');
+
+/** Minor units as typed in a money field: 150050 USD -> "1500.50", 90000 LBP -> "90000". */
+export function minorText(minor: number, currency: string): string {
+  return currency === 'USD' ? `${Math.floor(minor / 100)}.${String(minor % 100).padStart(2, '0')}` : String(minor);
+}
+
+const ORDER_WORDS: Record<string, string> = {
+  draft: 'Draft: nothing is ordered yet',
+  ordered: 'Ordered: the stock branches expect these goods',
+  closed: 'Closed: what arrived is accepted',
+  cancelled: 'Cancelled',
+};
+export const orderStatusText = (s: string): string => ORDER_WORDS[s] ?? s;

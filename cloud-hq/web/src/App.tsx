@@ -13,6 +13,8 @@ import { OverviewPage } from './pages/OverviewPage';
 import { PayrollPage } from './pages/PayrollPage';
 import { PaySetupPage } from './pages/PaySetupPage';
 import { PeoplePage } from './pages/PeoplePage';
+import { PurchasingPage } from './pages/PurchasingPage';
+import { RestockPage } from './pages/RestockPage';
 import { SchedulePage } from './pages/SchedulePage';
 import { StaffPage } from './pages/StaffPage';
 
@@ -68,6 +70,8 @@ export function App() {
           Overview
         </NavLink>
         <NavLink to="/branches">Branches</NavLink>
+        <NavLink to="/purchasing">Purchasing</NavLink>
+        <NavLink to="/restock">Stock suggestions</NavLink>
         <NavLink to="/people">People</NavLink>
         <NavLink to="/attendance">Attendance</NavLink>
         <NavLink to="/schedule">Schedule</NavLink>
@@ -88,6 +92,8 @@ export function App() {
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/branches" element={<BranchesPage me={me} />} />
+          <Route path="/purchasing" element={<PurchasingPage me={me} />} />
+          <Route path="/restock" element={<RestockPage me={me} />} />
           <Route path="/people" element={<PeoplePage me={me} />} />
           <Route path="/attendance" element={<AttendancePage me={me} />} />
           <Route path="/schedule" element={<SchedulePage me={me} />} />
