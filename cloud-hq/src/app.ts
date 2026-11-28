@@ -20,8 +20,9 @@ import customerRoutes from './modules/customers/routes';
 import hrRoutes from './modules/hr/routes';
 import payrollRoutes from './modules/payroll/routes';
 import scheduleRoutes from './modules/hr/scheduleRoutes';
+import payslipRoutes from './modules/payslips/routes';
 import supplyRoutes from './modules/supply/routes';
-import { asStaff, hasRole, type Staff, type StaffRole } from './modules/staff/context';
+import { asStaff, hasRole, type Capability, type Staff } from './modules/staff/context';
 import staffRoutes from './modules/staff/routes';
 import { staffOfToken } from './modules/staff/users';
 
@@ -35,7 +36,7 @@ declare module 'fastify' {
      * preHandler: a signed-in member of HQ staff with at least this role (viewer < catalog < admin). Sets `request.staff`. A person who still has to
      * choose their own password is stopped (`PASSWORD_RESET_REQUIRED`) unless the route says `allowReset`.
      */
-    requireStaff: (min: StaffRole, opts?: { allowReset?: boolean }) => (req: FastifyRequest) => Promise<void>;
+    requireStaff: (min: Capability, opts?: { allowReset?: boolean }) => (req: FastifyRequest) => Promise<void>;
     /** One transaction in which every audit row written says who made the change (staff/context.ts). */
     staffTx: <T>(req: FastifyRequest, fn: (tx: Queryable) => Promise<T>) => Promise<T>;
     /** preHandler: a connected branch (`X-Branch-Token`). Sets `request.branch`. */
@@ -133,7 +134,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
 
   app.decorateRequest('branch', undefined as unknown as Branch);
   app.decorateRequest('staff', undefined as unknown as Staff);
-  app.decorate('requireStaff', (min: StaffRole, opts: { allowReset?: boolean } = {}) => async (req: FastifyRequest) => {
+  app.decorate('requireStaff', (min: Capability, opts: { allowReset?: boolean } = {}) => async (req: FastifyRequest) => {
     const header = req.headers.authorization;
     const token = header?.startsWith('Bearer ') ? header.slice(7) : '';
     let staff: Staff | null = null;
@@ -172,6 +173,7 @@ export async function buildCentral(options: CentralOptions): Promise<FastifyInst
       await api.register(hrRoutes);
       await api.register(payrollRoutes);
       await api.register(scheduleRoutes);
+      await api.register(payslipRoutes);
     },
     { prefix: '/api/v1' },
   );

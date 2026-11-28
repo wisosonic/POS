@@ -15,9 +15,23 @@ export type Staff = {
   actor: string;
 };
 
-export type StaffRole = 'viewer' | 'catalog' | 'admin';
-export const ROLE_RANK: Record<StaffRole, number> = { viewer: 1, catalog: 2, admin: 3 };
-export const hasRole = (have: StaffRole, need: StaffRole): boolean => ROLE_RANK[have] >= ROLE_RANK[need];
+/**
+ * What a person can be. viewer reads; catalog also changes the catalog; hr also employees, rosters, leave and attendance corrections; payroll also pay
+ * (the most sensitive data: profiles, rules, loans, runs, payslips); admin can do everything. `employee` is an account for a member of staff, who sees ONLY
+ * their own attendance and payslips (self-service, docs/16 §7): it has no other capability at all, not even reading.
+ */
+export type StaffRole = 'viewer' | 'catalog' | 'hr' | 'payroll' | 'admin' | 'employee';
+/** What a route may ask for: a capability. `any` is every signed-in account (change password, sign out); `self` is an employee's own data. */
+export type Capability = 'any' | 'viewer' | 'catalog' | 'hr' | 'payroll' | 'admin' | 'self';
+const CAN: Record<StaffRole, readonly Capability[]> = {
+  viewer: ['any', 'viewer'],
+  catalog: ['any', 'viewer', 'catalog'],
+  hr: ['any', 'viewer', 'hr'],
+  payroll: ['any', 'viewer', 'payroll'],
+  admin: ['any', 'viewer', 'catalog', 'hr', 'payroll', 'admin'],
+  employee: ['any', 'self'],
+};
+export const hasRole = (have: StaffRole, need: Capability): boolean => CAN[have].includes(need);
 
 /** Run `fn` in ONE transaction with `staff` recorded as the actor of every audit row it writes. */
 export function asStaff<T>(db: Database, staff: Staff | null, fn: (tx: Queryable) => Promise<T>): Promise<T> {

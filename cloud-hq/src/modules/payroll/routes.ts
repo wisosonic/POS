@@ -36,7 +36,7 @@ const ruleCode = z
  */
 export default async function payrollRoutes(app: FastifyInstance) {
   const db = app.database;
-  const admin = { preHandler: app.requireStaff('admin') };
+  const admin = { preHandler: app.requireStaff('payroll') }; // pay is for payroll (an admin can too)
 
   // ---- pay profiles (dated, never edited)
   app.get('/employees/:id/pay-profiles', admin, async (req) => ({ data: await listProfiles(db, parse(idParam, req.params).id) }));

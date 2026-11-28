@@ -21,7 +21,7 @@ const iso = z
 export default async function hrRoutes(app: FastifyInstance) {
   const db = app.database;
   const view = { preHandler: app.requireStaff('viewer') };
-  const admin = { preHandler: app.requireStaff('admin') };
+  const admin = { preHandler: app.requireStaff('hr') }; // HR changes (an admin can too)
 
   app.get('/employees', view, async (req) => {
     const q = parse(

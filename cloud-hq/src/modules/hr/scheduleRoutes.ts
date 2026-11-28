@@ -42,7 +42,7 @@ const range = z
 export default async function scheduleRoutes(app: FastifyInstance) {
   const db = app.database;
   const view = { preHandler: app.requireStaff('viewer') };
-  const admin = { preHandler: app.requireStaff('admin') };
+  const admin = { preHandler: app.requireStaff('hr') }; // HR changes (an admin can too)
 
   app.get('/shifts', view, async () => ({ data: await listShifts(db) }));
   app.post('/shifts', admin, async (req, reply) => {

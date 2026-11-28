@@ -19,7 +19,12 @@ import {
   userJson,
 } from './users';
 
-const role = z.string().refine(isRole, 'The role must be viewer, catalog or admin') as unknown as z.ZodType<'viewer' | 'catalog' | 'admin'>;
+// An `employee` account is made only from an employee's record (POST /employees/:id/account), never from here.
+const role = z
+  .string()
+  .refine((v) => isRole(v) && v !== 'employee', 'The role must be viewer, catalog, hr, payroll or admin') as unknown as z.ZodType<
+  'viewer' | 'catalog' | 'hr' | 'payroll' | 'admin'
+>;
 const idParam = z.object({ id: z.coerce.number().int().min(1) });
 const LOGIN_LIMIT = { max: 10, timeWindow: '1 minute' };
 
@@ -30,7 +35,7 @@ const LOGIN_LIMIT = { max: 10, timeWindow: '1 minute' };
 export default async function staffRoutes(app: FastifyInstance) {
   const db = app.database;
   // A person who must still choose their own password may do these three things and nothing else.
-  const anyone = { preHandler: app.requireStaff('viewer', { allowReset: true }) };
+  const anyone = { preHandler: app.requireStaff('any', { allowReset: true }) };
   const admin = { preHandler: app.requireStaff('admin') };
   const bearer = (header: string | undefined) => (header?.startsWith('Bearer ') ? header.slice(7) : '');
 

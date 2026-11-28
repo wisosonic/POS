@@ -14,7 +14,7 @@ export const MAX_PASSWORD = 200;
 export const SESSION_HOURS = 8;
 export const MAX_FAILED = 5;
 export const LOCK_MINUTES = 15;
-const ROLES: StaffRole[] = ['viewer', 'catalog', 'admin'];
+const ROLES: StaffRole[] = ['viewer', 'catalog', 'hr', 'payroll', 'admin', 'employee'];
 export const isRole = (v: unknown): v is StaffRole => typeof v === 'string' && (ROLES as string[]).includes(v);
 
 const nowIso = () => new Date().toISOString();

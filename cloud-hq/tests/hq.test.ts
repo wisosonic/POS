@@ -176,7 +176,7 @@ describe('what HQ writes down', () => {
 });
 
 describe('protecting HQ itself (it is the first part reachable from the internet)', () => {
-  const OPEN = new Set(['GET /api/v1/healthz', 'POST /api/v1/sync/enrol', 'POST /api/v1/auth/login']);
+  const OPEN = new Set(['GET /api/v1/healthz', 'POST /api/v1/sync/enrol', 'POST /api/v1/auth/login', 'GET /api/v1/print/payslips/:token']);
   const real = () => hq.app.registeredRoutes.filter((r) => r.url.startsWith(api) && !['HEAD', 'OPTIONS'].includes(r.method));
   const concrete = (url: string) => url.replace(/:\w+/g, '1');
 
@@ -185,7 +185,7 @@ describe('protecting HQ itself (it is the first part reachable from the internet
     for (const open of OPEN) expect(real().map((r) => `${r.method} ${r.url}`)).toContain(open);
   });
 
-  it('every other route refuses an anonymous request and a garbage token: only the three listed doors are open', async () => {
+  it('every other route refuses an anonymous request and a garbage token: only the listed doors are open', async () => {
     const open: string[] = [];
     for (const r of real()) {
       if (OPEN.has(`${r.method} ${r.url}`)) continue;
