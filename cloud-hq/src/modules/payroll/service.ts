@@ -3,6 +3,7 @@ import { AppError } from '@pos/core/errors';
 import { calculatePayslip, type PayProfile, type PayRule, type PayType } from '@pos/shared/payroll';
 import type { Currency } from '@pos/shared/money';
 import { attendanceDays } from '../hr/service';
+import { absenceSummary } from '../hr/schedule';
 import { writeAudit } from '../staff/context';
 
 // Payroll at HQ (docs/16 §5, P6b). Salary data lives here and nowhere else. The arithmetic is `calculatePayslip` in `shared` (pure, integer, tested with
@@ -391,6 +392,8 @@ export async function calculateRun(
   const { rules, versions } = await rulesInForce(q, run.to_day);
   const attendance = await attendanceDays(q, { from: run.from_day, to: run.to_day });
   const warnings: Warning[] = [];
+  // The roster knows who should have worked: absence and unpaid leave are listed so HR can enter a deduction (a manual line); pay is not changed by them.
+  const absences = await absenceSummary(q, run.from_day, run.to_day, now.toISOString().slice(0, 10));
   const inputs = await q.all<{ employee_id: number; kind: 'earning' | 'deduction'; label: string; amount_minor: number }>(
     'SELECT employee_id, kind, label, amount_minor FROM payroll_inputs WHERE run_id = ? ORDER BY id',
     [runId],
@@ -406,6 +409,13 @@ export async function calculateRun(
     const mine = attendance.filter((d) => d.employeeId === row.employee_id);
     for (const d of mine.filter((x) => x.flags.length > 0))
       warnings.push({ employeeId: row.employee_id, code: 'ATTENDANCE_FLAGS', message: `${row.name}: ${d.day} is ${d.flags.join(', ')}` });
+    const gone = absences.get(row.employee_id);
+    if (gone && (gone.absent > 0 || gone.unpaidLeave > 0))
+      warnings.push({
+        employeeId: row.employee_id,
+        code: 'ABSENCE',
+        message: `${row.name}: ${gone.absent} day(s) absent and ${gone.unpaidLeave} day(s) of unpaid leave on the roster: add a deduction if it applies`,
+      });
     const loans = loansAll.filter((l) => l.employeeId === row.employee_id && l.remainingMinor > 0);
     for (const l of loans.filter((x) => x.currency !== row.currency))
       warnings.push({

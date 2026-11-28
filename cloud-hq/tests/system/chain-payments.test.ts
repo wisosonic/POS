@@ -140,6 +140,7 @@ describe('a debt at two branches is paid at one (US-cust-chain-pay)', () => {
     // A is paid locally while B still thinks 75,000 is owed there (a stale hint, set by hand)
     expect((await pay(a, aCashier, atA, 75000, false)).status).toBe(201);
     expect(await until(async () => (await person()).totalBalanceLbp === 0)).toBe(true);
+    expect(await until(async () => (await othersAt(b, atB)) === 0)).toBe(true); // B has heard the truth first, or its stale figure would be overwritten
     await b.app.database.run('UPDATE customer_chain SET others_lbp = 75000 WHERE customer_id = ?', [atB]);
     const stale = await pay(b, bCashier, atB, 75000);
     expect(stale.status).toBe(201);
@@ -151,7 +152,7 @@ describe('a debt at two branches is paid at one (US-cust-chain-pay)', () => {
     expect(await until(async () => (await person()).unplacedLbp === 0)).toBe(true);
     expect(await until(async () => (await balance(a, atA)) === 0)).toBe(true);
     expect(await openSales(a, atA)).toBe(0);
-    expect((await person()).totalBalanceLbp).toBe(0);
+    expect(await until(async () => (await person()).totalBalanceLbp === 0)).toBe(true); // HQ's copy follows a moment later
   });
 
   it('a payment across the chain needs a customer with a phone', async () => {
