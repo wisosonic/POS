@@ -13,6 +13,8 @@
     "test:central": "vitest run --project central",
     "test:unit": "vitest run --project unit",
     "test:system": "vitest run --project system --no-file-parallelism",
+    "e2e": "playwright test",
+    "e2e-server": "tsx src/cli/e2e-server.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -34,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.65.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.0.0",
     "@types/supertest": "^6.0.2",

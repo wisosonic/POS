@@ -20,6 +20,7 @@
     "test:web": "npm --prefix till run test:web",
     "test:migration": "npm --prefix branch-server run test:migration",
     "test:e2e": "npm --prefix till run e2e",
+    "test:e2e:hq": "npm --prefix cloud-hq run e2e",
     "test:load": "npm --prefix branch-server run test:load",
     "lint": "npm --prefix branch-server run lint && npm --prefix cloud-hq run lint && npm --prefix till run lint",
     "format": "npm --prefix branch-server run format && npm --prefix cloud-hq run format && npm --prefix till run format",
