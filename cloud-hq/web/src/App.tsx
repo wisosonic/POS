@@ -2,12 +2,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { post } from './lib/api';
-import { clearSession, getMe, isAdmin, setSession, type Me } from './lib/session';
+import { canPayroll, clearSession, getMe, isAdmin, setSession, type Me } from './lib/session';
+import { AttendancePage } from './pages/AttendancePage';
 import { BackupsPage } from './pages/BackupsPage';
 import { BranchesPage } from './pages/BranchesPage';
 import { ChoosePasswordPage } from './pages/ChoosePasswordPage';
 import { LoginPage } from './pages/LoginPage';
+import { MyPayPage } from './pages/MyPayPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { PayrollPage } from './pages/PayrollPage';
+import { PaySetupPage } from './pages/PaySetupPage';
+import { PeoplePage } from './pages/PeoplePage';
 import { StaffPage } from './pages/StaffPage';
 
 export function App() {
@@ -51,19 +56,8 @@ export function App() {
     );
   // An account that must choose its own password sees nothing else until it has (the server refuses everything else too).
   if (me.mustResetPassword) return <ChoosePasswordPage me={me} onDone={signedIn} onCancel={signOut} />;
-  // An employee account is for reading one's own payslips, which HQ's screen does not show yet.
-  if (me.role === 'employee')
-    return (
-      <main className="center">
-        <div className="card narrow">
-          <h1>Hello, {me.name}</h1>
-          <p>This account is for your own attendance and payslips. Those are not on this screen yet; ask HR for a printed payslip.</p>
-          <button className="btn" onClick={() => void signOut()}>
-            Sign out
-          </button>
-        </div>
-      </main>
-    );
+  // An employee account sees only its own attendance and paid payslips.
+  if (me.role === 'employee') return <MyPayPage name={me.name} onSignOut={() => void signOut()} />;
 
   return (
     <div className="shell">
@@ -73,6 +67,10 @@ export function App() {
           Overview
         </NavLink>
         <NavLink to="/branches">Branches</NavLink>
+        <NavLink to="/people">People</NavLink>
+        <NavLink to="/attendance">Attendance</NavLink>
+        {canPayroll(me) && <NavLink to="/payroll">Payroll</NavLink>}
+        {canPayroll(me) && <NavLink to="/pay-setup">Pay setup</NavLink>}
         {isAdmin(me) && <NavLink to="/backups">Backups</NavLink>}
         {isAdmin(me) && <NavLink to="/staff">Staff</NavLink>}
         <div className="spacer" />
@@ -88,6 +86,10 @@ export function App() {
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/branches" element={<BranchesPage me={me} />} />
+          <Route path="/people" element={<PeoplePage me={me} />} />
+          <Route path="/attendance" element={<AttendancePage me={me} />} />
+          <Route path="/payroll" element={canPayroll(me) ? <PayrollPage /> : <Navigate to="/" replace />} />
+          <Route path="/pay-setup" element={canPayroll(me) ? <PaySetupPage /> : <Navigate to="/" replace />} />
           <Route path="/backups" element={isAdmin(me) ? <BackupsPage /> : <Navigate to="/" replace />} />
           <Route path="/staff" element={isAdmin(me) ? <StaffPage me={me} /> : <Navigate to="/" replace />} />
           <Route path="/login" element={<Navigate to="/" replace />} />

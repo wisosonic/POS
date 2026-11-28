@@ -601,7 +601,17 @@ export async function runJson(q: Queryable, id: number, withSlips = true) {
       netMinor: t.net,
       employerCostMinor: t.employer,
     })),
-    ...(slips ? { payslips: slips } : {}),
+    ...(slips
+      ? {
+          payslips: slips,
+          inputs: (
+            await q.all<{ id: number; employee_id: number; kind: 'earning' | 'deduction'; label: string; amount_minor: number }>(
+              'SELECT id, employee_id, kind, label, amount_minor FROM payroll_inputs WHERE run_id = ? ORDER BY id',
+              [id],
+            )
+          ).map((i) => ({ id: i.id, employeeId: i.employee_id, kind: i.kind, label: i.label, amountMinor: i.amount_minor })),
+        }
+      : {}),
   };
 }
 

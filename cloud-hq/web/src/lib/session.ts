@@ -41,3 +41,7 @@ export function clearSession(): void {
 
 /** Only an admin changes people, branches and backups; everyone on staff reads the chain's figures (the server enforces both, this only hides buttons). */
 export const isAdmin = (me: Me | null): boolean => me?.role === 'admin';
+
+/** What the menu shows: HR changes people, payroll reads pay, an admin does both (the server enforces each; this only hides buttons and pages). */
+export const canHr = (me: Me | null): boolean => me?.role === 'admin' || me?.role === 'hr';
+export const canPayroll = (me: Me | null): boolean => me?.role === 'admin' || me?.role === 'payroll';

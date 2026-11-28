@@ -41,3 +41,54 @@ export const ROLES: { value: string; label: string; note: string }[] = [
   { value: 'payroll', label: 'Payroll', note: 'Also pay and payslips' },
   { value: 'admin', label: 'Admin', note: 'Everything, including branches, people and backups' },
 ];
+
+/** Money in its own currency: LBP in whole lira, USD in cents. */
+export const money = (minor: number, currency: string): string => (currency === 'USD' ? usd(minor) : lbp(minor));
+
+/** Worked minutes as hours and minutes: 485 -> "8 h 05". */
+export function hm(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+}
+
+const FLAGS: Record<string, string> = {
+  double_in: 'Clocked in twice',
+  out_without_in: 'Clocked out without clocking in',
+  open: 'Still clocked in',
+};
+export const flagText = (code: string): string => FLAGS[code] ?? code;
+
+/** The punch time as a person reads it (the browser's own zone). */
+export const clock = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+};
+
+/** A whole number typed as money ("1,500.50" for USD, "150000" for LBP) to minor units, exactly: no floats. null when it is not a clean amount. */
+export function parseMinor(text: string, currency: string): number | null {
+  const t = text.trim().replace(/,/g, '');
+  const re = currency === 'USD' ? /^(\d{1,12})(?:\.(\d{1,2}))?$/ : /^(\d{1,12})$/;
+  const m = re.exec(t);
+  if (!m) return null;
+  return currency === 'USD' ? Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0') || '0') : Number(m[1]);
+}
+
+/** A percentage typed by a person ("7.5") to basis points (750), exactly. null when it is not a clean percentage with at most two decimals. */
+export function parseBp(text: string, max = 10_000): number | null {
+  const m = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(text.trim().replace('%', ''));
+  if (!m) return null;
+  const bp = Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0') || '0');
+  return bp <= max ? bp : null;
+}
+
+/** Basis points as a percentage: 750 -> "7.5%", 2000 -> "20%". */
+export const bpText = (bp: number): string => `${(bp / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
+
+export const RUN_STEPS = ['draft', 'calculated', 'approved', 'paid', 'locked'] as const;
+export const RUN_WORDS: Record<string, string> = {
+  draft: 'Draft: add any extra lines, then calculate',
+  calculated: 'Calculated: check the payslips, then approve',
+  approved: 'Approved: the figures are frozen. Pay, then lock',
+  paid: 'Paid: lock it when the books agree',
+  locked: 'Locked: final',
+};

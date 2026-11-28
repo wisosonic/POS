@@ -2,7 +2,7 @@
 
 Until now HQ was an API: every HQ job (adding a branch, reading the chain's day, taking a backup, making a staff account) meant a hand-made request. The HQ screen is a small web app that does those jobs in a browser. It answers question #33 in `docs/QUESTIONS.md` (option A: a screen the owner looks at each morning). It sends nothing; it only shows.
 
-**Built (2026-11-28), version 1:** sign in, **Overview**, **Branches**, **Backups**, **Staff**. **Not built yet:** employees, attendance, rosters and leave; payroll and payslips; purchase orders and stock suggestions; the catalog; customers' balances; reports beyond today's totals; Arabic. Each of those is an API today (`docs/06`) and gets a page when it is needed.
+**Built (2026-11-28):** sign in, **Overview**, **Branches**, **Backups**, **Staff** (version 1) and **People**, **Attendance**, **Payroll**, **Pay setup** and **My pay** for employee accounts (HR and payroll pages). **Not built yet:** rosters, shifts, holidays and leave (the API has them, `docs/16`); purchase orders and stock suggestions; the catalog; customers' balances; reports beyond today's totals; Arabic. Each of those is an API today (`docs/06`) and gets a page when it is needed.
 
 ## 1. Where it lives and how it is served
 
@@ -20,8 +20,13 @@ Until now HQ was an API: every HQ job (adding a branch, reading the chain's day,
 | **Branches** | any staff read; admin changes | The branches and their state; **add a branch** (code, name, shop or stock) and the **one-time code** is shown once, in a box, to type at the branch; **New code** for a branch that has not connected; **Close** and **Reopen**. |
 | **Backups** | admin | When the last backup was made, whether it worked, encrypted or not, whether there is a second copy, the files on disk, and **Back up now**. |
 | **Staff** | admin | HQ's accounts: add a person with a temporary password and a role (viewer, catalog, HR, payroll, admin), change a role, set a new temporary password, close or reopen an account. You cannot change your own role or close yourself. |
+| **People** | any staff read; HR and admin change | Everyone who works in the chain with where they work. HR adds a person (code, name, branches), ticks the branches, sets the **attendance PIN** (typed once in a box, never shown again), gives an employee a **sign-in** (a name and a temporary password), and marks who has left. A person with no sign-in (a cleaner) is normal. |
+| **Attendance** | any staff read; HR and admin correct | The days in a period by branch or person: each clock-in and clock-out, the hours worked, and a red flag where a punch is missing (clocked in twice, out without in, still in). HR **adds a missed punch** or **cancels** one, always with a reason that is kept; a punch a branch recorded is never edited. |
+| **Payroll** | payroll and admin | The runs, then one run at a time: where it is (draft, calculated, approved, paid, locked) with what to do next, the warnings, the totals, every payslip (days, hours, gross, deductions, net; **Lines** shows each line; **Print** opens the payslip page through a one-use link), and the run's **extra lines** (a bonus or a deduction for one person). Approving and paying ask "are you sure": after approval the figures are frozen. A refusal from HQ (a branch has not caught up, the period is not finished, no exchange rate) is shown in its own words. |
+| **Pay setup** | payroll and admin | How each person is paid (monthly, daily or hourly, in LBP or USD, overtime, the rules that apply), the dated **rules** (NSSF, tax: a percent with an optional cap, or brackets) and **loans**. Nothing is edited: a change is a new row from a day on, and the older rows stay shown. |
+| **My pay** | employee accounts | An employee's whole screen: their own paid payslips (opened through a one-use print link) and their own attendance for two weeks. Nothing else is reachable: it is read through `/me`. |
 
-The server decides who may do what (docs/16 §7); the screen only hides the buttons a person cannot use.
+The server decides who may do what (docs/16 §7); the screen only hides the buttons a person cannot use. An amount typed on a form is turned into whole lira or cents by exact text parsing (`parseMinor`, `parseBp`: no floating point, a fraction of a lira or a third decimal is refused before it is sent). Amounts are shown on these pages only: nothing about pay goes into a log, an alert or a URL.
 
 ## 3. How it handles the sign-in
 
@@ -29,7 +34,7 @@ The session token (`POST /auth/login`) is kept in `sessionStorage` (gone when th
 
 ## 4. Tests
 
-`cloud-hq/tests/web.test.ts` (serving, headers, the router fallback, traversal, the API's strict headers, the payslip page keeping its style), `cloud-hq/tests/unit/screen-format.test.ts` (the figures and sentences the screen shows). **The pages themselves were checked in a real browser by a script** (sign in with a wrong and a right password, add a branch and see its code, Overview, Staff, Backups, reload stays signed in, sign out; no errors in the console but the expected 401), **not by a test that is kept in the repository**: there is no browser-test setup in `cloud-hq` yet. Adding one (Playwright, as in `till`) is the next step for this screen.
+`cloud-hq/tests/web.test.ts` (serving, headers, the router fallback, traversal, the API's strict headers, the payslip page keeping its style), `cloud-hq/tests/unit/screen-format.test.ts` (the figures and sentences the screen shows, and the exact parsing of typed amounts and percentages), and the payroll system test checks a run lists its manual lines. **The pages themselves were checked in a real browser by a script** (for the HR and payroll pages: add a person with a branch, set a PIN and see it is not shown anywhere, give a sign-in, add a rule and a pay, refuse a fractional lira, add a missed clock-in and clock-out and see 8 h 00, start a run, calculate, see the NSSF line, add and remove an extra line, approve, pay, lock, print a payslip, then sign in as the employee, choose a password and see only their own payslip and no menu; no console errors). Earlier:  (sign in with a wrong and a right password, add a branch and see its code, Overview, Staff, Backups, reload stays signed in, sign out; no errors in the console but the expected 401), **not by a test that is kept in the repository**: there is no browser-test setup in `cloud-hq` yet. Adding one (Playwright, as in `till`) is the next step for this screen.
 
 ## 5. Not decided
 

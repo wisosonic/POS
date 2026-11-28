@@ -240,6 +240,9 @@ describe('a payroll run (US-HR-payroll)', () => {
     ).body.id;
     let r = (await post(`/payroll/runs/${runId}/calculate`)).body.run;
     expect(slipOf(r, sami)).toMatchObject({ deductionsMinor: 138_000, netMinor: 1_762_000 });
+    // the run lists its manual lines (the HQ screen shows and removes them)
+    const listed = (await hq.http.get(`${api}/payroll/runs/${runId}`).set(adminAuth)).body.inputs;
+    expect(listed).toContainEqual({ id: input, employeeId: sami, kind: 'deduction', label: 'Absent a day', amountMinor: 100_000 });
     expect((await hq.http.delete(`${api}/payroll/runs/${runId}/inputs/${input}`).set(adminAuth)).status).toBe(204);
     r = (await post(`/payroll/runs/${runId}/calculate`)).body.run;
     expect(slipOf(r, sami)).toMatchObject({ deductionsMinor: 38_000, netMinor: 1_862_000 }); // 2%, not the new 9%
